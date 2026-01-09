@@ -35,14 +35,11 @@ fn run_file(path: &str) {
     let mut parser = Parser::new(tokens.clone(), source.clone());
     match parser.parse_program() {
         Ok(statements) => {
-            // Тайпчекер временно отключен, пока не адаптируем под VM
-            /*
             let mut type_checker = TypeChecker::new(source.clone());
             if let Err(e) = type_checker.check(&statements) {
                 eprintln!("{}", e);
                 process::exit(65);
             }
-            */
 
             let compiler = Compiler::new("<script>".to_string(), FunctionType::Script);
             match compiler.compile(&statements) {

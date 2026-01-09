@@ -4,10 +4,13 @@ use crate::parser::parser::Parser;
 use crate::compiler::compiler::{Compiler, FunctionType};
 use crate::vm::VM;
 use crate::eval::value::Value;
+use crate::type_checker::checker::TypeChecker;
 
 pub fn run() {
     let mut vm = VM::new();
-    println!("Lavina REPL (Bytecode VM) [type 'exit' to quit]");
+    let mut type_checker = TypeChecker::new("".to_string());
+    
+    println!("Lavina REPL (Bytecode VM + Type Safety) [type 'exit' to quit]");
     println!("Note: Blocks (after ':') must be indented with spaces.");
 
     loop {
@@ -25,11 +28,11 @@ pub fn run() {
             continue;
         }
 
-        execute(input, &mut vm);
+        execute(input, &mut vm, &mut type_checker);
     }
 }
 
-fn execute(source: String, vm: &mut VM) {
+fn execute(source: String, vm: &mut VM, type_checker: &mut TypeChecker) {
     let mut scanner = Scanner::new(source.clone());
     let (tokens, errors) = scanner.scan_tokens();
 
@@ -38,30 +41,36 @@ fn execute(source: String, vm: &mut VM) {
         return;
     }
 
-    let mut parser = Parser::new(tokens.clone(), source.clone());
-    
-    // Пытаемся распарсить как выражение для удобства вывода результата в REPL
+    type_checker.source = source.clone();
+
+    // 1. Пробуем как выражение
     let mut expr_parser = Parser::new(tokens.clone(), source.clone());
     if let Ok(expr) = expr_parser.parse_expression() {
-        // Оборачиваем выражение в неявный print или просто компилируем его
-        // Для REPL удобно сразу видеть результат выражения
-        let compiler = Compiler::new("<repl_expr>".to_string(), FunctionType::Script);
-        // Временно создаем стейтмент из выражения, чтобы компилятор его съел
-        let stmt = crate::parser::ast::Stmt::Expression(expr);
-        if let Ok(function) = compiler.compile(&[stmt]) {
-            // Нам нужно, чтобы результат выражения остался на стеке и мы его напечатали
-            // Но наш компилятор сейчас добавляет OP_POP в конце compile_stmt
-            // Поэтому мы немного схитрим или просто запустим как есть
-            vm.interpret(function);
-            // Если на стеке что-то осталось (результат выражения до OP_POP), 
-            // мы могли бы это напечатать, но сейчас VM чистит за собой.
-            return;
+        if let Ok(_) = type_checker.check_expr(&expr) {
+            let compiler = Compiler::new("<repl_expr>".to_string(), FunctionType::Script);
+            let stmt = crate::parser::ast::Stmt::Expression(expr);
+            if let Ok(function) = compiler.compile(&[stmt]) {
+                vm.interpret(function);
+                return;
+            }
+        } else {
+            // Если тайп-чекер нашел ошибку в выражении, выводим её
+            match type_checker.check_expr(&expr) {
+                Err(e) => { eprintln!("{}", e); return; },
+                _ => {}
+            }
         }
     }
 
-    // Если это не просто выражение, а программа (let, fn, etc)
+    // 2. Пробуем как программу
+    let mut parser = Parser::new(tokens.clone(), source.clone());
     match parser.parse_program() {
         Ok(statements) => {
+            if let Err(e) = type_checker.check(&statements) {
+                eprintln!("{}", e);
+                return;
+            }
+
             let compiler = Compiler::new("<repl>".to_string(), FunctionType::Script);
             match compiler.compile(&statements) {
                 Ok(function) => {

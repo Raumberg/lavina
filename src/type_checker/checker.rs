@@ -14,8 +14,8 @@ pub enum TypeInfo {
 }
 
 pub struct TypeEnvironment {
-    types: HashMap<String, TypeInfo>,
-    enclosing: Option<Box<TypeEnvironment>>,
+    pub types: HashMap<String, TypeInfo>,
+    pub enclosing: Option<Box<TypeEnvironment>>,
 }
 
 impl TypeEnvironment {
@@ -24,11 +24,10 @@ impl TypeEnvironment {
             types: HashMap::new(),
             enclosing: None,
         };
-        // Add native functions
         env.define("print".to_string(), TypeInfo::Function {
             params: vec![Type::Dynamic],
             return_type: Box::new(Type::Void),
-            is_variadic: true, // print can take many arguments
+            is_variadic: true,
         });
         env.define("len".to_string(), TypeInfo::Function {
             params: vec![Type::Dynamic],
@@ -128,26 +127,16 @@ impl TypeChecker {
                 self.env.define(name.lexeme.clone(), TypeInfo::Primitive(final_type));
                 Ok(())
             }
-            Stmt::Function(func) => {
-                let mut inner_env = TypeEnvironment {
-                    types: HashMap::new(),
-                    enclosing: Some(Box::new(std::mem::replace(&mut self.env, TypeEnvironment::new()))),
-                };
+            Stmt::Block(stmts) => {
+                let mut old_env = std::mem::replace(&mut self.env, TypeEnvironment::new());
+                self.env.enclosing = Some(Box::new(old_env));
                 
-                self.env = *inner_env.enclosing.take().unwrap();
-
-                let mut checker = TypeChecker {
-                    env: inner_env,
-                    source: self.source.clone(),
-                };
+                for stmt in stmts {
+                    self.check_stmt(stmt)?;
+                }
                 
-                for (param_name, param_type) in &func.params {
-                    checker.env.define(param_name.lexeme.clone(), TypeInfo::Primitive(param_type.clone()));
-                }
-
-                for body_stmt in &func.body {
-                    checker.check_stmt(body_stmt)?;
-                }
+                let mut current_env = std::mem::replace(&mut self.env, TypeEnvironment::new());
+                self.env = *current_env.enclosing.take().unwrap();
                 Ok(())
             }
             Stmt::If(condition, then_branch, else_branch) => {
@@ -169,19 +158,20 @@ impl TypeChecker {
                 self.check_stmt(body)?;
                 Ok(())
             }
-            Stmt::Block(stmts) => {
-                let mut inner_env = TypeEnvironment {
-                    types: HashMap::new(),
-                    enclosing: Some(Box::new(std::mem::replace(&mut self.env, TypeEnvironment::new()))),
-                };
-                self.env = *inner_env.enclosing.take().unwrap();
-                let mut checker = TypeChecker {
-                    env: inner_env,
-                    source: self.source.clone(),
-                };
-                for stmt in stmts {
-                    checker.check_stmt(stmt)?;
+            Stmt::Function(func) => {
+                let mut old_env = std::mem::replace(&mut self.env, TypeEnvironment::new());
+                self.env.enclosing = Some(Box::new(old_env));
+                
+                for (param_name, param_type) in &func.params {
+                    self.env.define(param_name.lexeme.clone(), TypeInfo::Primitive(param_type.clone()));
                 }
+
+                for body_stmt in &func.body {
+                    self.check_stmt(body_stmt)?;
+                }
+                
+                let mut current_env = std::mem::replace(&mut self.env, TypeEnvironment::new());
+                self.env = *current_env.enclosing.take().unwrap();
                 Ok(())
             }
             Stmt::Return(_, value) => {
@@ -243,10 +233,7 @@ impl TypeChecker {
                             Err(self.error(format!("Invalid binary operands: {:?} and {:?}", lt, rt), op.line, op.column))
                         }
                     }
-                    TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => {
-                        Ok(Type::Bool)
-                    }
-                    TokenType::EqualEqual | TokenType::BangEqual => {
+                    TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual | TokenType::EqualEqual | TokenType::BangEqual => {
                         Ok(Type::Bool)
                     }
                     _ => Ok(Type::Dynamic),
@@ -273,18 +260,15 @@ impl TypeChecker {
                 if let Expr::Variable(name) = &**callee {
                     if let Some(TypeInfo::Function { params, return_type, is_variadic }) = self.env.get(&name.lexeme) {
                         if is_variadic {
-                            // Check that we have at least as many args as non-variadic params
                             if args.len() < params.len() {
                                 return Err(self.error(format!("Expected at least {} arguments but got {}", params.len(), args.len()), paren.line, paren.column));
                             }
-                            // Check fixed params
                             for (i, p) in params.iter().enumerate() {
                                 let arg_type = self.check_expr(&args[i])?;
                                 if !self.is_assignable(p, &arg_type) {
                                     return Err(self.error(format!("Argument {}: expected {:?}, but got {:?}", i + 1, p, arg_type), paren.line, paren.column));
                                 }
                             }
-                            // Check variadic args against the LAST param type (Dynamic for print)
                             let var_type = params.last().unwrap();
                             for i in params.len()..args.len() {
                                 let arg_type = self.check_expr(&args[i])?;
@@ -303,7 +287,7 @@ impl TypeChecker {
                                 }
                             }
                         }
-                        return Ok(*return_type);
+                        return Ok(*return_type.clone());
                     }
                 }
                 Ok(Type::Dynamic)
@@ -325,17 +309,14 @@ impl TypeChecker {
                 if entries.is_empty() {
                     return Ok(Type::Dict(Box::new(Type::Dynamic), Box::new(Type::Dynamic)));
                 }
-                let first_key_type = self.check_expr(&entries[0].0)?;
-                let first_val_type = self.check_expr(&entries[0].1)?;
+                let mut key_type = self.check_expr(&entries[0].0)?;
+                let mut val_type = self.check_expr(&entries[0].1)?;
                 
-                let mut final_key = first_key_type;
-                let mut final_val = first_val_type;
-
                 for (k, v) in entries.iter().skip(1) {
-                    if self.check_expr(k)? != final_key { final_key = Type::Dynamic; }
-                    if self.check_expr(v)? != final_val { final_val = Type::Dynamic; }
+                    if self.check_expr(k)? != key_type { key_type = Type::Dynamic; }
+                    if self.check_expr(v)? != val_type { val_type = Type::Dynamic; }
                 }
-                Ok(Type::Dict(Box::new(final_key), Box::new(final_val)))
+                Ok(Type::Dict(Box::new(key_type), Box::new(val_type)))
             }
         }
     }
@@ -344,10 +325,16 @@ impl TypeChecker {
         if target == value || *target == Type::Dynamic || *value == Type::Dynamic || *target == Type::Auto {
             return true;
         }
-        if let Type::Nullable(inner) = target {
-            if *value == Type::Dynamic { return true; } // null is Dynamic
-            return self.is_assignable(inner, value);
+        match (target, value) {
+            (Type::Array(t), Type::Array(v)) => self.is_assignable(t, v),
+            (Type::Dict(tk, tv), Type::Dict(vk, vv)) => {
+                self.is_assignable(tk, vk) && self.is_assignable(tv, vv)
+            }
+            (Type::Nullable(t), v) => {
+                if *v == Type::Dynamic { return true; }
+                self.is_assignable(t, v)
+            }
+            _ => false
         }
-        false
     }
 }
