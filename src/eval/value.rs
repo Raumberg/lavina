@@ -3,8 +3,16 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::collections::HashMap;
 use crate::eval::function::LavinaFunction;
+use crate::vm::chunk::Chunk;
 
 pub type NativeFn = fn(Vec<Value>) -> Result<Value, String>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjFunction {
+    pub arity: usize,
+    pub chunk: Chunk,
+    pub name: String,
+}
 
 #[derive(Clone, PartialEq)]
 pub enum Value {
@@ -15,6 +23,7 @@ pub enum Value {
     Null,
     NativeFunction(String, NativeFn),
     Function(Rc<LavinaFunction>),
+    ObjFunction(Rc<ObjFunction>),
     Vector(Rc<RefCell<Vec<Value>>>),
     HashMap(Rc<RefCell<HashMap<String, Value>>>),
 }
@@ -52,6 +61,7 @@ impl fmt::Display for Value {
             Value::Null => write!(f, "null"),
             Value::NativeFunction(name, _) => write!(f, "<native fn {}>", name),
             Value::Function(func) => write!(f, "<fn {}>", func.declaration.name.lexeme),
+            Value::ObjFunction(func) => write!(f, "<vm fn {}>", func.name),
             Value::Vector(v) => {
                 let v = v.borrow();
                 write!(f, "[")?;

@@ -1,0 +1,11 @@
+let x = 10
+if x > 5:
+    let y = 20
+    print("X is big:", x, "Y is:", y)
+else:
+    print("X is small")
+
+let i = 0
+while i < 3:
+    print("Iteration:", i)
+    i = i + 1

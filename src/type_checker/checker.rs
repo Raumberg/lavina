@@ -1,12 +1,16 @@
-use crate::parser::ast::{Expr, Stmt, Literal, Type, FunctionDecl};
-use crate::lexer::{Token, TokenType};
+use crate::parser::ast::{Expr, Stmt, Literal, Type};
+use crate::lexer::TokenType;
 use crate::error::{LavinaError, ErrorPhase};
 use std::collections::HashMap;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TypeInfo {
     Primitive(Type),
-    Function(Vec<Type>, Box<Type>),
+    Function {
+        params: Vec<Type>,
+        return_type: Box<Type>,
+        is_variadic: bool,
+    },
 }
 
 pub struct TypeEnvironment {
@@ -21,9 +25,26 @@ impl TypeEnvironment {
             enclosing: None,
         };
         // Add native functions
-        env.define("print".to_string(), TypeInfo::Function(vec![Type::Dynamic], Box::new(Type::Void)));
-        env.define("len".to_string(), TypeInfo::Function(vec![Type::Dynamic], Box::new(Type::Int)));
-        env.define("clock".to_string(), TypeInfo::Function(vec![], Box::new(Type::Float)));
+        env.define("print".to_string(), TypeInfo::Function {
+            params: vec![Type::Dynamic],
+            return_type: Box::new(Type::Void),
+            is_variadic: true, // print can take many arguments
+        });
+        env.define("len".to_string(), TypeInfo::Function {
+            params: vec![Type::Dynamic],
+            return_type: Box::new(Type::Int),
+            is_variadic: false,
+        });
+        env.define("clock".to_string(), TypeInfo::Function {
+            params: vec![],
+            return_type: Box::new(Type::Float),
+            is_variadic: false,
+        });
+        env.define("type".to_string(), TypeInfo::Function {
+            params: vec![Type::Dynamic],
+            return_type: Box::new(Type::String),
+            is_variadic: false,
+        });
         env
     }
 
@@ -60,15 +81,17 @@ impl TypeChecker {
     }
 
     pub fn check(&mut self, statements: &[Stmt]) -> Result<(), LavinaError> {
-        // First pass: register functions
         for stmt in statements {
             if let Stmt::Function(func) = stmt {
                 let param_types: Vec<Type> = func.params.iter().map(|(_, t)| t.clone()).collect();
-                self.env.define(func.name.lexeme.clone(), TypeInfo::Function(param_types, Box::new(func.return_type.clone())));
+                self.env.define(func.name.lexeme.clone(), TypeInfo::Function {
+                    params: param_types,
+                    return_type: Box::new(func.return_type.clone()),
+                    is_variadic: false,
+                });
             }
         }
 
-        // Second pass: check bodies
         for stmt in statements {
             self.check_stmt(stmt)?;
         }
@@ -88,13 +111,16 @@ impl TypeChecker {
                 }
 
                 let final_type = if let Some(annotated) = type_annotation {
-                    if !self.is_assignable(annotated, &inferred_type) {
+                    if *annotated == Type::Auto {
+                        inferred_type
+                    } else if !self.is_assignable(annotated, &inferred_type) {
                         return Err(self.error(
                             format!("Type mismatch for variable '{}': expected {:?}, but got {:?}", name.lexeme, annotated, inferred_type),
                             name.line, name.column
                         ));
+                    } else {
+                        annotated.clone()
                     }
-                    annotated.clone()
                 } else {
                     inferred_type
                 };
@@ -108,7 +134,6 @@ impl TypeChecker {
                     enclosing: Some(Box::new(std::mem::replace(&mut self.env, TypeEnvironment::new()))),
                 };
                 
-                // Swap env back after swap
                 self.env = *inner_env.enclosing.take().unwrap();
 
                 let mut checker = TypeChecker {
@@ -128,7 +153,6 @@ impl TypeChecker {
             Stmt::If(condition, then_branch, else_branch) => {
                 let cond_type = self.check_expr(condition)?;
                 if !matches!(cond_type, Type::Bool | Type::Dynamic) {
-                    // Find first token of condition for better error location
                     return Err(self.error("If condition must be a boolean".to_string(), 0, 0)); 
                 }
                 self.check_stmt(then_branch)?;
@@ -177,13 +201,13 @@ impl TypeChecker {
                 Literal::Float(_) => Ok(Type::Float),
                 Literal::String(_) => Ok(Type::String),
                 Literal::Bool(_) => Ok(Type::Bool),
-                Literal::Null => Ok(Type::Dynamic), // Null can be anything nullable
+                Literal::Null => Ok(Type::Dynamic),
             },
             Expr::Variable(name) => {
                 if let Some(type_info) = self.env.get(&name.lexeme) {
                     match type_info {
                         TypeInfo::Primitive(t) => Ok(t),
-                        TypeInfo::Function(_, ret) => Ok(*ret),
+                        TypeInfo::Function { return_type, .. } => Ok(*return_type.clone()),
                     }
                 } else {
                     Err(self.error(format!("Undefined variable '{}'", name.lexeme), name.line, name.column))
@@ -247,17 +271,39 @@ impl TypeChecker {
             Expr::Grouping(e) => self.check_expr(e),
             Expr::Call(callee, paren, args) => {
                 if let Expr::Variable(name) = &**callee {
-                    if let Some(TypeInfo::Function(params, ret)) = self.env.get(&name.lexeme) {
-                        if params.len() != args.len() {
-                            return Err(self.error(format!("Expected {} arguments but got {}", params.len(), args.len()), paren.line, paren.column));
-                        }
-                        for (i, arg) in args.iter().enumerate() {
-                            let arg_type = self.check_expr(arg)?;
-                            if !self.is_assignable(&params[i], &arg_type) {
-                                return Err(self.error(format!("Argument {}: expected {:?}, but got {:?}", i + 1, params[i], arg_type), paren.line, paren.column));
+                    if let Some(TypeInfo::Function { params, return_type, is_variadic }) = self.env.get(&name.lexeme) {
+                        if is_variadic {
+                            // Check that we have at least as many args as non-variadic params
+                            if args.len() < params.len() {
+                                return Err(self.error(format!("Expected at least {} arguments but got {}", params.len(), args.len()), paren.line, paren.column));
+                            }
+                            // Check fixed params
+                            for (i, p) in params.iter().enumerate() {
+                                let arg_type = self.check_expr(&args[i])?;
+                                if !self.is_assignable(p, &arg_type) {
+                                    return Err(self.error(format!("Argument {}: expected {:?}, but got {:?}", i + 1, p, arg_type), paren.line, paren.column));
+                                }
+                            }
+                            // Check variadic args against the LAST param type (Dynamic for print)
+                            let var_type = params.last().unwrap();
+                            for i in params.len()..args.len() {
+                                let arg_type = self.check_expr(&args[i])?;
+                                if !self.is_assignable(var_type, &arg_type) {
+                                    return Err(self.error(format!("Variadic argument {}: expected {:?}, but got {:?}", i + 1, var_type, arg_type), paren.line, paren.column));
+                                }
+                            }
+                        } else {
+                            if params.len() != args.len() {
+                                return Err(self.error(format!("Expected {} arguments but got {}", params.len(), args.len()), paren.line, paren.column));
+                            }
+                            for (i, arg) in args.iter().enumerate() {
+                                let arg_type = self.check_expr(arg)?;
+                                if !self.is_assignable(&params[i], &arg_type) {
+                                    return Err(self.error(format!("Argument {}: expected {:?}, but got {:?}", i + 1, params[i], arg_type), paren.line, paren.column));
+                                }
                             }
                         }
-                        return Ok(*ret);
+                        return Ok(*return_type);
                     }
                 }
                 Ok(Type::Dynamic)
@@ -267,10 +313,9 @@ impl TypeChecker {
                     return Ok(Type::Array(Box::new(Type::Dynamic)));
                 }
                 let first_type = self.check_expr(&elements[0])?;
-                for (i, el) in elements.iter().enumerate().skip(1) {
+                for el in elements.iter().skip(1) {
                     let t = self.check_expr(el)?;
                     if t != first_type {
-                        // For now, if types mismatch, we'll call it a vector of dynamic
                         return Ok(Type::Array(Box::new(Type::Dynamic)));
                     }
                 }
@@ -286,7 +331,7 @@ impl TypeChecker {
                 let mut final_key = first_key_type;
                 let mut final_val = first_val_type;
 
-                for (i, (k, v)) in entries.iter().enumerate().skip(1) {
+                for (k, v) in entries.iter().skip(1) {
                     if self.check_expr(k)? != final_key { final_key = Type::Dynamic; }
                     if self.check_expr(v)? != final_val { final_val = Type::Dynamic; }
                 }
@@ -296,7 +341,7 @@ impl TypeChecker {
     }
 
     fn is_assignable(&self, target: &Type, value: &Type) -> bool {
-        if target == value || *target == Type::Dynamic || *value == Type::Dynamic {
+        if target == value || *target == Type::Dynamic || *value == Type::Dynamic || *target == Type::Auto {
             return true;
         }
         if let Type::Nullable(inner) = target {

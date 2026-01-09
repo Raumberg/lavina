@@ -12,6 +12,10 @@ print(user) // Выведет: {name: Alina, age: 20, is_ai: true}
 
 vector[int] mytestarray = [1, 2, 3]
 print(mytestarray)
-print("len of that array is: ", len(mytestarray))
+
+int ln = len(mytestarray)
+print("len of that array is: ", ln)
 
 print("current clock is: ", clock())
+
+print("type of that array is: ", type(mytestarray))

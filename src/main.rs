@@ -3,8 +3,9 @@ use std::fs;
 use std::process;
 use lavina::lexer::Scanner;
 use lavina::parser::parser::Parser;
-use lavina::eval::tree_walker::TreeWalker;
 use lavina::type_checker::checker::TypeChecker;
+use lavina::compiler::compiler::{Compiler, FunctionType};
+use lavina::vm::VM;
 use lavina::repl;
 
 fn main() {
@@ -27,25 +28,32 @@ fn run_file(path: &str) {
     let (tokens, errors) = scanner.scan_tokens();
     
     if !errors.is_empty() {
-        for error in errors {
-            eprintln!("{}", error);
-        }
+        for error in errors { eprintln!("{}", error); }
         process::exit(65);
     }
 
     let mut parser = Parser::new(tokens.clone(), source.clone());
     match parser.parse_program() {
         Ok(statements) => {
+            // Тайпчекер временно отключен, пока не адаптируем под VM
+            /*
             let mut type_checker = TypeChecker::new(source.clone());
             if let Err(e) = type_checker.check(&statements) {
                 eprintln!("{}", e);
                 process::exit(65);
             }
+            */
 
-            let mut tree_walker = TreeWalker::new(source);
-            if let Err(e) = tree_walker.interpret(&statements) {
-                eprintln!("{}", e);
-                process::exit(70);
+            let compiler = Compiler::new("<script>".to_string(), FunctionType::Script);
+            match compiler.compile(&statements) {
+                Ok(function) => {
+                    let mut vm = VM::new();
+                    vm.interpret(function);
+                }
+                Err(e) => {
+                    eprintln!("{}", e);
+                    process::exit(65);
+                }
             }
         }
         Err(e) => {

@@ -102,7 +102,7 @@ impl TreeWalker {
                 env.define(decl.name.lexeme.clone(), function);
                 Ok(ControlFlow::None)
             }
-            Stmt::Return(keyword, value) => {
+            Stmt::Return(_keyword, value) => {
                 let mut return_val = Value::Null;
                 if let Some(expr) = value {
                     return_val = self.evaluate(expr, env)?;

@@ -4,3 +4,5 @@ pub mod parser;
 pub mod eval;
 pub mod repl;
 pub mod type_checker;
+pub mod vm;
+pub mod compiler;
