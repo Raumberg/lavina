@@ -1,0 +1,97 @@
+#[derive(Debug, Clone, PartialEq)]
+pub enum TokenType {
+    // Single-character tokens
+    LeftParen, RightParen,
+    LeftBracket, RightBracket,
+    LeftBrace, RightBrace,
+    Comma, Dot, Minus, Plus, Semicolon, Slash, Star,
+    Colon, Hash, Question,
+
+    // One or two character tokens
+    Bang, BangEqual,
+    Equal, EqualEqual,
+    Greater, GreaterEqual,
+    Less, LessEqual,
+    Arrow, // ->
+
+    // Literals
+    Identifier,
+    String,
+    Int,
+    Float,
+
+    // Keywords
+    Let, And, Auto, Bool, Comptime, Dynamic, Else, False, FloatType,
+    Fn, If, Inline, IntType, Null, Or, Return,
+    StringType, True, Void, While, Vector, HashMap,
+
+    // Special for directives
+    HashBracket, // #[
+    HashSet,     // #set
+
+    // Indentation
+    Indent,
+    Dedent,
+    Newline,
+
+    Eof
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub lexeme: String,
+    pub line: usize,
+    pub column: usize,
+}
+
+impl TokenType {
+    pub fn to_string(&self) -> String {
+        match self {
+            TokenType::LeftParen => "'('".to_string(),
+            TokenType::RightParen => "')'".to_string(),
+            TokenType::LeftBracket => "'['".to_string(),
+            TokenType::RightBracket => "']'".to_string(),
+            TokenType::LeftBrace => "'{'".to_string(),
+            TokenType::RightBrace => "'}'".to_string(),
+            TokenType::Comma => "','".to_string(),
+            TokenType::Dot => "'.'".to_string(),
+            TokenType::Minus => "'-'".to_string(),
+            TokenType::Plus => "'+'".to_string(),
+            TokenType::Semicolon => "';'".to_string(),
+            TokenType::Slash => "'/'".to_string(),
+            TokenType::Star => "'*'".to_string(),
+            TokenType::Colon => "':'".to_string(),
+            TokenType::Hash => "'#'".to_string(),
+            TokenType::Bang => "'!'".to_string(),
+            TokenType::BangEqual => "'!='".to_string(),
+            TokenType::Equal => "'='".to_string(),
+            TokenType::EqualEqual => "'=='".to_string(),
+            TokenType::Greater => "'>'".to_string(),
+            TokenType::GreaterEqual => "'>='".to_string(),
+            TokenType::Less => "'<'".to_string(),
+            TokenType::LessEqual => "'<='".to_string(),
+            TokenType::Arrow => "'->'".to_string(),
+            TokenType::Identifier => "identifier".to_string(),
+            TokenType::String => "string literal".to_string(),
+            TokenType::Int => "integer literal".to_string(),
+            TokenType::Float => "float literal".to_string(),
+            TokenType::Newline => "newline".to_string(),
+            TokenType::Indent => "indentation".to_string(),
+            TokenType::Dedent => "dedent".to_string(),
+            TokenType::Eof => "end of file".to_string(),
+            _ => format!("{:?}", self).to_lowercase(),
+        }
+    }
+}
+
+impl Token {
+    pub fn new(token_type: TokenType, lexeme: String, line: usize, column: usize) -> Self {
+        Self {
+            token_type,
+            lexeme,
+            line,
+            column,
+        }
+    }
+}

@@ -1,0 +1,25 @@
+string fn tryme(string arg): // should break: string decl, int ret
+    arg = null
+    return 1
+
+int fn tryme_2(string arg): // should break: int decl, str ret
+    print("im in! but I should not")
+    return arg
+
+fn should_work(string arg) -> void:
+    print(arg)
+
+void fn should_not_work(string arg) -> void:
+    expr = arg + 10
+    print(expr)
+
+void fn main():
+    auto x = tryme("-x-")
+    print("x is: ", x)
+    auto y = tryme_2("-y-")
+    print("y is: ", y)
+    should_work("Hello, World!")
+    should_not_work("Hello!")
+    should_not_work(true)
+
+main()

@@ -1,0 +1,17 @@
+// Векторы (массивы)
+auto my_list = [1, 2, 3 + 4, 5]
+print(my_list) // Выведет: [1, 2, 7, 5]
+
+// Словари (hashmap)
+auto user = {
+    "name": "Alina",
+    "age": 20,
+    "is_ai": true
+}
+print(user) // Выведет: {name: Alina, age: 20, is_ai: true}
+
+vector[int] mytestarray = [1, 2, 3]
+print(mytestarray)
+print("len of that array is: ", len(mytestarray))
+
+print("current clock is: ", clock())
