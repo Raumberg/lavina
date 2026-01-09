@@ -1,4 +1,4 @@
-use crate::parser::ast::{Expr, Stmt, Literal};
+use crate::parser::ast::{Expr, Stmt, Literal, Visibility};
 use crate::vm::chunk::Chunk;
 use crate::vm::opcode::OpCode;
 use crate::lexer::TokenType;
@@ -63,7 +63,7 @@ impl Compiler {
                 self.emit_byte(OpCode::Pop as u8, 0);
                 Ok(())
             }
-            Stmt::Let(name, _, initializer) => {
+            Stmt::Let(name, _, initializer, _visibility) => {
                 if let Some(init) = initializer {
                     self.compile_expr(init)?;
                 } else {
@@ -97,6 +97,78 @@ impl Compiler {
                 let name_const = self.function.chunk.add_constant(crate::eval::value::Value::String(decl.name.lexeme.clone()));
                 self.emit_byte(OpCode::DefineGlobal as u8, decl.name.line);
                 self.emit_byte(name_const as u8, decl.name.line);
+                Ok(())
+            }
+            Stmt::Namespace(name, body) => {
+                // In a true namespace system, we'd handle visibility here.
+                // For now, let's keep the object-based approach but we could
+                // also do name mangling (e.g., math::add).
+                
+                // Let's use a simpler approach for now:
+                // Compile the body as if it were a function that returns a map of its public members.
+                
+                let mut compiler = Compiler::new(name.lexeme.clone(), FunctionType::Script);
+                
+                for s in body {
+                    compiler.compile_stmt(s)?;
+                }
+                
+                // Now collect all public members into a map
+                let mut public_members = Vec::new();
+                for s in body {
+                    match s {
+                        Stmt::Function(f) if f.visibility == Visibility::Public => {
+                            public_members.push(f.name.lexeme.clone());
+                        }
+                        Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
+                            public_members.push(n.lexeme.clone());
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Emit code to build the namespace object
+                for m_name in &public_members {
+                    let name_const = compiler.function.chunk.add_constant(crate::eval::value::Value::String(m_name.clone()));
+                    compiler.emit_byte(OpCode::Constant as u8, 0);
+                    compiler.emit_byte(name_const as u8, 0);
+                    
+                    compiler.emit_byte(OpCode::GetGlobal as u8, 0);
+                    compiler.emit_byte(name_const as u8, 0);
+                }
+                
+                compiler.emit_byte(OpCode::HashMap as u8, 0);
+                compiler.emit_byte(public_members.len() as u8, 0);
+                compiler.emit_byte(OpCode::Return as u8, 0);
+
+                let function = Rc::new(compiler.function);
+                let constant = self.function.chunk.add_constant(crate::eval::value::Value::ObjFunction(function));
+                
+                self.emit_byte(OpCode::Constant as u8, name.line);
+                self.emit_byte(constant as u8, name.line);
+                
+                // Call it
+                self.emit_byte(OpCode::Call as u8, name.line);
+                self.emit_byte(0, name.line);
+                
+                // Wrap in Namespace object
+                let name_const = self.function.chunk.add_constant(crate::eval::value::Value::String(name.lexeme.clone()));
+                self.emit_byte(OpCode::Namespace as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+                
+                self.emit_byte(OpCode::DefineGlobal as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+                
+                Ok(())
+            }
+            Stmt::Import(path, alias) => {
+                let path_str: Vec<String> = path.iter().map(|t| t.lexeme.clone()).collect();
+                let name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or_else(|| path_str.last().unwrap().clone());
+                
+                let name_const = self.function.chunk.add_constant(crate::eval::value::Value::String(name));
+                self.emit_byte(OpCode::Null as u8, 0);
+                self.emit_byte(OpCode::DefineGlobal as u8, 0);
+                self.emit_byte(name_const as u8, 0);
                 Ok(())
             }
             Stmt::Block(stmts) => {
@@ -139,50 +211,19 @@ impl Compiler {
             }
             Stmt::For(item_name, collection, body) => {
                 self.begin_scope();
-                
-                // 1. Копируем коллекцию в скрытую переменную
                 self.compile_expr(collection)?;
                 let coll_local = "_collection".to_string();
                 self.add_local(coll_local.clone());
                 
-                // 2. Инициализируем индекс _i = 0
                 let zero = self.function.chunk.add_constant(crate::eval::value::Value::Int(0));
                 self.emit_constant(zero as u8, item_name.line);
                 let index_local = "_i".to_string();
                 self.add_local(index_local.clone());
                 
                 let loop_start = self.function.chunk.code.len();
-                
-                // 3. Условие: _i < len(_collection)
                 let coll_idx = self.resolve_local(&coll_local).unwrap();
                 let i_idx = self.resolve_local(&index_local).unwrap();
                 
-                // Вызываем len(_collection)
-                let len_const = self.function.chunk.add_constant(crate::eval::value::Value::String("len".to_string()));
-                self.emit_byte(OpCode::GetGlobal as u8, item_name.line);
-                self.emit_byte(len_const as u8, item_name.line);
-                
-                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
-                self.emit_byte(coll_idx as u8, item_name.line);
-                
-                self.emit_byte(OpCode::Call as u8, item_name.line);
-                self.emit_byte(1, item_name.line);
-                
-                // Загружаем _i и сравниваем
-                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
-                self.emit_byte(i_idx as u8, item_name.line);
-                
-                self.emit_byte(OpCode::Less as u8, item_name.line);
-                self.emit_byte(OpCode::Not as u8, item_name.line); // Инвертируем, так как i < len
-                // На самом деле нам нужно Less, но я реализовала Less в VM. 
-                // Давай просто: _i < len
-                // Сначала i, потом len, потом Less
-                // Перепишем порядок:
-                
-                /* Очистим стек условия */
-                self.function.chunk.code.truncate(loop_start);
-                
-                // Повторная попытка генерации условия:
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
                 
@@ -195,25 +236,20 @@ impl Compiler {
                 self.emit_byte(1, item_name.line);
                 
                 self.emit_byte(OpCode::Less as u8, item_name.line);
-                
                 let exit_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
                 self.emit_byte(OpCode::Pop as u8, 0);
                 
-                // 4. Тело цикла: let item = _collection[_i]
                 self.begin_scope();
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(coll_idx as u8, item_name.line);
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
                 self.emit_byte(OpCode::GetIndex as u8, item_name.line);
-                
-                self.add_local(item_name.lexeme.clone()); // Текущий элемент
+                self.add_local(item_name.lexeme.clone());
                 
                 self.compile_stmt(body)?;
+                self.end_scope();
                 
-                self.end_scope(); // Конец тела (удаляем item)
-                
-                // 5. Инкремент: _i = _i + 1
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
                 let one = self.function.chunk.add_constant(crate::eval::value::Value::Int(1));
@@ -221,14 +257,12 @@ impl Compiler {
                 self.emit_byte(OpCode::Add as u8, item_name.line);
                 self.emit_byte(OpCode::SetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
-                self.emit_byte(OpCode::Pop as u8, 0); // Результат SetLocal нам не нужен
-                
-                self.emit_loop(loop_start);
-                
-                self.patch_jump(exit_jump);
                 self.emit_byte(OpCode::Pop as u8, 0);
                 
-                self.end_scope(); // Удаляем _collection и _i
+                self.emit_loop(loop_start);
+                self.patch_jump(exit_jump);
+                self.emit_byte(OpCode::Pop as u8, 0);
+                self.end_scope();
                 Ok(())
             }
             Stmt::Return(keyword, value) => {
@@ -256,11 +290,6 @@ impl Compiler {
                     self.emit_constant(constant as u8, 0);
                 }
                 Literal::String(s) => {
-                    // Strings are now objects, but we'll store them as raw strings in constants
-                    // and let the VM handle the object creation or just keep it as is
-                    // for now if Value can still hold it.
-                    // Actually, let's keep String in Value for constants ONLY, 
-                    // and VM will convert it to Object during execution if needed.
                     let constant = self.function.chunk.add_constant(crate::eval::value::Value::String(s.clone()));
                     self.emit_constant(constant as u8, 0);
                 }

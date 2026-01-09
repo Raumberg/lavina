@@ -1,6 +1,12 @@
 use crate::lexer::Token;
 
 #[derive(Debug, Clone, PartialEq)]
+pub enum Visibility {
+    Public,
+    Private,
+}
+
+#[derive(Debug, Clone, PartialEq)]
 pub enum Type {
     Int,
     Float,
@@ -27,7 +33,7 @@ pub enum Expr {
     Assign(Token, Box<Expr>),
     Logical(Box<Expr>, Token, Box<Expr>),
     Call(Box<Expr>, Token, Vec<Expr>),
-    Index(Box<Expr>, Token, Box<Expr>), // New: collection[index]
+    Index(Box<Expr>, Token, Box<Expr>),
     Vector(Vec<Expr>),
     Map(Vec<(Expr, Expr)>),
 }
@@ -44,14 +50,16 @@ pub enum Literal {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     Expression(Expr),
-    Let(Token, Option<Type>, Option<Expr>),
+    Let(Token, Option<Type>, Option<Expr>, Visibility),
     Return(Token, Option<Expr>),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
-    For(Token, Expr, Box<Stmt>), // New: for item in collection:
+    For(Token, Expr, Box<Stmt>),
     Block(Vec<Stmt>),
     Function(FunctionDecl),
     Directive(Directive),
+    Namespace(Token, Vec<Stmt>),
+    Import(Vec<Token>, Option<Token>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -63,6 +71,7 @@ pub struct FunctionDecl {
     pub directives: Vec<Directive>,
     pub is_inline: bool,
     pub is_comptime: bool,
+    pub visibility: Visibility,
 }
 
 #[derive(Debug, Clone, PartialEq)]

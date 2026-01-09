@@ -47,7 +47,7 @@ impl TreeWalker {
                 self.evaluate(expr)?;
                 Ok(ControlFlow::None)
             }
-            Stmt::Let(name, _, initializer) => {
+            Stmt::Let(name, _, initializer, _) => {
                 let value = if let Some(init) = initializer {
                     self.evaluate(init)?
                 } else {
@@ -108,6 +108,8 @@ impl TreeWalker {
                 };
                 Ok(ControlFlow::Return(result))
             }
+            Stmt::Namespace(_, _) => todo!("Namespace not implemented in tree-walker."),
+            Stmt::Import(_, _) => todo!("Import not implemented in tree-walker."),
             Stmt::Directive(_) => Ok(ControlFlow::None),
         }
     }

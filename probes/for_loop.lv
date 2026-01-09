@@ -2,8 +2,8 @@ auto items = [10, 20, 30]
 print("Initial list:", items)
 print("Element at index 1:", items[1])
 
-for x in items:
-    print("Loop item:", x)
+for item in items:
+    print("Loop item:", item)
 
 auto m = {"a": 1, "b": 2}
 print("Map lookup a:", m["a"])

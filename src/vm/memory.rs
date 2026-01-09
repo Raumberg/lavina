@@ -91,7 +91,12 @@ impl Memory {
                     self.mark_value(val, worklist);
                 }
             }
-            _ => {} // Strings and Functions have no outgoing refs to other heap objects for now
+            ObjType::Namespace(_, members) => {
+                for val in members.values() {
+                    self.mark_value(val, worklist);
+                }
+            }
+            _ => {}
         }
     }
 

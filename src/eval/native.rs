@@ -33,6 +33,7 @@ fn value_to_string(heap: &[Option<Obj>], value: &Value) -> String {
                         s += "}";
                         s
                     }
+                    ObjType::Namespace(name, _) => format!("<namespace {}>", name),
                     ObjType::Function(f) => format!("<fn {}>", f.name),
                 }
             } else {

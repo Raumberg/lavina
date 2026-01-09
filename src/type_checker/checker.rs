@@ -1,40 +1,37 @@
-use crate::parser::ast::{Expr, Stmt, Literal, Type, FunctionDecl};
-use crate::lexer::TokenType; // Removed Token
+use crate::parser::ast::{Expr, Stmt, Type, Literal, Visibility};
 use crate::error::{LavinaError, ErrorPhase};
+use crate::lexer::TokenType;
 use std::collections::HashMap;
 
-#[derive(Debug, Clone, PartialEq)]
-enum TypeInfo {
+#[derive(Clone)]
+pub enum TypeInfo {
     Variable(Type),
-    Function {
-        params: Vec<Type>,
-        return_type: Type,
-        is_variadic: bool,
-    },
+    Function(Type, Vec<Type>),
+    Namespace(String, HashMap<String, (TypeInfo, Visibility)>), // Added visibility to members
 }
 
-struct TypeEnvironment {
-    types: HashMap<String, TypeInfo>,
-    enclosing: Option<Box<TypeEnvironment>>,
+pub struct TypeEnvironment {
+    pub values: HashMap<String, (TypeInfo, Visibility)>, // Added visibility
+    pub enclosing: Option<Box<TypeEnvironment>>,
 }
 
 impl TypeEnvironment {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Self {
-            types: HashMap::new(),
+            values: HashMap::new(),
             enclosing: None,
         }
     }
 
-    fn define(&mut self, name: String, info: TypeInfo) {
-        self.types.insert(name, info);
+    pub fn define(&mut self, name: String, info: TypeInfo, visibility: Visibility) {
+        self.values.insert(name, (info, visibility));
     }
 
-    fn get(&self, name: &str) -> Option<TypeInfo> {
-        if let Some(info) = self.types.get(name) {
+    pub fn get(&self, name: &str) -> Option<TypeInfo> {
+        if let Some((info, _)) = self.values.get(name) {
             return Some(info.clone());
         }
-        if let Some(ref enclosing) = self.enclosing {
+        if let Some(enclosing) = &self.enclosing {
             return enclosing.get(name);
         }
         None
@@ -43,39 +40,23 @@ impl TypeEnvironment {
 
 pub struct TypeChecker {
     env: TypeEnvironment,
-    pub source: String, // Made public
+    source: String,
 }
 
 impl TypeChecker {
     pub fn new() -> Self {
-        let mut env = TypeEnvironment::new();
-        
-        // Native functions
-        env.define("print".to_string(), TypeInfo::Function {
-            params: vec![],
-            return_type: Type::Void,
-            is_variadic: true,
-        });
-        env.define("len".to_string(), TypeInfo::Function {
-            params: vec![Type::Dynamic],
-            return_type: Type::Int,
-            is_variadic: false,
-        });
-        env.define("clock".to_string(), TypeInfo::Function {
-            params: vec![],
-            return_type: Type::Float,
-            is_variadic: false,
-        });
-        env.define("type".to_string(), TypeInfo::Function {
-            params: vec![Type::Dynamic],
-            return_type: Type::String,
-            is_variadic: false,
-        });
-
-        Self {
-            env,
+        let mut checker = Self {
+            env: TypeEnvironment::new(),
             source: String::new(),
-        }
+        };
+        
+        // Register native functions as public
+        checker.env.define("print".to_string(), TypeInfo::Function(Type::Void, vec![Type::Dynamic]), Visibility::Public);
+        checker.env.define("len".to_string(), TypeInfo::Function(Type::Int, vec![Type::Dynamic]), Visibility::Public);
+        checker.env.define("clock".to_string(), TypeInfo::Function(Type::Float, vec![]), Visibility::Public);
+        checker.env.define("type".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic]), Visibility::Public);
+        
+        checker
     }
 
     pub fn set_source(&mut self, source: String) {
@@ -83,27 +64,9 @@ impl TypeChecker {
     }
 
     pub fn check_statements(&mut self, statements: &[Stmt]) -> Result<(), LavinaError> {
-        // First pass: register functions
-        for stmt in statements {
-            if let Stmt::Function(decl) = stmt {
-                self.register_function(decl)?;
-            }
-        }
-
-        // Second pass: check bodies
         for stmt in statements {
             self.check_stmt(stmt)?;
         }
-        Ok(())
-    }
-
-    fn register_function(&mut self, decl: &FunctionDecl) -> Result<(), LavinaError> {
-        let params = decl.params.iter().map(|(_, t)| t.clone()).collect();
-        self.env.define(decl.name.lexeme.clone(), TypeInfo::Function {
-            params,
-            return_type: decl.return_type.clone(),
-            is_variadic: false,
-        });
         Ok(())
     }
 
@@ -113,51 +76,79 @@ impl TypeChecker {
                 self.check_expr(expr)?;
                 Ok(())
             }
-            Stmt::Let(name, declared_type, initializer) => {
-                let init_type = if let Some(init) = initializer {
-                    self.check_expr(init)?
-                } else {
-                    Type::Nullable(Box::new(Type::Void)) // Default to null
-                };
+            Stmt::Let(name, type_ann, initializer, visibility) => {
+                let mut inferred_type = Type::Auto;
+                if let Some(init) = initializer {
+                    inferred_type = self.check_expr(init)?;
+                }
 
-                let final_type = match declared_type {
-                    Some(Type::Auto) => init_type, // Inference!
-                    Some(t) => {
-                        if !self.is_assignable(t, &init_type) {
-                            return Err(self.error(format!("Type mismatch: expected {:?}, but got {:?}", t, init_type), name.line, name.column));
+                let final_type = if let Some(ann) = type_ann {
+                    if ann == &Type::Auto {
+                        inferred_type
+                    } else {
+                        if !self.is_assignable(ann, &inferred_type) {
+                            return Err(LavinaError::new(
+                                ErrorPhase::TypeChecker,
+                                format!("Type mismatch: expected {:?}, but got {:?}", ann, inferred_type),
+                                name.line,
+                                name.column,
+                            ).with_context(&self.source));
                         }
-                        t.clone()
+                        ann.clone()
                     }
-                    None => init_type,
+                } else {
+                    inferred_type
                 };
 
-                self.env.define(name.lexeme.clone(), TypeInfo::Variable(final_type));
+                self.env.define(name.lexeme.clone(), TypeInfo::Variable(final_type), visibility.clone());
                 Ok(())
             }
             Stmt::Function(decl) => {
+                let param_types: Vec<Type> = decl.params.iter().map(|(_, t)| t.clone()).collect();
+                self.env.define(decl.name.lexeme.clone(), TypeInfo::Function(decl.return_type.clone(), param_types), decl.visibility.clone());
+                
+                // Check body in a new scope
                 let mut previous_env = TypeEnvironment::new();
                 std::mem::swap(&mut self.env, &mut previous_env);
-                
                 self.env.enclosing = Some(Box::new(previous_env));
-                
+
                 for (param_name, param_type) in &decl.params {
-                    self.env.define(param_name.lexeme.clone(), TypeInfo::Variable(param_type.clone()));
+                    self.env.define(param_name.lexeme.clone(), TypeInfo::Variable(param_type.clone()), Visibility::Public);
                 }
 
-                for s in &decl.body {
-                    self.check_stmt(s)?;
-                }
+                self.check_statements(&decl.body)?;
 
                 let mut current_env = self.env.enclosing.take().unwrap();
                 std::mem::swap(&mut self.env, &mut current_env);
                 Ok(())
             }
-            Stmt::Block(stmts) => {
+            Stmt::Namespace(name, body) => {
+                // Collect members of the namespace
+                let mut members = HashMap::new();
+                
+                // First pass: register names
+                for s in body {
+                    match s {
+                        Stmt::Function(f) => {
+                            let pts: Vec<Type> = f.params.iter().map(|(_, t)| t.clone()).collect();
+                            members.insert(f.name.lexeme.clone(), (TypeInfo::Function(f.return_type.clone(), pts), f.visibility.clone()));
+                        }
+                        Stmt::Let(n, t, _, v) => {
+                            let final_t = t.clone().unwrap_or(Type::Auto);
+                            members.insert(n.lexeme.clone(), (TypeInfo::Variable(final_t), v.clone()));
+                        }
+                        _ => {}
+                    }
+                }
+
+                self.env.define(name.lexeme.clone(), TypeInfo::Namespace(name.lexeme.clone(), members), Visibility::Public);
+                
+                // Second pass: check body in namespace scope
                 let mut previous_env = TypeEnvironment::new();
                 std::mem::swap(&mut self.env, &mut previous_env);
                 self.env.enclosing = Some(Box::new(previous_env));
 
-                for s in stmts {
+                for s in body {
                     self.check_stmt(s)?;
                 }
 
@@ -166,7 +157,7 @@ impl TypeChecker {
                 Ok(())
             }
             Stmt::If(condition, then_branch, else_branch) => {
-                let _cond_type = self.check_expr(condition)?;
+                self.check_expr(condition)?;
                 self.check_stmt(then_branch)?;
                 if let Some(else_stmt) = else_branch {
                     self.check_stmt(else_stmt)?;
@@ -182,191 +173,189 @@ impl TypeChecker {
                 let coll_type = self.check_expr(collection)?;
                 let item_type = match coll_type {
                     Type::Array(inner) => *inner,
-                    Type::Dict(_, value_type) => *value_type,
                     Type::Dynamic => Type::Dynamic,
-                    _ => return Err(self.error("Can only iterate over vectors and hashmaps.".to_string(), item_name.line, item_name.column)),
+                    _ => return Err(LavinaError::new(
+                        ErrorPhase::TypeChecker,
+                        "Can only iterate over vectors.".to_string(),
+                        item_name.line,
+                        item_name.column,
+                    ).with_context(&self.source)),
                 };
 
                 let mut previous_env = TypeEnvironment::new();
                 std::mem::swap(&mut self.env, &mut previous_env);
                 self.env.enclosing = Some(Box::new(previous_env));
 
-                self.env.define(item_name.lexeme.clone(), TypeInfo::Variable(item_type));
+                self.env.define(item_name.lexeme.clone(), TypeInfo::Variable(item_type), Visibility::Public);
                 self.check_stmt(body)?;
 
                 let mut current_env = self.env.enclosing.take().unwrap();
                 std::mem::swap(&mut self.env, &mut current_env);
                 Ok(())
             }
-            Stmt::Return(_keyword, value) => {
+            Stmt::Block(stmts) => {
+                let mut previous_env = TypeEnvironment::new();
+                std::mem::swap(&mut self.env, &mut previous_env);
+                self.env.enclosing = Some(Box::new(previous_env));
+
+                self.check_statements(stmts)?;
+
+                let mut current_env = self.env.enclosing.take().unwrap();
+                std::mem::swap(&mut self.env, &mut current_env);
+                Ok(())
+            }
+            Stmt::Return(_, value) => {
                 if let Some(expr) = value {
                     self.check_expr(expr)?;
                 }
                 Ok(())
             }
+            Stmt::Import(_, _) => Ok(()),
             Stmt::Directive(_) => Ok(()),
         }
     }
 
-    pub fn check_expr(&mut self, expr: &Expr) -> Result<Type, LavinaError> { // Made public
+    pub fn check_expr(&mut self, expr: &Expr) -> Result<Type, LavinaError> {
         match expr {
             Expr::Literal(lit) => match lit {
                 Literal::Int(_) => Ok(Type::Int),
                 Literal::Float(_) => Ok(Type::Float),
                 Literal::String(_) => Ok(Type::String),
                 Literal::Bool(_) => Ok(Type::Bool),
-                Literal::Null => Ok(Type::Void),
+                Literal::Null => Ok(Type::Dynamic),
             },
             Expr::Variable(name) => {
                 match self.env.get(&name.lexeme) {
                     Some(TypeInfo::Variable(t)) => Ok(t),
-                    Some(TypeInfo::Function { .. }) => Ok(Type::Dynamic), // Function as value
-                    None => Err(self.error(format!("Undefined variable '{}'", name.lexeme), name.line, name.column)),
+                    Some(TypeInfo::Function(ret, _)) => Ok(Type::Function(Box::new(ret), vec![])),
+                    Some(TypeInfo::Namespace(_, _)) => Ok(Type::Dynamic), // Or a specific Namespace type
+                    None => Err(LavinaError::new(
+                        ErrorPhase::TypeChecker,
+                        format!("Undefined variable '{}'", name.lexeme),
+                        name.line,
+                        name.column,
+                    ).with_context(&self.source)),
+                }
+            }
+            Expr::Index(collection, bracket, index) => {
+                let coll_type = self.check_expr(collection)?;
+                
+                // If it's a static namespace access like math.add
+                if let Expr::Variable(name) = &**collection {
+                    if let Some(TypeInfo::Namespace(ns_name, members)) = self.env.get(&name.lexeme) {
+                        if let Expr::Literal(Literal::String(member_name)) = &**index {
+                            if let Some((info, visibility)) = members.get(member_name) {
+                                if visibility == &Visibility::Private {
+                                    return Err(LavinaError::new(
+                                        ErrorPhase::TypeChecker,
+                                        format!("Cannot access private member '{}' of namespace '{}'", member_name, ns_name),
+                                        bracket.line,
+                                        bracket.column,
+                                    ).with_context(&self.source));
+                                }
+                                return Ok(match info {
+                                    TypeInfo::Variable(t) => t.clone(),
+                                    TypeInfo::Function(ret, _) => ret.clone(),
+                                    TypeInfo::Namespace(_, _) => Type::Dynamic,
+                                });
+                            }
+                        }
+                    }
+                }
+
+                // Normal collection indexing
+                match coll_type {
+                    Type::Array(inner) => {
+                        let idx_type = self.check_expr(index)?;
+                        if idx_type != Type::Int && idx_type != Type::Auto {
+                            return Err(LavinaError::new(ErrorPhase::TypeChecker, "Array index must be an integer.".to_string(), bracket.line, bracket.column).with_context(&self.source));
+                        }
+                        Ok(*inner)
+                    }
+                    Type::Dict(_, val) => {
+                        self.check_expr(index)?;
+                        Ok(*val)
+                    }
+                    Type::Dynamic => Ok(Type::Dynamic),
+                    _ => Err(LavinaError::new(ErrorPhase::TypeChecker, "Can only index vectors and hashmaps.".to_string(), bracket.line, bracket.column).with_context(&self.source)),
+                }
+            }
+            Expr::Call(callee, _paren, args) => {
+                let _callee_type = self.check_expr(callee)?;
+                for arg in args {
+                    self.check_expr(arg)?;
+                }
+                // Simplified call check
+                Ok(Type::Dynamic)
+            }
+            Expr::Binary(left, op, right) => {
+                let l = self.check_expr(left)?;
+                let r = self.check_expr(right)?;
+                
+                match op.token_type {
+                    TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Slash => {
+                        if l == Type::Int && r == Type::Int { Ok(Type::Int) }
+                        else if (l == Type::Float || l == Type::Int) && (r == Type::Float || r == Type::Int) { Ok(Type::Float) }
+                        else if l == Type::String || r == Type::String { Ok(Type::String) }
+                        else { Ok(Type::Dynamic) }
+                    }
+                    TokenType::EqualEqual | TokenType::BangEqual | TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => Ok(Type::Bool),
+                    _ => Ok(Type::Dynamic),
                 }
             }
             Expr::Assign(name, value) => {
                 let val_type = self.check_expr(value)?;
-                match self.env.get(&name.lexeme) {
-                    Some(TypeInfo::Variable(t)) => {
-                        if !self.is_assignable(&t, &val_type) {
-                            return Err(self.error(format!("Cannot assign {:?} to variable of type {:?}", val_type, t), name.line, name.column));
-                        }
-                        Ok(t)
-                    }
-                    _ => Err(self.error(format!("Undefined variable '{}'", name.lexeme), name.line, name.column)),
-                }
-            }
-            Expr::Binary(left, op, right) => {
-                let l_type = self.check_expr(left)?;
-                let r_type = self.check_expr(right)?;
-                match op.token_type {
-                    TokenType::Plus | TokenType::Minus | TokenType::Star | TokenType::Slash => {
-                        if (l_type == Type::Int || l_type == Type::Float) && (r_type == Type::Int || r_type == Type::Float) {
-                            if l_type == Type::Float || r_type == Type::Float { return Ok(Type::Float); }
-                            return Ok(Type::Int);
-                        }
-                        if op.token_type == TokenType::Plus && l_type == Type::String && r_type == Type::String {
-                            return Ok(Type::String);
-                        }
-                        Err(self.error("Invalid operands for binary operator".to_string(), op.line, op.column))
-                    }
-                    TokenType::EqualEqual | TokenType::BangEqual | TokenType::Greater | TokenType::GreaterEqual | TokenType::Less | TokenType::LessEqual => {
-                        Ok(Type::Bool)
-                    }
-                    _ => Ok(Type::Dynamic),
-                }
-            }
-            Expr::Call(callee, paren, args) => {
-                let _callee_type = self.check_expr(callee)?;
-                let mut arg_types = Vec::new();
-                for arg in args {
-                    arg_types.push(self.check_expr(arg)?);
-                }
-
-                if let Expr::Variable(name) = &**callee {
-                    if let Some(TypeInfo::Function { params, return_type, is_variadic }) = self.env.get(&name.lexeme) {
-                        if !is_variadic && params.len() != args.len() {
-                            return Err(self.error(format!("Expected {} arguments but got {}", params.len(), args.len()), paren.line, paren.column));
-                        }
-                        if !is_variadic {
-                            for (i, (expected, actual)) in params.iter().zip(arg_types.iter()).enumerate() {
-                                if !self.is_assignable(expected, actual) {
-                                    return Err(self.error(format!("Argument {} type mismatch: expected {:?}, got {:?}", i + 1, expected, actual), paren.line, paren.column));
-                                }
-                            }
-                        }
-                        return Ok(return_type);
+                if let Some(TypeInfo::Variable(t)) = self.env.get(&name.lexeme) {
+                    if !self.is_assignable(&t, &val_type) {
+                        return Err(LavinaError::new(ErrorPhase::TypeChecker, "Type mismatch in assignment.".to_string(), name.line, name.column).with_context(&self.source));
                     }
                 }
-                Ok(Type::Dynamic)
-            }
-            Expr::Index(collection, bracket, index) => {
-                let coll_type = self.check_expr(collection)?;
-                let idx_type = self.check_expr(index)?;
-
-                match coll_type {
-                    Type::Array(inner) => {
-                        if idx_type != Type::Int && idx_type != Type::Dynamic {
-                            return Err(self.error("Vector index must be an integer.".to_string(), bracket.line, bracket.column));
-                        }
-                        Ok(*inner)
-                    }
-                    Type::Dict(key_type, val_type) => {
-                        if !self.is_assignable(&key_type, &idx_type) {
-                            return Err(self.error(format!("Map key type mismatch: expected {:?}, got {:?}", key_type, idx_type), bracket.line, bracket.column));
-                        }
-                        Ok(*val_type)
-                    }
-                    Type::Dynamic => Ok(Type::Dynamic),
-                    _ => Err(self.error("Can only index vectors and hashmaps.".to_string(), bracket.line, bracket.column)),
-                }
+                Ok(val_type)
             }
             Expr::Vector(elements) => {
-                let mut inner_type = Type::Auto;
+                let mut element_type = Type::Auto;
                 for el in elements {
-                    let el_type = self.check_expr(el)?;
-                    if inner_type == Type::Auto {
-                        inner_type = el_type;
-                    } else if inner_type != el_type {
-                        inner_type = Type::Dynamic;
+                    let t = self.check_expr(el)?;
+                    if element_type == Type::Auto {
+                        element_type = t;
+                    } else if element_type != t && t != Type::Dynamic {
+                        element_type = Type::Dynamic;
                     }
                 }
-                Ok(Type::Array(Box::new(inner_type)))
+                if element_type == Type::Auto { element_type = Type::Dynamic; }
+                Ok(Type::Array(Box::new(element_type)))
             }
             Expr::Map(entries) => {
                 let mut key_type = Type::Auto;
                 let mut val_type = Type::Auto;
                 for (k, v) in entries {
-                    let k_t = self.check_expr(k)?;
-                    let v_t = self.check_expr(v)?;
-                    if key_type == Type::Auto {
-                        key_type = k_t;
-                    } else if key_type != k_t {
-                        key_type = Type::Dynamic;
-                    }
-                    if val_type == Type::Auto {
-                        val_type = v_t;
-                    } else if val_type != v_t {
-                        val_type = Type::Dynamic;
-                    }
+                    let kt = self.check_expr(k)?;
+                    let vt = self.check_expr(v)?;
+                    
+                    if key_type == Type::Auto { key_type = kt; }
+                    else if key_type != kt { key_type = Type::Dynamic; }
+                    
+                    if val_type == Type::Auto { val_type = vt; }
+                    else if val_type != vt { val_type = Type::Dynamic; }
                 }
+                if key_type == Type::Auto { key_type = Type::Dynamic; }
+                if val_type == Type::Auto { val_type = Type::Dynamic; }
                 Ok(Type::Dict(Box::new(key_type), Box::new(val_type)))
             }
-            Expr::Grouping(e) => self.check_expr(e),
+            Expr::Grouping(expr) => self.check_expr(expr),
             _ => Ok(Type::Dynamic),
         }
     }
 
-    fn is_assignable(&self, target_type: &Type, source_type: &Type) -> bool {
-        if target_type == source_type {
-            return true;
-        }
-        match (target_type, source_type) {
-            (Type::Auto, _) => true,
-            (Type::Dynamic, _) => true,
-            (_, Type::Dynamic) => true,
-            (Type::Nullable(t_inner), s_inner) => {
-                if s_inner == &Type::Void {
-                    return true;
-                }
-                self.is_assignable(t_inner, s_inner)
-            }
-            (Type::Array(t_inner), Type::Array(s_inner)) => {
-                // For containers, we need exact match or target must be dynamic
-                if **t_inner == Type::Dynamic { return true; }
-                t_inner == s_inner
-            }
-            (Type::Dict(tk_inner, tv_inner), Type::Dict(sk_inner, sv_inner)) => {
-                // For maps, keys and values must match or target must be dynamic
-                let key_match = **tk_inner == Type::Dynamic || tk_inner == sk_inner;
-                let val_match = **tv_inner == Type::Dynamic || tv_inner == sv_inner;
-                key_match && val_match
-            }
+    fn is_assignable(&self, target: &Type, value: &Type) -> bool {
+        if target == &Type::Auto || target == &Type::Dynamic || value == &Type::Dynamic { return true; }
+        if target == value { return true; }
+        
+        match (target, value) {
+            (Type::Array(t1), Type::Array(t2)) => self.is_assignable(t1, t2),
+            (Type::Dict(k1, v1), Type::Dict(k2, v2)) => self.is_assignable(k1, k2) && self.is_assignable(v1, v2),
+            (Type::Nullable(t1), t2) => self.is_assignable(t1, t2),
             _ => false,
         }
-    }
-
-    fn error(&self, message: String, line: usize, column: usize) -> LavinaError {
-        LavinaError::new(ErrorPhase::TypeChecker, message, line, column).with_context(&self.source)
     }
 }

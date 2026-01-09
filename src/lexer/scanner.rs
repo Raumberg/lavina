@@ -33,7 +33,6 @@ impl Scanner {
         keywords.insert("if".to_string(), TokenType::If);
         keywords.insert("inline".to_string(), TokenType::Inline);
         keywords.insert("int".to_string(), TokenType::IntType);
-        keywords.insert("let".to_string(), TokenType::Let);
         keywords.insert("null".to_string(), TokenType::Null);
         keywords.insert("or".to_string(), TokenType::Or);
         keywords.insert("return".to_string(), TokenType::Return);
@@ -45,6 +44,10 @@ impl Scanner {
         keywords.insert("in".to_string(), TokenType::In);
         keywords.insert("vector".to_string(), TokenType::Vector);
         keywords.insert("hashmap".to_string(), TokenType::HashMap);
+        keywords.insert("import".to_string(), TokenType::Import);
+        keywords.insert("as".to_string(), TokenType::As);
+        keywords.insert("namespace".to_string(), TokenType::Namespace);
+        keywords.insert("private".to_string(), TokenType::Private);
 
         Self {
             source: source.chars().collect(),
@@ -111,7 +114,13 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
-            ':' => self.add_token(TokenType::Colon),
+            ':' => {
+                if self.match_char(':') {
+                    self.add_token(TokenType::DoubleColon);
+                } else {
+                    self.add_token(TokenType::Colon);
+                }
+            }
             '#' => {
                 if self.match_char('[') {
                     self.add_token(TokenType::HashBracket);

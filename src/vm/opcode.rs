@@ -29,6 +29,7 @@ pub enum OpCode {
     HashMap,
     GetIndex,
     SetIndex,
+    Namespace, // New!
 }
 
 impl From<u8> for OpCode {
@@ -62,6 +63,7 @@ impl From<u8> for OpCode {
             25 => OpCode::HashMap,
             26 => OpCode::GetIndex,
             27 => OpCode::SetIndex,
+            28 => OpCode::Namespace,
             _ => panic!("Unknown opcode: {}", value),
         }
     }

@@ -73,6 +73,7 @@ impl Chunk {
             OpCode::HashMap => self.byte_instruction("OP_HASH_MAP", offset),
             OpCode::GetIndex => self.simple_instruction("OP_GET_INDEX", offset),
             OpCode::SetIndex => self.simple_instruction("OP_SET_INDEX", offset),
+            OpCode::Namespace => self.constant_instruction("OP_NAMESPACE", offset),
         }
     }
 

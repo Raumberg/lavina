@@ -1,0 +1,5 @@
+fn add(int a, int b) -> int:
+    return a + b
+
+private fn internal_utility():
+    print("This is hidden")

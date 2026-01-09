@@ -1,21 +1,13 @@
-// Векторы (массивы)
-auto my_list = [1, 2, 3 + 4, 5]
-print(my_list) // Выведет: [1, 2, 7, 5]
+vector[int] my_list = [1, 2, 3]
+print("List:", my_list)
 
-// Словари (hashmap)
-auto user = {
-    "name": "Alina",
-    "age": 20,
-    "is_ai": true
-}
-print(user) // Выведет: {name: Alina, age: 20, is_ai: true}
+hashmap[string, int] my_map = {"a": 1, "b": 2}
+print("Map:", my_map)
 
-vector[int] mytestarray = [1, 2, 3]
-print(mytestarray)
+auto inferred_list = [1.1, 2.2]
+print("Inferred list (float):", inferred_list)
 
-int ln = len(mytestarray)
-print("len of that array is: ", ln)
-
-print("current clock is: ", clock())
-
-print("type of that array is: ", type(mytestarray))
+dynamic flexible = 10
+print("Dynamic as int:", flexible)
+flexible = "now a string"
+print("Dynamic as string:", flexible)

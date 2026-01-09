@@ -12,7 +12,8 @@ pub enum TokenType {
     Equal, EqualEqual,
     Greater, GreaterEqual,
     Less, LessEqual,
-    Arrow, // ->
+    Arrow,       // ->
+    DoubleColon, // ::
 
     // Literals
     Identifier,
@@ -21,9 +22,10 @@ pub enum TokenType {
     Float,
 
     // Keywords
-    Let, And, Auto, Bool, Comptime, Dynamic, Else, False, FloatType,
+    And, Auto, Bool, Comptime, Dynamic, Else, False, FloatType,
     Fn, If, Inline, IntType, Null, Or, Return,
     StringType, True, Void, While, For, In, Vector, HashMap,
+    Import, As, Namespace, Private,
 
     // Special for directives
     HashBracket, // #[
@@ -64,6 +66,7 @@ impl TokenType {
             TokenType::Less => "'<'".to_string(),
             TokenType::LessEqual => "'<='".to_string(),
             TokenType::Arrow => "'->'".to_string(),
+            TokenType::DoubleColon => "'::'".to_string(),
             TokenType::Identifier => "identifier".to_string(),
             TokenType::String => "string literal".to_string(),
             TokenType::Int => "integer literal".to_string(),

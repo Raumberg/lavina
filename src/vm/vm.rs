@@ -19,7 +19,6 @@ struct CallFrame {
     slots_offset: usize,
 }
 
-/// The Lavina Virtual Machine.
 pub struct VM {
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
@@ -42,8 +41,6 @@ impl VM {
         
         vm
     }
-
-    // --- Core Methods ---
 
     pub fn interpret(&mut self, function: Rc<ObjFunction>) -> InterpretResult {
         self.stack.clear();
@@ -72,8 +69,6 @@ impl VM {
     fn current_frame(&mut self) -> &mut CallFrame {
         self.frames.last_mut().expect("No call frame")
     }
-
-    // --- Main Execution Loop ---
 
     fn run(&mut self) -> InterpretResult {
         loop {
@@ -247,7 +242,13 @@ impl VM {
                                     None => self.push(Value::Null),
                                 }
                             }
-                            _ => return self.runtime_error("Can only index vectors and hashmaps."),
+                            ObjType::Namespace(_, members) => {
+                                match members.get(&key) {
+                                    Some(val) => self.push(val.clone()),
+                                    None => self.push(Value::Null),
+                                }
+                            }
+                            _ => return self.runtime_error("Can only index vectors, hashmaps and namespaces."),
                         }
                     } else {
                         return self.runtime_error("Can only index objects.");
@@ -279,10 +280,38 @@ impl VM {
                                 m.insert(key, value.clone());
                                 self.push(value);
                             }
-                            _ => return self.runtime_error("Can only index vectors and hashmaps."),
+                            ObjType::Namespace(_, members) => {
+                                members.insert(key, value.clone());
+                                self.push(value);
+                            }
+                            _ => return self.runtime_error("Can only index vectors, hashmaps and namespaces."),
                         }
                     } else {
                         return self.runtime_error("Can only index objects.");
+                    }
+                }
+
+                OpCode::Namespace => {
+                    let name = self.read_string_constant();
+                    // In a real implementation, we would collect defined members.
+                    // For now, let's create a Namespace from a HashMap.
+                    let val = self.pop();
+                    if let Value::Object(idx) = val {
+                        // This is a hack: we assume the namespace "init" returned a HashMap
+                        // of its members. We convert it to a Namespace object.
+                        let obj_type = self.memory.heap[idx].as_ref().unwrap().obj_type.clone();
+                        if let ObjType::HashMap(members) = obj_type {
+                            let ns_idx = self.memory.alloc(ObjType::Namespace(name, members));
+                            self.push(Value::Object(ns_idx));
+                        } else {
+                            // If it's not a hashmap, maybe it's just null? 
+                            // Create empty namespace.
+                            let ns_idx = self.memory.alloc(ObjType::Namespace(name, HashMap::new()));
+                            self.push(Value::Object(ns_idx));
+                        }
+                    } else {
+                        let ns_idx = self.memory.alloc(ObjType::Namespace(name, HashMap::new()));
+                        self.push(Value::Object(ns_idx));
                     }
                 }
 
@@ -326,6 +355,7 @@ impl VM {
                             s += "}";
                             s
                         }
+                        ObjType::Namespace(name, _) => format!("<namespace {}>", name),
                         ObjType::Function(f) => format!("<fn {}>", f.name),
                     }
                 } else {

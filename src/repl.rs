@@ -57,7 +57,7 @@ pub fn run() {
 
         if is_expr {
             let expr = expr_res.unwrap();
-            type_checker.source = source.clone();
+            type_checker.set_source(source.clone());
             if let Ok(_) = type_checker.check_expr(&expr) {
                 // To evaluate expression in VM, we wrap it in a print or just compile it
                 // For now, let's wrap it in a statement for the compiler
@@ -87,7 +87,7 @@ pub fn run() {
         };
 
         // Type Checking
-        type_checker.source = source.clone();
+        type_checker.set_source(source.clone());
         if let Err(e) = type_checker.check_statements(&statements) {
             eprintln!("{}", e);
             continue;

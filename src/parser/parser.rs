@@ -1,5 +1,5 @@
 use crate::lexer::{Token, TokenType};
-use crate::parser::ast::{Expr, Literal, Stmt, Type, FunctionDecl, Directive};
+use crate::parser::ast::{Expr, Literal, Stmt, Type, FunctionDecl, Directive, Visibility};
 use crate::error::{LavinaError, ErrorPhase};
 
 pub struct Parser {
@@ -37,8 +37,12 @@ impl Parser {
     }
 
     fn declaration(&mut self) -> Result<Stmt, LavinaError> {
-        let mut directives = Vec::new();
+        let mut visibility = Visibility::Public;
+        if self.match_types(&[TokenType::Private]) {
+            visibility = Visibility::Private;
+        }
 
+        let mut directives = Vec::new();
         while self.check(&TokenType::Hash) || self.check(&TokenType::HashBracket) {
             if self.check(&TokenType::Hash) && self.peek_next().token_type != TokenType::LeftBracket {
                 let directive = self.single_directive()?;
@@ -58,17 +62,72 @@ impl Parser {
             return Ok(Stmt::Directive(dir));
         }
 
-        if self.check_function_start() {
-            return self.function_declaration(directives);
+        // Hybrid check: Type then Fn OR Type then Identifier
+        if self.is_type_at_pos(0) {
+            // It could be a type followed by a name (variable) 
+            // OR a type followed by 'fn' (function)
+            // OR it could be just a function call (e.g. print(...))
+            
+            let mut next_pos = 1;
+            let current_type = self.peek().token_type.clone();
+            
+            // Handle vector[T] / hashmap[K, V]
+            if current_type == TokenType::Vector {
+                next_pos = 4; // vector [ T ]
+            } else if current_type == TokenType::HashMap {
+                next_pos = 6; // hashmap [ K , V ]
+            }
+            
+            // Check for nullable ?
+            if self.peek_at(next_pos).token_type == TokenType::Question {
+                next_pos += 1;
+            }
+
+            let next_token = self.peek_at(next_pos).token_type.clone();
+            
+            if next_token == TokenType::Identifier || next_token == TokenType::Fn || 
+               next_token == TokenType::Inline || next_token == TokenType::Comptime {
+                
+                if self.check_function_start() {
+                    return self.function_declaration(directives, visibility);
+                }
+                return self.var_declaration(visibility);
+            }
         }
 
-        if self.match_types(&[TokenType::Let, TokenType::Auto, TokenType::Dynamic, 
-                            TokenType::IntType, TokenType::FloatType, TokenType::StringType, TokenType::Bool,
-                            TokenType::Vector, TokenType::HashMap]) {
-            return self.var_declaration();
+        if self.match_types(&[TokenType::Import]) {
+            return self.import_statement();
+        }
+
+        if self.match_types(&[TokenType::Namespace]) {
+            return self.namespace_statement();
         }
 
         self.statement()
+    }
+
+    fn import_statement(&mut self) -> Result<Stmt, LavinaError> {
+        let mut path = Vec::new();
+        loop {
+            path.push(self.consume(TokenType::Identifier, "Expect module name.")?.clone());
+            if !self.match_types(&[TokenType::DoubleColon]) { break; }
+        }
+
+        let mut alias = None;
+        if self.match_types(&[TokenType::As]) {
+            alias = Some(self.consume(TokenType::Identifier, "Expect alias name after 'as'.")?.clone());
+        }
+
+        self.match_types(&[TokenType::Semicolon, TokenType::Newline]);
+        Ok(Stmt::Import(path, alias))
+    }
+
+    fn namespace_statement(&mut self) -> Result<Stmt, LavinaError> {
+        let name = self.consume(TokenType::Identifier, "Expect namespace name.")?.clone();
+        self.consume(TokenType::Colon, "Expect ':' after namespace name.")?;
+        
+        let body = self.block()?;
+        Ok(Stmt::Namespace(name, body))
     }
 
     fn single_directive(&mut self) -> Result<Directive, LavinaError> {
@@ -161,33 +220,61 @@ impl Parser {
     }
 
     fn check_function_start(&self) -> bool {
-        let t = self.peek().token_type.clone();
-        if t == TokenType::Fn || t == TokenType::Inline || t == TokenType::Comptime {
-            return true;
+        // We are already at the beginning of a declaration.
+        // Format: [ReturnType] [inline|comptime] fn ...
+        let mut offset = 0;
+        
+        // Skip return type
+        if self.is_type_at_pos(offset) {
+            offset += 1;
+            // Handle vector[T] / hashmap[K, V] which take multiple tokens
+            let t = self.peek_at(offset - 1).token_type.clone();
+            if t == TokenType::Vector {
+                offset += 3; // [ T ]
+            } else if t == TokenType::HashMap {
+                offset += 5; // [ K , V ]
+            }
+        } else {
+            return false;
         }
-        if self.is_type_token(&t) && self.peek_next().token_type == TokenType::Fn {
-            return true;
+
+        // Optional ? for nullable
+        if self.peek_at(offset).token_type == TokenType::Question {
+            offset += 1;
         }
-        false
+
+        // Optional modifiers
+        while offset < self.tokens.len() {
+            let t = self.peek_at(offset).token_type.clone();
+            if t == TokenType::Inline || t == TokenType::Comptime {
+                offset += 1;
+            } else {
+                break;
+            }
+        }
+
+        // Must be 'fn'
+        self.peek_at(offset).token_type == TokenType::Fn
     }
 
-    fn is_type_token(&self, t: &TokenType) -> bool {
-        matches!(t, TokenType::IntType | TokenType::FloatType | TokenType::StringType | TokenType::Bool | TokenType::Void | TokenType::Auto | TokenType::Dynamic | TokenType::Vector | TokenType::HashMap)
+    fn is_type_at_pos(&self, pos: usize) -> bool {
+        let t = self.peek_at(pos).token_type.clone();
+        matches!(t, TokenType::IntType | TokenType::FloatType | TokenType::StringType | TokenType::Bool | 
+                  TokenType::Void | TokenType::Auto | TokenType::Dynamic | TokenType::Vector | 
+                  TokenType::HashMap | TokenType::Identifier)
     }
 
-    fn function_declaration(&mut self, directives: Vec<Directive>) -> Result<Stmt, LavinaError> {
+    fn function_declaration(&mut self, directives: Vec<Directive>, visibility: Visibility) -> Result<Stmt, LavinaError> {
+        let return_type = self.parse_type()?;
+
         let mut is_inline = false;
         let mut is_comptime = false;
-        
-        if self.match_types(&[TokenType::Inline]) { is_inline = true; }
-        if self.match_types(&[TokenType::Comptime]) { is_comptime = true; }
-
-        let mut return_type = Type::Void;
-        if self.is_type_token(&self.peek().token_type) {
-            return_type = self.parse_type()?;
+        while self.match_types(&[TokenType::Inline, TokenType::Comptime]) {
+            if self.previous().token_type == TokenType::Inline { is_inline = true; }
+            if self.previous().token_type == TokenType::Comptime { is_comptime = true; }
         }
 
-        self.consume(TokenType::Fn, "Expect 'fn' keyword.")?;
+        self.consume(TokenType::Fn, "Expect 'fn' keyword after return type.")?;
         let name = self.consume(TokenType::Identifier, "Expect function name.")?.clone();
         
         self.consume(TokenType::LeftParen, "Expect '(' after function name.")?;
@@ -202,10 +289,6 @@ impl Parser {
         }
         self.consume(TokenType::RightParen, "Expect ')' after parameters.")?;
 
-        if self.match_types(&[TokenType::Arrow]) {
-            return_type = self.parse_type()?;
-        }
-
         self.consume(TokenType::Colon, "Expect ':' before function body.")?;
         let body = self.block()?;
 
@@ -217,54 +300,13 @@ impl Parser {
             directives,
             is_inline,
             is_comptime,
+            visibility,
         }))
     }
 
-    fn var_declaration(&mut self) -> Result<Stmt, LavinaError> {
-        let token = self.previous().clone();
-        
-        let (name, final_type) = if token.token_type == TokenType::Let {
-            let name = self.consume(TokenType::Identifier, "Expect variable name.")?.clone();
-            let mut t = None;
-            if self.match_types(&[TokenType::Colon]) {
-                t = Some(self.parse_type()?);
-            }
-            (name, t)
-        } else {
-            let mut t = match token.token_type {
-                TokenType::Auto => Type::Auto,
-                TokenType::Dynamic => Type::Dynamic,
-                TokenType::IntType => Type::Int,
-                TokenType::FloatType => Type::Float,
-                TokenType::StringType => Type::String,
-                TokenType::Bool => Type::Bool,
-                TokenType::Vector => {
-                    self.consume(TokenType::LeftBracket, "Expect '[' after 'vector'.")?;
-                    let inner = self.parse_type()?;
-                    self.consume(TokenType::RightBracket, "Expect ']' after vector type.")?;
-                    Type::Array(Box::new(inner))
-                }
-                TokenType::HashMap => {
-                    self.consume(TokenType::LeftBracket, "Expect '[' after 'hashmap'.")?;
-                    let key = self.parse_type()?;
-                    self.consume(TokenType::Comma, "Expect ',' between key and value types in hashmap.")?;
-                    let value = self.parse_type()?;
-                    self.consume(TokenType::RightBracket, "Expect ']' after hashmap types.")?;
-                    Type::Dict(Box::new(key), Box::new(value))
-                }
-                _ => {
-                    let t = self.peek();
-                    return Err(self.error(format!("Unexpected token in variable declaration: {:?}", token), t.line, t.column));
-                }
-            };
-
-            if self.match_types(&[TokenType::Question]) {
-                t = Type::Nullable(Box::new(t));
-            }
-
-            let name = self.consume(TokenType::Identifier, "Expect variable name.")?.clone();
-            (name, Some(t))
-        };
+    fn var_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
+        let var_type = self.parse_type()?;
+        let name = self.consume(TokenType::Identifier, "Expect variable name after type.")?.clone();
 
         let mut initializer = None;
         if self.match_types(&[TokenType::Equal]) {
@@ -272,7 +314,7 @@ impl Parser {
         }
 
         self.match_types(&[TokenType::Semicolon, TokenType::Newline]);
-        Ok(Stmt::Let(name, final_type, initializer))
+        Ok(Stmt::Let(name, Some(var_type), initializer, visibility))
     }
 
     fn statement(&mut self) -> Result<Stmt, LavinaError> {
@@ -361,10 +403,6 @@ impl Parser {
             match expr {
                 Expr::Variable(name) => return Ok(Expr::Assign(name, Box::new(value))),
                 Expr::Index(_coll, bracket, _idx) => {
-                    // For now we don't have AssignIndex in AST, let's just use regular assign 
-                    // or maybe we should add it? Actually, collection[idx] = val 
-                    // is a special case. Let's just return error for now to keep it simple
-                    // or handle it later.
                     return Err(self.error("Index assignment not yet implemented.".to_string(), bracket.line, bracket.column));
                 }
                 _ => return Err(self.error("Invalid assignment target.".to_string(), equals.line, equals.column)),
@@ -452,6 +490,10 @@ impl Parser {
                 let index = self.expression()?;
                 let bracket = self.consume(TokenType::RightBracket, "Expect ']' after index.")?.clone();
                 expr = Expr::Index(Box::new(expr), bracket, Box::new(index));
+            } else if self.match_types(&[TokenType::Dot]) {
+                let name = self.consume(TokenType::Identifier, "Expect property name after '.'.")?.clone();
+                let literal_name = Expr::Literal(Literal::String(name.lexeme.clone()));
+                expr = Expr::Index(Box::new(expr), name, Box::new(literal_name));
             } else {
                 break;
             }
@@ -606,6 +648,13 @@ impl Parser {
 
     fn peek(&self) -> &Token {
         &self.tokens[self.current]
+    }
+
+    fn peek_at(&self, offset: usize) -> &Token {
+        if self.current + offset >= self.tokens.len() {
+            return self.tokens.last().unwrap();
+        }
+        &self.tokens[self.current + offset]
     }
 
     fn peek_next(&self) -> &Token {

@@ -1,0 +1,13 @@
+namespace math:
+    int fn add(int a, int b):
+        return a + b
+
+    private int fn secret_formula(int x):
+        return x * 42
+
+print("Math namespace defined")
+auto res = math.add(5, 10)
+print("5 + 10 =", res)
+// print("Now lets try to use private function:")
+// auto res2 = math.secret_formula(5)
+// print("The value is: ", res2)

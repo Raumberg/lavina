@@ -1,4 +1,3 @@
-use std::fmt;
 use std::collections::HashMap;
 use crate::vm::chunk::Chunk;
 use crate::eval::value::Value;
@@ -24,6 +23,7 @@ pub enum ObjType {
     Vector(Vec<Value>),
     HashMap(HashMap<String, Value>),
     Function(ObjFunction),
+    Namespace(String, HashMap<String, Value>), // New: namespace name, members
 }
 
 /// A header for any heap-allocated object.
