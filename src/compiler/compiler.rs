@@ -2,7 +2,7 @@ use crate::parser::ast::{Expr, Stmt, Literal};
 use crate::vm::chunk::Chunk;
 use crate::vm::opcode::OpCode;
 use crate::lexer::TokenType;
-use crate::error::{LavinaError, ErrorPhase};
+use crate::error::LavinaError;
 use crate::eval::value::ObjFunction;
 use std::rc::Rc;
 
@@ -137,6 +137,100 @@ impl Compiler {
                 self.emit_byte(OpCode::Pop as u8, 0);
                 Ok(())
             }
+            Stmt::For(item_name, collection, body) => {
+                self.begin_scope();
+                
+                // 1. Копируем коллекцию в скрытую переменную
+                self.compile_expr(collection)?;
+                let coll_local = "_collection".to_string();
+                self.add_local(coll_local.clone());
+                
+                // 2. Инициализируем индекс _i = 0
+                let zero = self.function.chunk.add_constant(crate::eval::value::Value::Int(0));
+                self.emit_constant(zero as u8, item_name.line);
+                let index_local = "_i".to_string();
+                self.add_local(index_local.clone());
+                
+                let loop_start = self.function.chunk.code.len();
+                
+                // 3. Условие: _i < len(_collection)
+                let coll_idx = self.resolve_local(&coll_local).unwrap();
+                let i_idx = self.resolve_local(&index_local).unwrap();
+                
+                // Вызываем len(_collection)
+                let len_const = self.function.chunk.add_constant(crate::eval::value::Value::String("len".to_string()));
+                self.emit_byte(OpCode::GetGlobal as u8, item_name.line);
+                self.emit_byte(len_const as u8, item_name.line);
+                
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(coll_idx as u8, item_name.line);
+                
+                self.emit_byte(OpCode::Call as u8, item_name.line);
+                self.emit_byte(1, item_name.line);
+                
+                // Загружаем _i и сравниваем
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(i_idx as u8, item_name.line);
+                
+                self.emit_byte(OpCode::Less as u8, item_name.line);
+                self.emit_byte(OpCode::Not as u8, item_name.line); // Инвертируем, так как i < len
+                // На самом деле нам нужно Less, но я реализовала Less в VM. 
+                // Давай просто: _i < len
+                // Сначала i, потом len, потом Less
+                // Перепишем порядок:
+                
+                /* Очистим стек условия */
+                self.function.chunk.code.truncate(loop_start);
+                
+                // Повторная попытка генерации условия:
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(i_idx as u8, item_name.line);
+                
+                let len_const = self.function.chunk.add_constant(crate::eval::value::Value::String("len".to_string()));
+                self.emit_byte(OpCode::GetGlobal as u8, item_name.line);
+                self.emit_byte(len_const as u8, item_name.line);
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(coll_idx as u8, item_name.line);
+                self.emit_byte(OpCode::Call as u8, item_name.line);
+                self.emit_byte(1, item_name.line);
+                
+                self.emit_byte(OpCode::Less as u8, item_name.line);
+                
+                let exit_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
+                self.emit_byte(OpCode::Pop as u8, 0);
+                
+                // 4. Тело цикла: let item = _collection[_i]
+                self.begin_scope();
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(coll_idx as u8, item_name.line);
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(i_idx as u8, item_name.line);
+                self.emit_byte(OpCode::GetIndex as u8, item_name.line);
+                
+                self.add_local(item_name.lexeme.clone()); // Текущий элемент
+                
+                self.compile_stmt(body)?;
+                
+                self.end_scope(); // Конец тела (удаляем item)
+                
+                // 5. Инкремент: _i = _i + 1
+                self.emit_byte(OpCode::GetLocal as u8, item_name.line);
+                self.emit_byte(i_idx as u8, item_name.line);
+                let one = self.function.chunk.add_constant(crate::eval::value::Value::Int(1));
+                self.emit_constant(one as u8, item_name.line);
+                self.emit_byte(OpCode::Add as u8, item_name.line);
+                self.emit_byte(OpCode::SetLocal as u8, item_name.line);
+                self.emit_byte(i_idx as u8, item_name.line);
+                self.emit_byte(OpCode::Pop as u8, 0); // Результат SetLocal нам не нужен
+                
+                self.emit_loop(loop_start);
+                
+                self.patch_jump(exit_jump);
+                self.emit_byte(OpCode::Pop as u8, 0);
+                
+                self.end_scope(); // Удаляем _collection и _i
+                Ok(())
+            }
             Stmt::Return(keyword, value) => {
                 if let Some(expr) = value {
                     self.compile_expr(expr)?;
@@ -146,7 +240,7 @@ impl Compiler {
                 self.emit_byte(OpCode::Return as u8, keyword.line);
                 Ok(())
             }
-            _ => Ok(()),
+            Stmt::Directive(_) => Ok(()),
         }
     }
 
@@ -199,10 +293,6 @@ impl Compiler {
                     TokenType::Star => self.emit_byte(OpCode::Multiply as u8, op.line),
                     TokenType::Slash => self.emit_byte(OpCode::Divide as u8, op.line),
                     TokenType::EqualEqual => self.emit_byte(OpCode::Equal as u8, op.line),
-                    TokenType::BangEqual => {
-                        self.emit_byte(OpCode::Equal as u8, op.line);
-                        self.emit_byte(OpCode::Not as u8, op.line);
-                    }
                     TokenType::Greater => self.emit_byte(OpCode::Greater as u8, op.line),
                     TokenType::GreaterEqual => {
                         self.emit_byte(OpCode::Less as u8, op.line);
@@ -213,14 +303,10 @@ impl Compiler {
                         self.emit_byte(OpCode::Greater as u8, op.line);
                         self.emit_byte(OpCode::Not as u8, op.line);
                     }
-                    _ => {}
-                }
-            }
-            Expr::Unary(op, right) => {
-                self.compile_expr(right)?;
-                match op.token_type {
-                    TokenType::Minus => self.emit_byte(OpCode::Negate as u8, op.line),
-                    TokenType::Bang => self.emit_byte(OpCode::Not as u8, op.line),
+                    TokenType::BangEqual => {
+                        self.emit_byte(OpCode::Equal as u8, op.line);
+                        self.emit_byte(OpCode::Not as u8, op.line);
+                    }
                     _ => {}
                 }
             }
@@ -231,6 +317,11 @@ impl Compiler {
                 }
                 self.emit_byte(OpCode::Call as u8, paren.line);
                 self.emit_byte(args.len() as u8, paren.line);
+            }
+            Expr::Index(collection, bracket, index) => {
+                self.compile_expr(collection)?;
+                self.compile_expr(index)?;
+                self.emit_byte(OpCode::GetIndex as u8, bracket.line);
             }
             Expr::Vector(elements) => {
                 for el in elements {

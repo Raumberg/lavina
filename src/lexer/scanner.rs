@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 pub struct Scanner {
     source: Vec<char>,
-    raw_source: String, // Store for error context
+    raw_source: String,
     tokens: Vec<Token>,
     errors: Vec<LavinaError>,
     start: usize,
@@ -41,6 +41,8 @@ impl Scanner {
         keywords.insert("true".to_string(), TokenType::True);
         keywords.insert("void".to_string(), TokenType::Void);
         keywords.insert("while".to_string(), TokenType::While);
+        keywords.insert("for".to_string(), TokenType::For);
+        keywords.insert("in".to_string(), TokenType::In);
         keywords.insert("vector".to_string(), TokenType::Vector);
         keywords.insert("hashmap".to_string(), TokenType::HashMap);
 

@@ -12,7 +12,7 @@ pub enum Type {
     Array(Box<Type>),
     Tuple(Vec<Type>),
     Dict(Box<Type>, Box<Type>),
-    Function(Box<Type>, Vec<Type>), // Return type, parameter types
+    Function(Box<Type>, Vec<Type>),
     Nullable(Box<Type>),
     Custom(String),
 }
@@ -26,9 +26,10 @@ pub enum Expr {
     Variable(Token),
     Assign(Token, Box<Expr>),
     Logical(Box<Expr>, Token, Box<Expr>),
-    Call(Box<Expr>, Token, Vec<Expr>), // Callee, closing paren token, arguments
-    Vector(Vec<Expr>),                 // [1, 2, 3]
-    Map(Vec<(Expr, Expr)>),            // {"a": 1, "b": 2}
+    Call(Box<Expr>, Token, Vec<Expr>),
+    Index(Box<Expr>, Token, Box<Expr>), // New: collection[index]
+    Vector(Vec<Expr>),
+    Map(Vec<(Expr, Expr)>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -45,11 +46,12 @@ pub enum Stmt {
     Expression(Expr),
     Let(Token, Option<Type>, Option<Expr>),
     Return(Token, Option<Expr>),
-    If(Expr, Box<Stmt>, Option<Box<Stmt>>), // Condition, then_branch, else_branch
+    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
     While(Expr, Box<Stmt>),
+    For(Token, Expr, Box<Stmt>), // New: for item in collection:
     Block(Vec<Stmt>),
     Function(FunctionDecl),
-    Directive(Directive), // Top-level or block-level directive like #set
+    Directive(Directive),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -65,10 +67,10 @@ pub struct FunctionDecl {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Directive {
-    Simple(String),                    // #pure
-    Parametric(String, Vec<Expr>),      // #optimize[3], #target[jit]
-    Doc(String),                        // #doc "text"
-    Block(Vec<Directive>, Vec<Stmt>),   // #set[...] : block
+    Simple(String),
+    Parametric(String, Vec<Expr>),
+    Doc(String),
+    Block(Vec<Directive>, Vec<Stmt>),
 }
 
 pub struct Program {

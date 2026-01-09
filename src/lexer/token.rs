@@ -23,7 +23,7 @@ pub enum TokenType {
     // Keywords
     Let, And, Auto, Bool, Comptime, Dynamic, Else, False, FloatType,
     Fn, If, Inline, IntType, Null, Or, Return,
-    StringType, True, Void, While, Vector, HashMap,
+    StringType, True, Void, While, For, In, Vector, HashMap,
 
     // Special for directives
     HashBracket, // #[
@@ -35,14 +35,6 @@ pub enum TokenType {
     Newline,
 
     Eof
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    pub token_type: TokenType,
-    pub lexeme: String,
-    pub line: usize,
-    pub column: usize,
 }
 
 impl TokenType {
@@ -83,6 +75,14 @@ impl TokenType {
             _ => format!("{:?}", self).to_lowercase(),
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Token {
+    pub token_type: TokenType,
+    pub lexeme: String,
+    pub line: usize,
+    pub column: usize,
 }
 
 impl Token {

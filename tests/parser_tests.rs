@@ -5,11 +5,11 @@ use lavina::parser::ast::{Expr, Literal, Stmt, Type};
 #[test]
 fn test_parse_simple_arithmetic() {
     let source = "1 + 2 * 3".to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, errors) = scanner.scan_tokens();
     assert!(errors.is_empty());
 
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let expr = parser.parse_expression().unwrap();
 
     // Ожидаем: Binary(1, +, Binary(2, *, 3))
@@ -30,10 +30,10 @@ fn test_parse_simple_arithmetic() {
 #[test]
 fn test_parse_grouping() {
     let source = "(1 + 2) * 3".to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
     
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let expr = parser.parse_expression().unwrap();
 
     // Ожидаем: Binary(Grouping(Binary(1, +, 2)), *, 3)
@@ -46,10 +46,10 @@ fn test_parse_grouping() {
 #[test]
 fn test_parse_unary() {
     let source = "-5 * !true".to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
 
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let expr = parser.parse_expression().unwrap();
 
     if let Expr::Binary(left, _, right) = expr {
@@ -61,16 +61,16 @@ fn test_parse_unary() {
 #[test]
 fn test_parse_function_with_if() {
     let source = r#"
-int fn abs(int n):
+fn abs(int n) -> int:
     if n < 0:
         return -n
     return n
 "#.to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, errors) = scanner.scan_tokens();
     assert!(errors.is_empty());
 
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let program = parser.parse_program().unwrap();
 
     assert_eq!(program.len(), 1);
@@ -89,10 +89,10 @@ auto x = 10
 int y = 20
 let z: string = "hello"
 "#.to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
     
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let program = parser.parse_program().unwrap();
 
     assert_eq!(program.len(), 3);
@@ -107,10 +107,10 @@ fn test_parse_while_loop() {
 while x > 0:
     x = x - 1
 "#.to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
     
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let program = parser.parse_program().unwrap();
 
     assert_eq!(program.len(), 1);
@@ -126,13 +126,13 @@ fn test_parse_directives() {
     let source = r#"
 #pure
 #[inline, optimize[3]]
-void fn fast():
+fn fast():
     return
 "#.to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
     
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let program = parser.parse_program().unwrap();
 
     assert_eq!(program.len(), 1);
@@ -146,13 +146,13 @@ void fn fast():
 fn test_parse_set_directive() {
     let source = r#"
 #set[target[jit]]:
-    void fn x():
+    fn x():
         return
 "#.to_string();
-    let mut scanner = Scanner::new(source);
+    let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
     
-    let mut parser = Parser::new(tokens.clone());
+    let mut parser = Parser::new(tokens.clone(), source);
     let program = parser.parse_program().unwrap();
 
     assert_eq!(program.len(), 1);
@@ -161,4 +161,3 @@ fn test_parse_set_directive() {
         assert_eq!(body.len(), 1);
     } else { panic!("Should be a #set block directive"); }
 }
-

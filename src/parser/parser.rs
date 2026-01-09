@@ -278,6 +278,7 @@ impl Parser {
     fn statement(&mut self) -> Result<Stmt, LavinaError> {
         if self.match_types(&[TokenType::If]) { return self.if_statement(); }
         if self.match_types(&[TokenType::While]) { return self.while_statement(); }
+        if self.match_types(&[TokenType::For]) { return self.for_statement(); }
         if self.match_types(&[TokenType::Return]) { return self.return_statement(); }
         
         self.expression_statement()
@@ -305,6 +306,15 @@ impl Parser {
         self.consume(TokenType::Colon, "Expect ':' after while condition.")?;
         let body = Box::new(Stmt::Block(self.block()?));
         Ok(Stmt::While(condition, body))
+    }
+
+    fn for_statement(&mut self) -> Result<Stmt, LavinaError> {
+        let item_name = self.consume(TokenType::Identifier, "Expect variable name after 'for'.")?.clone();
+        self.consume(TokenType::In, "Expect 'in' after variable name.")?;
+        let collection = self.expression()?;
+        self.consume(TokenType::Colon, "Expect ':' after for loop header.")?;
+        let body = Box::new(Stmt::Block(self.block()?));
+        Ok(Stmt::For(item_name, collection, body))
     }
 
     fn return_statement(&mut self) -> Result<Stmt, LavinaError> {
@@ -348,11 +358,17 @@ impl Parser {
             let equals = self.previous().clone();
             let value = self.assignment()?;
 
-            if let Expr::Variable(name) = expr {
-                return Ok(Expr::Assign(name, Box::new(value)));
+            match expr {
+                Expr::Variable(name) => return Ok(Expr::Assign(name, Box::new(value))),
+                Expr::Index(_coll, bracket, _idx) => {
+                    // For now we don't have AssignIndex in AST, let's just use regular assign 
+                    // or maybe we should add it? Actually, collection[idx] = val 
+                    // is a special case. Let's just return error for now to keep it simple
+                    // or handle it later.
+                    return Err(self.error("Index assignment not yet implemented.".to_string(), bracket.line, bracket.column));
+                }
+                _ => return Err(self.error("Invalid assignment target.".to_string(), equals.line, equals.column)),
             }
-
-            return Err(self.error("Invalid assignment target.".to_string(), equals.line, equals.column));
         }
 
         Ok(expr)
@@ -432,6 +448,10 @@ impl Parser {
         loop {
             if self.match_types(&[TokenType::LeftParen]) {
                 expr = self.finish_call(expr)?;
+            } else if self.match_types(&[TokenType::LeftBracket]) {
+                let index = self.expression()?;
+                let bracket = self.consume(TokenType::RightBracket, "Expect ']' after index.")?.clone();
+                expr = Expr::Index(Box::new(expr), bracket, Box::new(index));
             } else {
                 break;
             }
@@ -580,7 +600,7 @@ impl Parser {
         self.previous()
     }
 
-    fn is_at_end(&self) -> bool {
+    pub fn is_at_end(&self) -> bool {
         self.peek().token_type == TokenType::Eof
     }
 

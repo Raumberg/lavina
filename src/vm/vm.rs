@@ -1,4 +1,3 @@
-use crate::vm::chunk::Chunk;
 use crate::vm::opcode::OpCode;
 use crate::eval::value::{Value, ObjFunction};
 use crate::eval::native::get_native_functions;
@@ -207,6 +206,60 @@ impl VM {
                         map.insert(key.to_string(), value);
                     }
                     self.push(Value::HashMap(Rc::new(RefCell::new(map))));
+                }
+                OpCode::GetIndex => {
+                    let index = self.pop();
+                    let collection = self.pop();
+                    match collection {
+                        Value::Vector(v) => {
+                            if let Some(idx) = index.as_int() {
+                                let v = v.borrow();
+                                if idx < 0 || idx >= v.len() as i64 {
+                                    return self.runtime_error("Vector index out of bounds.");
+                                }
+                                self.push(v[idx as usize].clone());
+                            } else {
+                                return self.runtime_error("Vector index must be an integer.");
+                            }
+                        }
+                        Value::HashMap(m) => {
+                            let m = m.borrow();
+                            let key = index.to_string();
+                            // In Lavina maps, keys are converted to strings for representation
+                            // but we can make it better later.
+                            match m.get(&key) {
+                                Some(val) => self.push(val.clone()),
+                                None => self.push(Value::Null),
+                            }
+                        }
+                        _ => return self.runtime_error("Can only index vectors and hashmaps."),
+                    }
+                }
+                OpCode::SetIndex => {
+                    let value = self.pop();
+                    let index = self.pop();
+                    let collection = self.pop();
+                    match collection {
+                        Value::Vector(v) => {
+                            if let Some(idx) = index.as_int() {
+                                let mut v = v.borrow_mut();
+                                if idx < 0 || idx >= v.len() as i64 {
+                                    return self.runtime_error("Vector index out of bounds.");
+                                }
+                                v[idx as usize] = value.clone();
+                                self.push(value);
+                            } else {
+                                return self.runtime_error("Vector index must be an integer.");
+                            }
+                        }
+                        Value::HashMap(m) => {
+                            let mut m = m.borrow_mut();
+                            let key = index.to_string();
+                            m.insert(key, value.clone());
+                            self.push(value);
+                        }
+                        _ => return self.runtime_error("Can only index vectors and hashmaps."),
+                    }
                 }
                 OpCode::Return => {
                     let result = self.pop();

@@ -1,44 +1,50 @@
 use std::env;
 use std::fs;
-use std::process;
-use lavina::lexer::Scanner;
+use lavina::lexer::scanner::Scanner;
 use lavina::parser::parser::Parser;
 use lavina::type_checker::checker::TypeChecker;
 use lavina::compiler::compiler::{Compiler, FunctionType};
-use lavina::vm::VM;
-use lavina::repl;
+use lavina::vm::vm::VM;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
 
-    if args.len() > 2 {
-        println!("Usage: lavina [script]");
-        process::exit(64);
+    if args.len() == 1 {
+        lavina::repl::run();
     } else if args.len() == 2 {
         run_file(&args[1]);
     } else {
-        repl::run();
+        eprintln!("Usage: lavina [path]");
     }
 }
 
 fn run_file(path: &str) {
-    let source = fs::read_to_string(path).expect("Could not read file");
-    
+    let source = match fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("Error reading file {}: {}", path, e);
+            return;
+        }
+    };
+
     let mut scanner = Scanner::new(source.clone());
     let (tokens, errors) = scanner.scan_tokens();
     
     if !errors.is_empty() {
-        for error in errors { eprintln!("{}", error); }
-        process::exit(65);
+        for e in errors {
+            eprintln!("{}", e);
+        }
+        return;
     }
 
     let mut parser = Parser::new(tokens.clone(), source.clone());
     match parser.parse_program() {
         Ok(statements) => {
-            let mut type_checker = TypeChecker::new(source.clone());
-            if let Err(e) = type_checker.check(&statements) {
+            let mut type_checker = TypeChecker::new();
+            type_checker.set_source(source.clone());
+            if let Err(e) = type_checker.check_statements(&statements) {
                 eprintln!("{}", e);
-                process::exit(65);
+                return;
             }
 
             let compiler = Compiler::new("<script>".to_string(), FunctionType::Script);
@@ -47,15 +53,9 @@ fn run_file(path: &str) {
                     let mut vm = VM::new();
                     vm.interpret(function);
                 }
-                Err(e) => {
-                    eprintln!("{}", e);
-                    process::exit(65);
-                }
+                Err(e) => eprintln!("{}", e),
             }
         }
-        Err(e) => {
-            eprintln!("{}", e);
-            process::exit(65);
-        }
+        Err(e) => eprintln!("{}", e),
     }
 }

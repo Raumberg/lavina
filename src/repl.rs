@@ -1,84 +1,113 @@
 use std::io::{self, Write};
-use crate::lexer::Scanner;
+use crate::lexer::scanner::Scanner;
 use crate::parser::parser::Parser;
-use crate::compiler::compiler::{Compiler, FunctionType};
-use crate::vm::VM;
-use crate::eval::value::Value;
 use crate::type_checker::checker::TypeChecker;
+use crate::compiler::compiler::{Compiler, FunctionType};
+use crate::vm::vm::{VM, InterpretResult};
 
 pub fn run() {
+    let mut line = String::new();
     let mut vm = VM::new();
-    let mut type_checker = TypeChecker::new("".to_string());
-    
-    println!("Lavina REPL (Bytecode VM + Type Safety) [type 'exit' to quit]");
+    let mut type_checker = TypeChecker::new(); // Persistent TypeChecker
+
+    println!("Lavina REPL (type 'exit' to quit)");
     println!("Note: Blocks (after ':') must be indented with spaces.");
 
     loop {
         print!("> ");
         io::stdout().flush().unwrap();
+        line.clear();
 
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).expect("Failed to read line");
-
-        if input.trim() == "exit" {
+        if io::stdin().read_line(&mut line).unwrap() == 0 {
             break;
         }
 
-        if input.trim().is_empty() {
+        let trimmed_line = line.trim();
+        if trimmed_line == "exit" {
+            break;
+        }
+        if trimmed_line.is_empty() {
             continue;
         }
 
-        execute(input, &mut vm, &mut type_checker);
-    }
-}
+        let source = trimmed_line.to_string();
 
-fn execute(source: String, vm: &mut VM, type_checker: &mut TypeChecker) {
-    let mut scanner = Scanner::new(source.clone());
-    let (tokens, errors) = scanner.scan_tokens();
-
-    if !errors.is_empty() {
-        for error in errors { eprintln!("{}", error); }
-        return;
-    }
-
-    type_checker.source = source.clone();
-
-    // 1. Пробуем как выражение
-    let mut expr_parser = Parser::new(tokens.clone(), source.clone());
-    if let Ok(expr) = expr_parser.parse_expression() {
-        if let Ok(_) = type_checker.check_expr(&expr) {
-            let compiler = Compiler::new("<repl_expr>".to_string(), FunctionType::Script);
-            let stmt = crate::parser::ast::Stmt::Expression(expr);
-            if let Ok(function) = compiler.compile(&[stmt]) {
-                vm.interpret(function);
-                return;
-            }
-        } else {
-            // Если тайп-чекер нашел ошибку в выражении, выводим её
-            match type_checker.check_expr(&expr) {
-                Err(e) => { eprintln!("{}", e); return; },
-                _ => {}
-            }
-        }
-    }
-
-    // 2. Пробуем как программу
-    let mut parser = Parser::new(tokens.clone(), source.clone());
-    match parser.parse_program() {
-        Ok(statements) => {
-            if let Err(e) = type_checker.check(&statements) {
+        // Lexing
+        let mut scanner = Scanner::new(source.clone());
+        let (tokens, lex_errors) = scanner.scan_tokens();
+        if !lex_errors.is_empty() {
+            for e in lex_errors {
                 eprintln!("{}", e);
-                return;
             }
+            continue;
+        }
 
-            let compiler = Compiler::new("<repl>".to_string(), FunctionType::Script);
-            match compiler.compile(&statements) {
-                Ok(function) => {
-                    vm.interpret(function);
-                }
-                Err(e) => eprintln!("{}", e),
+        // Parsing
+        let mut parser = Parser::new(tokens.clone(), source.clone());
+        
+        // Try to parse as expression first (for immediate printing)
+        let mut is_expr = false;
+        let mut expr_res = None;
+        if let Ok(expr) = parser.parse_expression() {
+            if parser.is_at_end() {
+                is_expr = true;
+                expr_res = Some(expr);
             }
         }
-        Err(e) => eprintln!("{}", e),
+
+        if is_expr {
+            let expr = expr_res.unwrap();
+            type_checker.source = source.clone();
+            if let Ok(_) = type_checker.check_expr(&expr) {
+                // To evaluate expression in VM, we wrap it in a print or just compile it
+                // For now, let's wrap it in a statement for the compiler
+                let statements = vec![crate::parser::ast::Stmt::Expression(expr)];
+                let compiler = Compiler::new("<repl>".to_string(), FunctionType::Script);
+                if let Ok(function) = compiler.compile(&statements) {
+                    match vm.interpret(function) {
+                        InterpretResult::Ok => {
+                            // If the last instruction pushed a value, print it
+                            // (In our current VM implementation, we might need a special REPL mode)
+                        },
+                        _ => {}
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Otherwise parse as full program
+        let mut parser = Parser::new(tokens.clone(), source.clone());
+        let statements = match parser.parse_program() {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{}", e);
+                continue;
+            }
+        };
+
+        // Type Checking
+        type_checker.source = source.clone();
+        if let Err(e) = type_checker.check_statements(&statements) {
+            eprintln!("{}", e);
+            continue;
+        }
+
+        // Compiling
+        let compiler = Compiler::new("<repl>".to_string(), FunctionType::Script);
+        let function = match compiler.compile(&statements) {
+            Ok(f) => f,
+            Err(e) => {
+                eprintln!("{}", e);
+                continue;
+            }
+        };
+
+        // Interpreting (VM)
+        match vm.interpret(function) {
+            InterpretResult::Ok => {},
+            InterpretResult::CompileError => eprintln!("Compile Error in REPL."),
+            InterpretResult::RuntimeError => {}, // VM already prints runtime error
+        }
     }
 }

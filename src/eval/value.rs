@@ -36,6 +36,13 @@ impl Value {
             _ => true,
         }
     }
+
+    pub fn as_int(&self) -> Option<i64> {
+        match self {
+            Value::Int(i) => Some(*i),
+            _ => None,
+        }
+    }
 }
 
 impl PartialOrd for Value {
