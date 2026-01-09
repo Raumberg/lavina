@@ -1,11 +1,11 @@
 use std::fmt;
 use std::rc::Rc;
-use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::eval::function::LavinaFunction;
 use crate::vm::chunk::Chunk;
+use crate::eval::function::LavinaFunction;
 
-pub type NativeFn = fn(Vec<Value>) -> Result<Value, String>;
+// Change: NativeFn now receives the heap
+pub type NativeFn = fn(&[Option<Obj>], Vec<Value>) -> Result<Value, String>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjFunction {
@@ -14,18 +14,46 @@ pub struct ObjFunction {
     pub name: String,
 }
 
-#[derive(Clone, PartialEq)]
+impl PartialOrd for ObjFunction {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.name.partial_cmp(&other.name)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub enum ObjType {
+    String(String),
+    Vector(Vec<Value>),
+    HashMap(HashMap<String, Value>),
+    Function(ObjFunction),
+}
+
+#[derive(Debug)]
+pub struct Obj {
+    pub obj_type: ObjType,
+    pub is_marked: bool,
+}
+
+impl Obj {
+    pub fn new(obj_type: ObjType) -> Self {
+        Self {
+            obj_type,
+            is_marked: false,
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Int(i64),
     Float(f64),
-    String(String),
     Bool(bool),
     Null,
     NativeFunction(String, NativeFn),
-    Function(Rc<LavinaFunction>),
+    String(String), 
+    Object(usize), 
     ObjFunction(Rc<ObjFunction>),
-    Vector(Rc<RefCell<Vec<Value>>>),
-    HashMap(Rc<RefCell<HashMap<String, Value>>>),
+    Function(Rc<LavinaFunction>),
 }
 
 impl Value {
@@ -43,18 +71,9 @@ impl Value {
             _ => None,
         }
     }
-}
 
-impl PartialOrd for Value {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        match (self, other) {
-            (Value::Int(a), Value::Int(b)) => a.partial_cmp(b),
-            (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
-            (Value::Int(a), Value::Float(b)) => (*a as f64).partial_cmp(b),
-            (Value::Float(a), Value::Int(b)) => a.partial_cmp(&(*b as f64)),
-            (Value::String(a), Value::String(b)) => a.partial_cmp(b),
-            _ => None,
-        }
+    pub fn is_string(&self) -> bool {
+        matches!(self, Value::String(_)) || matches!(self, Value::Object(_))
     }
 }
 
@@ -62,31 +81,14 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Value::Int(i) => write!(f, "{}", i),
-            Value::Float(fl) => write!(f, "{}", fl),
-            Value::String(s) => write!(f, "\"{}\"", s),
+            Value::Float(fl) => write!(f, "{:?}", fl),
             Value::Bool(b) => write!(f, "{}", b),
             Value::Null => write!(f, "null"),
             Value::NativeFunction(name, _) => write!(f, "<native fn {}>", name),
+            Value::String(s) => write!(f, "\"{}\"", s),
+            Value::Object(idx) => write!(f, "<obj {}>", idx),
+            Value::ObjFunction(func) => write!(f, "<fn {}>", func.name),
             Value::Function(func) => write!(f, "<fn {}>", func.declaration.name.lexeme),
-            Value::ObjFunction(func) => write!(f, "<vm fn {}>", func.name),
-            Value::Vector(v) => {
-                let v = v.borrow();
-                write!(f, "[")?;
-                for (i, val) in v.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{}", val)?;
-                }
-                write!(f, "]")
-            }
-            Value::HashMap(m) => {
-                let m = m.borrow();
-                write!(f, "{{")?;
-                for (i, (k, v)) in m.iter().enumerate() {
-                    if i > 0 { write!(f, ", ")?; }
-                    write!(f, "{}: {}", k, v)?;
-                }
-                write!(f, "}}")
-            }
         }
     }
 }

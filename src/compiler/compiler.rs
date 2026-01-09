@@ -256,6 +256,11 @@ impl Compiler {
                     self.emit_constant(constant as u8, 0);
                 }
                 Literal::String(s) => {
+                    // Strings are now objects, but we'll store them as raw strings in constants
+                    // and let the VM handle the object creation or just keep it as is
+                    // for now if Value can still hold it.
+                    // Actually, let's keep String in Value for constants ONLY, 
+                    // and VM will convert it to Object during execution if needed.
                     let constant = self.function.chunk.add_constant(crate::eval::value::Value::String(s.clone()));
                     self.emit_constant(constant as u8, 0);
                 }

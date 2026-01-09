@@ -175,7 +175,7 @@ impl TreeWalker {
 
                 match func {
                     Value::NativeFunction(_, native_fn) => {
-                        native_fn(evaluated_args).map_err(|e| self.error(e, paren.line, paren.column))
+                        native_fn(&[], evaluated_args).map_err(|e| self.error(e, paren.line, paren.column))
                     }
                     _ => Err(self.error("Can only call functions.".to_string(), paren.line, paren.column)),
                 }

@@ -18,8 +18,12 @@ impl LavinaFunction {
 
 impl PartialEq for LavinaFunction {
     fn eq(&self, other: &Self) -> bool {
-        // Functions are equal if they have the same name and are defined in the same environment
-        // For simplicity, we compare names and memory addresses or just names
         self.declaration.name.lexeme == other.declaration.name.lexeme
+    }
+}
+
+impl PartialOrd for LavinaFunction {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.declaration.name.lexeme.partial_cmp(&other.declaration.name.lexeme)
     }
 }

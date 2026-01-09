@@ -1,9 +1,8 @@
 use crate::vm::opcode::OpCode;
-use crate::eval::value::{Value, ObjFunction};
+use crate::eval::value::{Value, Obj, ObjType, ObjFunction};
 use crate::eval::native::get_native_functions;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::cell::RefCell;
 
 #[derive(Debug, PartialEq)]
 pub enum InterpretResult {
@@ -22,6 +21,7 @@ pub struct VM {
     frames: Vec<CallFrame>,
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
+    heap: Vec<Option<Obj>>,
 }
 
 impl VM {
@@ -30,6 +30,7 @@ impl VM {
             frames: Vec::with_capacity(64),
             stack: Vec::with_capacity(256),
             globals: HashMap::new(),
+            heap: Vec::new(),
         };
         
         for (name, func) in get_native_functions() {
@@ -39,17 +40,96 @@ impl VM {
         vm
     }
 
+    fn alloc(&mut self, obj_type: ObjType) -> Value {
+        if self.heap.len() > 1024 {
+            self.collect_garbage();
+        }
+
+        let obj = Obj::new(obj_type);
+        for (i, slot) in self.heap.iter_mut().enumerate() {
+            if slot.is_none() {
+                *slot = Some(obj);
+                return Value::Object(i);
+            }
+        }
+        self.heap.push(Some(obj));
+        Value::Object(self.heap.len() - 1)
+    }
+
+    pub fn collect_garbage(&mut self) {
+        #[cfg(debug_assertions)]
+        println!("-- GC beginning --");
+
+        self.mark_roots();
+        self.sweep();
+
+        #[cfg(debug_assertions)]
+        println!("-- GC finished --");
+    }
+
+    fn mark_roots(&mut self) {
+        let mut roots = Vec::new();
+        for i in 0..self.stack.len() {
+            roots.push(self.stack[i].clone());
+        }
+        for val in self.globals.values() {
+            roots.push(val.clone());
+        }
+        for frame in &self.frames {
+            for constant in &frame.function.chunk.constants {
+                roots.push(constant.clone());
+            }
+        }
+        for root in roots {
+            self.mark_value(root);
+        }
+    }
+
+    fn mark_value(&mut self, value: Value) {
+        if let Value::Object(idx) = value {
+            self.mark_object(idx);
+        }
+    }
+
+    fn mark_object(&mut self, idx: usize) {
+        if let Some(Some(obj)) = self.heap.get_mut(idx) {
+            if obj.is_marked { return; }
+            obj.is_marked = true;
+
+            let obj_type = obj.obj_type.clone();
+            match obj_type {
+                ObjType::Vector(elements) => {
+                    for val in elements { self.mark_value(val); }
+                }
+                ObjType::HashMap(map) => {
+                    for val in map.values() { self.mark_value(val.clone()); }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn sweep(&mut self) {
+        for i in 0..self.heap.len() {
+            if let Some(obj) = &mut self.heap[i] {
+                if obj.is_marked {
+                    obj.is_marked = false;
+                } else {
+                    self.heap[i] = None;
+                }
+            }
+        }
+    }
+
     pub fn interpret(&mut self, function: Rc<ObjFunction>) -> InterpretResult {
         self.stack.clear();
         self.push(Value::ObjFunction(function.clone()));
-        
         let frame = CallFrame {
             function,
             ip: 0,
             slots_offset: 0,
         };
         self.frames.push(frame);
-        
         self.run()
     }
 
@@ -71,21 +151,13 @@ impl VM {
 
     fn run(&mut self) -> InterpretResult {
         loop {
-            #[cfg(debug_assertions)]
-            {
-                print!("          ");
-                for value in &self.stack {
-                    print!("[ {} ]", value);
-                }
-                println!();
-                let frame = self.frames.last().unwrap();
-                frame.function.chunk.disassemble_instruction(frame.ip);
-            }
-
             let instruction = self.read_byte();
             match OpCode::from(instruction) {
                 OpCode::Constant => {
-                    let constant = self.read_constant();
+                    let mut constant = self.read_constant();
+                    if let Value::String(s) = constant {
+                        constant = self.alloc(ObjType::String(s));
+                    }
                     self.push(constant);
                 }
                 OpCode::True => self.push(Value::Bool(true)),
@@ -145,7 +217,7 @@ impl VM {
                 OpCode::Equal => {
                     let b = self.pop();
                     let a = self.pop();
-                    self.push(Value::Bool(a == b));
+                    self.push(Value::Bool(self.values_equal(a, b)));
                 }
                 OpCode::Greater => {
                     let b = self.pop();
@@ -163,8 +235,17 @@ impl VM {
                     match (a, b) {
                         (Value::Int(x), Value::Int(y)) => self.push(Value::Int(x + y)),
                         (Value::Float(x), Value::Float(y)) => self.push(Value::Float(x + y)),
-                        (Value::String(x), Value::String(y)) => self.push(Value::String(x + &y)),
-                        _ => return self.runtime_error("Operands must be two numbers or two strings."),
+                        (l, r) => {
+                            let ls = self.value_to_string(&l);
+                            let rs = self.value_to_string(&r);
+                            if l.is_string() || r.is_string() {
+                                let new_str = ls + &rs;
+                                let obj_val = self.alloc(ObjType::String(new_str));
+                                self.push(obj_val);
+                            } else {
+                                return self.runtime_error("Operands must be two numbers or two strings.");
+                            }
+                        }
                     }
                 }
                 OpCode::Subtract => { self.binary_op(|a, b| a - b); }
@@ -195,7 +276,8 @@ impl VM {
                         elements.push(self.pop());
                     }
                     elements.reverse();
-                    self.push(Value::Vector(Rc::new(RefCell::new(elements))));
+                    let obj_val = self.alloc(ObjType::Vector(elements));
+                    self.push(obj_val);
                 }
                 OpCode::HashMap => {
                     let count = self.read_byte() as usize;
@@ -203,69 +285,76 @@ impl VM {
                     for _ in 0..count {
                         let value = self.pop();
                         let key = self.pop();
-                        map.insert(key.to_string(), value);
+                        map.insert(self.value_to_string(&key), value);
                     }
-                    self.push(Value::HashMap(Rc::new(RefCell::new(map))));
+                    let obj_val = self.alloc(ObjType::HashMap(map));
+                    self.push(obj_val);
                 }
                 OpCode::GetIndex => {
                     let index = self.pop();
                     let collection = self.pop();
-                    match collection {
-                        Value::Vector(v) => {
-                            if let Some(idx) = index.as_int() {
-                                let v = v.borrow();
-                                if idx < 0 || idx >= v.len() as i64 {
-                                    return self.runtime_error("Vector index out of bounds.");
+                    if let Value::Object(idx) = collection {
+                        let key = self.value_to_string(&index);
+                        let obj = self.heap[idx].as_ref().unwrap();
+                        match &obj.obj_type {
+                            ObjType::Vector(v) => {
+                                if let Some(i) = index.as_int() {
+                                    if i < 0 || i >= v.len() as i64 {
+                                        return self.runtime_error("Index out of bounds.");
+                                    }
+                                    self.push(v[i as usize].clone());
+                                } else {
+                                    return self.runtime_error("Index must be an integer.");
                                 }
-                                self.push(v[idx as usize].clone());
-                            } else {
-                                return self.runtime_error("Vector index must be an integer.");
                             }
-                        }
-                        Value::HashMap(m) => {
-                            let m = m.borrow();
-                            let key = index.to_string();
-                            // In Lavina maps, keys are converted to strings for representation
-                            // but we can make it better later.
-                            match m.get(&key) {
-                                Some(val) => self.push(val.clone()),
-                                None => self.push(Value::Null),
+                            ObjType::HashMap(m) => {
+                                match m.get(&key) {
+                                    Some(val) => self.push(val.clone()),
+                                    None => self.push(Value::Null),
+                                }
                             }
+                            _ => return self.runtime_error("Can only index vectors and hashmaps."),
                         }
-                        _ => return self.runtime_error("Can only index vectors and hashmaps."),
+                    } else {
+                        return self.runtime_error("Can only index objects.");
                     }
                 }
                 OpCode::SetIndex => {
                     let value = self.pop();
                     let index = self.pop();
                     let collection = self.pop();
-                    match collection {
-                        Value::Vector(v) => {
-                            if let Some(idx) = index.as_int() {
-                                let mut v = v.borrow_mut();
-                                if idx < 0 || idx >= v.len() as i64 {
-                                    return self.runtime_error("Vector index out of bounds.");
+                    
+                    let key = self.value_to_string(&index);
+                    let idx_int = index.as_int();
+
+                    if let Value::Object(idx) = collection {
+                        let obj = self.heap[idx].as_mut().unwrap();
+                        match &mut obj.obj_type {
+                            ObjType::Vector(v) => {
+                                if let Some(i) = idx_int {
+                                    if i < 0 || i >= v.len() as i64 {
+                                        return self.runtime_error("Index out of bounds.");
+                                    }
+                                    v[i as usize] = value.clone();
+                                    self.push(value);
+                                } else {
+                                    return self.runtime_error("Index must be an integer.");
                                 }
-                                v[idx as usize] = value.clone();
-                                self.push(value);
-                            } else {
-                                return self.runtime_error("Vector index must be an integer.");
                             }
+                            ObjType::HashMap(m) => {
+                                m.insert(key, value.clone());
+                                self.push(value);
+                            }
+                            _ => return self.runtime_error("Can only index vectors and hashmaps."),
                         }
-                        Value::HashMap(m) => {
-                            let mut m = m.borrow_mut();
-                            let key = index.to_string();
-                            m.insert(key, value.clone());
-                            self.push(value);
-                        }
-                        _ => return self.runtime_error("Can only index vectors and hashmaps."),
+                    } else {
+                        return self.runtime_error("Can only index objects.");
                     }
                 }
                 OpCode::Return => {
                     let result = self.pop();
                     let frame = self.frames.pop().unwrap();
                     if self.frames.is_empty() {
-                        self.pop();
                         return InterpretResult::Ok;
                     }
                     
@@ -273,6 +362,60 @@ impl VM {
                     self.push(result);
                 }
             }
+        }
+    }
+
+    fn value_to_string(&self, value: &Value) -> String {
+        match value {
+            Value::Object(idx) => {
+                if let Some(Some(obj)) = self.heap.get(*idx) {
+                    match &obj.obj_type {
+                        ObjType::String(s) => s.clone(),
+                        ObjType::Vector(v) => {
+                            let mut s = "[".to_string();
+                            for (i, val) in v.iter().enumerate() {
+                                if i > 0 { s += ", "; }
+                                s += &self.value_to_string(val);
+                            }
+                            s += "]";
+                            s
+                        }
+                        ObjType::HashMap(m) => {
+                            let mut s = "{".to_string();
+                            for (i, (k, v)) in m.iter().enumerate() {
+                                if i > 0 { s += ", "; }
+                                s += &format!("\"{}\": {}", k, self.value_to_string(v));
+                            }
+                            s += "}";
+                            s
+                        }
+                        ObjType::Function(f) => format!("<fn {}>", f.name),
+                    }
+                } else {
+                    "null".to_string()
+                }
+            }
+            Value::String(s) => s.clone(),
+            _ => value.to_string(),
+        }
+    }
+
+    fn values_equal(&self, a: Value, b: Value) -> bool {
+        match (a, b) {
+            (Value::Int(x), Value::Int(y)) => x == y,
+            (Value::Float(x), Value::Float(y)) => x == y,
+            (Value::Bool(x), Value::Bool(y)) => x == y,
+            (Value::Null, Value::Null) => true,
+            (Value::Object(idx1), Value::Object(idx2)) => {
+                if idx1 == idx2 { return true; }
+                let obj1 = self.heap[idx1].as_ref().unwrap();
+                let obj2 = self.heap[idx2].as_ref().unwrap();
+                match (&obj1.obj_type, &obj2.obj_type) {
+                    (ObjType::String(s1), ObjType::String(s2)) => s1 == s2,
+                    _ => false,
+                }
+            }
+            _ => false,
         }
     }
 
@@ -287,11 +430,8 @@ impl VM {
                 args.reverse();
                 self.pop();
                 
-                match func(args) {
-                    Ok(result) => {
-                        self.push(result);
-                        Ok(())
-                    }
+                match func(&self.heap, args) {
+                    Ok(result) => { self.push(result); Ok(()) }
                     Err(e) => Err(e),
                 }
             }
@@ -312,7 +452,7 @@ impl VM {
                 self.frames.push(frame);
                 Ok(())
             }
-            _ => Err(format!("Can only call functions and classes, got {}", callee)),
+            _ => Err("Can only call functions.".to_string()),
         }
     }
 
@@ -337,10 +477,11 @@ impl VM {
     }
 
     fn read_string_constant(&mut self) -> String {
-        match self.read_constant() {
-            Value::String(s) => s,
-            _ => panic!("Expected string constant"),
+        let mut constant = self.read_constant();
+        if let Value::String(s) = constant {
+            constant = self.alloc(ObjType::String(s));
         }
+        self.value_to_string(&constant)
     }
 
     fn binary_op<F>(&mut self, op: F) 
