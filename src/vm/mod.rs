@@ -1,7 +1,7 @@
+pub mod vm;
 pub mod opcode;
 pub mod chunk;
-pub mod vm;
+pub mod object;
+pub mod memory;
 
-pub use opcode::OpCode;
-pub use chunk::Chunk;
 pub use vm::VM;

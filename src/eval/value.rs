@@ -1,48 +1,13 @@
 use std::fmt;
 use std::rc::Rc;
-use std::collections::HashMap;
-use crate::vm::chunk::Chunk;
 use crate::eval::function::LavinaFunction;
+pub use crate::vm::object::{ObjFunction, ObjType, Obj};
 
-// Change: NativeFn now receives the heap
+/// A callback for native functions.
+/// It takes a reference to the heap and the arguments.
 pub type NativeFn = fn(&[Option<Obj>], Vec<Value>) -> Result<Value, String>;
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct ObjFunction {
-    pub arity: usize,
-    pub chunk: Chunk,
-    pub name: String,
-}
-
-impl PartialOrd for ObjFunction {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.name.partial_cmp(&other.name)
-    }
-}
-
-#[derive(Debug, PartialEq, Clone)]
-pub enum ObjType {
-    String(String),
-    Vector(Vec<Value>),
-    HashMap(HashMap<String, Value>),
-    Function(ObjFunction),
-}
-
-#[derive(Debug)]
-pub struct Obj {
-    pub obj_type: ObjType,
-    pub is_marked: bool,
-}
-
-impl Obj {
-    pub fn new(obj_type: ObjType) -> Self {
-        Self {
-            obj_type,
-            is_marked: false,
-        }
-    }
-}
-
+/// Represents any value in the Lavina language.
 #[derive(Clone, PartialEq, PartialOrd)]
 pub enum Value {
     Int(i64),
@@ -50,10 +15,10 @@ pub enum Value {
     Bool(bool),
     Null,
     NativeFunction(String, NativeFn),
-    String(String), 
-    Object(usize), 
-    ObjFunction(Rc<ObjFunction>),
-    Function(Rc<LavinaFunction>),
+    String(String), // Used for constants
+    Object(usize),  // Index into the GC heap
+    ObjFunction(Rc<ObjFunction>), // VM-internal function reference
+    Function(Rc<LavinaFunction>), // Tree-walker compatibility
 }
 
 impl Value {
