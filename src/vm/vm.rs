@@ -5,7 +5,6 @@ use crate::vm::frame::CallFrame;
 use crate::eval::value::{Value};
 use crate::eval::native::get_native_functions;
 use std::collections::HashMap;
-use std::rc::Rc;
 
 #[derive(Debug, PartialEq)]
 pub enum InterpretResult {
@@ -19,6 +18,7 @@ pub struct VM {
     stack: Vec<Value>,
     globals: HashMap<String, Value>,
     memory: Memory,
+    open_upvalues: Vec<usize>, // Indices of ObjUpvalue in the heap
 }
 
 impl VM {
@@ -28,6 +28,7 @@ impl VM {
             stack: Vec::with_capacity(256),
             globals: HashMap::new(),
             memory: Memory::new(),
+            open_upvalues: Vec::new(),
         };
         
         for (name, func) in get_native_functions() {
@@ -37,11 +38,29 @@ impl VM {
         vm
     }
 
-    pub fn interpret(&mut self, function: Rc<ObjFunction>) -> InterpretResult {
+    pub fn interpret(&mut self, function: ObjFunction) -> InterpretResult {
         self.stack.clear();
-        self.push(Value::ObjFunction(function.clone()));
+        self.open_upvalues.clear();
+        
+        let mut function = function;
+        // Transform string constants into heap objects once
+        for i in 0..function.chunk.constants.len() {
+            if let Value::String(s) = &function.chunk.constants[i] {
+                let idx = self.memory.alloc(ObjType::String(s.clone()));
+                function.chunk.constants[i] = Value::Object(idx);
+            }
+        }
+
+        let function_idx = self.memory.alloc(ObjType::Function(function));
+        let closure = crate::vm::object::ObjClosure {
+            function_idx,
+            upvalues: Vec::new(),
+        };
+        let closure_idx = self.memory.alloc(ObjType::Closure(closure));
+        
+        self.push(Value::Object(closure_idx));
         let frame = CallFrame {
-            function,
+            closure_idx,
             ip: 0,
             slots_offset: 0,
         };
@@ -67,14 +86,15 @@ impl VM {
 
     fn run(&mut self) -> InterpretResult {
         loop {
+            #[cfg(debug_assertions)]
+            if self.memory.bytes_allocated > self.memory.next_gc {
+                self.memory.collect_garbage(&self.stack, &self.globals, &self.open_upvalues);
+            }
+
             let instruction = self.read_byte();
             match OpCode::from(instruction) {
                 OpCode::Constant => {
-                    let mut constant = self.read_constant();
-                    if let Value::String(s) = constant {
-                        let idx = self.memory.alloc(ObjType::String(s));
-                        constant = Value::Object(idx);
-                    }
+                    let constant = self.read_constant();
                     self.push(constant);
                 }
                 OpCode::True => self.push(Value::Bool(true)),
@@ -310,13 +330,105 @@ impl VM {
                     }
                 }
 
+                OpCode::Closure => {
+                    let function_val = self.read_constant();
+                    if let Value::TemplateFunction(f_template) = function_val {
+                        let upvalue_count = f_template.chunk.upvalues.len();
+                        
+                        // Allocate function on the heap
+                        let f_idx = self.memory.alloc(ObjType::Function(*f_template));
+                        
+                        let mut upvalues = Vec::with_capacity(upvalue_count);
+                        let function_chunk = {
+                            let obj = self.memory.heap[f_idx].as_ref().unwrap();
+                            if let ObjType::Function(f) = &obj.obj_type {
+                                f.chunk.clone()
+                            } else { panic!("Not a function") }
+                        };
+
+                        for i in 0..upvalue_count {
+                            let loc = function_chunk.upvalues[i];
+                            if loc.is_local {
+                                let offset = self.frames.last().unwrap().slots_offset;
+                                upvalues.push(self.capture_upvalue(offset + loc.index as usize));
+                            } else {
+                                let parent_closure_idx = self.frames.last().unwrap().closure_idx;
+                                let parent_uv_idx = {
+                                    let obj = self.memory.heap[parent_closure_idx].as_ref().unwrap();
+                                    if let ObjType::Closure(c) = &obj.obj_type {
+                                        c.upvalues[loc.index as usize]
+                                    } else { panic!("Not a closure") }
+                                };
+                                upvalues.push(parent_uv_idx);
+                            }
+                        }
+
+                        let closure = crate::vm::object::ObjClosure {
+                            function_idx: f_idx,
+                            upvalues,
+                        };
+                        let closure_idx = self.memory.alloc(ObjType::Closure(closure));
+                        self.push(Value::Object(closure_idx));
+                    } else {
+                        panic!("VM: OP_CLOSURE expects function template, got {}", function_val);
+                    }
+                }
+                OpCode::GetUpvalue => {
+                    let slot = self.read_byte() as usize;
+                    let closure_idx = self.frames.last().unwrap().closure_idx;
+                    let uv_idx = {
+                        let obj = self.memory.heap[closure_idx].as_ref().unwrap();
+                        if let ObjType::Closure(closure) = &obj.obj_type {
+                            closure.upvalues[slot]
+                        } else { panic!("Not a closure") }
+                    };
+
+                    let val = {
+                        let uv_obj = self.memory.heap[uv_idx].as_ref().unwrap();
+                        if let ObjType::Upvalue(uv) = &uv_obj.obj_type {
+                            match uv {
+                                crate::vm::object::Upvalue::Open(pos) => self.stack[*pos].clone(),
+                                crate::vm::object::Upvalue::Closed(val) => val.clone(),
+                            }
+                        } else { panic!("Not an upvalue") }
+                    };
+                    self.push(val);
+                }
+                OpCode::SetUpvalue => {
+                    let slot = self.read_byte() as usize;
+                    let val = self.peek(0).clone();
+                    let closure_idx = self.frames.last().unwrap().closure_idx;
+                    let uv_idx = {
+                        let obj = self.memory.heap[closure_idx].as_ref().unwrap();
+                        if let ObjType::Closure(closure) = &obj.obj_type {
+                            closure.upvalues[slot]
+                        } else { panic!("Not a closure") }
+                    };
+
+                    let uv_obj = self.memory.heap[uv_idx].as_mut().unwrap();
+                    if let ObjType::Upvalue(uv) = &mut uv_obj.obj_type {
+                        match uv {
+                            crate::vm::object::Upvalue::Open(pos) => self.stack[*pos] = val,
+                            crate::vm::object::Upvalue::Closed(v) => *v = val,
+                        }
+                    } else { panic!("Not an upvalue") }
+                }
+                OpCode::CloseUpvalue => {
+                    self.close_upvalues(self.stack.len() - 1);
+                    self.pop();
+                }
+
                 OpCode::Return => {
-                    let result = self.pop();
                     let frame = self.frames.pop().unwrap();
+                    
+                    // Close upvalues owned by this frame before we mess with the stack
+                    self.close_upvalues(frame.slots_offset);
+
                     if self.frames.is_empty() {
                         return InterpretResult::Ok;
                     }
                     
+                    let result = self.pop();
                     self.stack.truncate(frame.slots_offset);
                     self.push(result);
                 }
@@ -352,6 +464,15 @@ impl VM {
                         }
                         ObjType::Namespace(name, _) => format!("<namespace {}>", name),
                         ObjType::Function(f) => format!("<fn {}>", f.name),
+                        ObjType::Closure(c) => {
+                            if let Some(Some(f_obj)) = self.memory.heap.get(c.function_idx) {
+                                if let ObjType::Function(f) = &f_obj.obj_type {
+                                    return format!("<fn {}>", f.name);
+                                }
+                            }
+                            "<fn unknown>".to_string()
+                        }
+                        ObjType::Upvalue(_) => "<upvalue>".to_string(),
                     }
                 } else {
                     "null".to_string()
@@ -359,6 +480,90 @@ impl VM {
             }
             Value::String(s) => s.clone(),
             _ => value.to_string(),
+        }
+    }
+
+    fn capture_upvalue(&mut self, local_idx: usize) -> usize {
+        for uv_idx in &self.open_upvalues {
+            if let Some(Some(obj)) = self.memory.heap.get(*uv_idx) {
+                if let ObjType::Upvalue(crate::vm::object::Upvalue::Open(pos)) = &obj.obj_type {
+                    if *pos == local_idx {
+                        return *uv_idx;
+                    }
+                }
+            }
+        }
+
+        let uv_idx = self.memory.alloc(ObjType::Upvalue(crate::vm::object::Upvalue::Open(local_idx)));
+        self.open_upvalues.push(uv_idx);
+        uv_idx
+    }
+
+    fn close_upvalues(&mut self, last_slot: usize) {
+        let mut i = 0;
+        while i < self.open_upvalues.len() {
+            let uv_idx = self.open_upvalues[i];
+            let mut close = false;
+            let mut val_to_store = None;
+
+            if let Some(Some(obj)) = self.memory.heap.get(uv_idx) {
+                if let ObjType::Upvalue(crate::vm::object::Upvalue::Open(pos)) = &obj.obj_type {
+                    if *pos >= last_slot {
+                        close = true;
+                        val_to_store = Some(self.stack[*pos].clone());
+                    }
+                }
+            }
+
+            if close {
+                self.open_upvalues.remove(i);
+                let obj = self.memory.heap[uv_idx].as_mut().unwrap();
+                obj.obj_type = ObjType::Upvalue(crate::vm::object::Upvalue::Closed(val_to_store.unwrap()));
+            } else {
+                i += 1;
+            }
+        }
+    }
+
+    fn call_value(&mut self, arg_count: usize) -> Result<(), String> {
+        let callee = self.peek(arg_count).clone();
+        match callee {
+            Value::NativeFunction(_, func) => {
+                let mut args = Vec::new();
+                for _ in 0..arg_count {
+                    args.push(self.pop());
+                }
+                args.reverse();
+                self.pop(); // Callee
+                
+                match func(&self.memory.heap, args) {
+                    Ok(result) => { self.push(result); Ok(()) }
+                    Err(e) => Err(e),
+                }
+            }
+            Value::Object(idx) => {
+                let obj = self.memory.heap[idx].as_ref().ok_or("Invalid object")?;
+                if let ObjType::Closure(closure) = &obj.obj_type {
+                    let f_obj = self.memory.heap[closure.function_idx].as_ref().ok_or("Invalid function index")?;
+                    if let ObjType::Function(func) = &f_obj.obj_type {
+                        if arg_count != func.arity {
+                            return Err(format!("Expected {} arguments but got {}.", func.arity, arg_count));
+                        }
+                        if self.frames.len() >= 64 {
+                            return Err("Stack overflow".to_string());
+                        }
+                        let frame = CallFrame {
+                            closure_idx: idx,
+                            ip: 0,
+                            slots_offset: self.stack.len() - arg_count - 1,
+                        };
+                        self.frames.push(frame);
+                        return Ok(());
+                    }
+                }
+                Err(format!("Can only call closures, got {}", callee))
+            }
+            _ => Err(format!("Can only call functions, got {}", callee)),
         }
     }
 
@@ -381,67 +586,50 @@ impl VM {
         }
     }
 
-    fn call_value(&mut self, arg_count: usize) -> Result<(), String> {
-        let callee = self.peek(arg_count).clone();
-        match callee {
-            Value::NativeFunction(_, func) => {
-                let mut args = Vec::new();
-                for _ in 0..arg_count {
-                    args.push(self.pop());
-                }
-                args.reverse();
-                self.pop();
-                
-                match func(&self.memory.heap, args) {
-                    Ok(result) => { self.push(result); Ok(()) }
-                    Err(e) => Err(e),
-                }
-            }
-            Value::ObjFunction(func) => {
-                if arg_count != func.arity {
-                    return Err(format!("Expected {} arguments but got {}.", func.arity, arg_count));
-                }
-                if self.frames.len() >= 64 {
-                    return Err("Stack overflow".to_string());
-                }
-                let frame = CallFrame {
-                    function: func,
-                    ip: 0,
-                    slots_offset: self.stack.len() - arg_count - 1,
-                };
-                self.frames.push(frame);
-                Ok(())
-            }
-            _ => Err(format!("Can only call functions, got {}", callee)),
-        }
-    }
-
     fn read_byte(&mut self) -> u8 {
         let frame = self.frames.last_mut().unwrap();
-        let byte = frame.function.chunk.code[frame.ip];
-        frame.ip += 1;
-        byte
+        let closure_idx = frame.closure_idx;
+        let ip = frame.ip;
+        
+        // Safety: we trust the closure index is valid
+        if let Some(Some(obj)) = self.memory.heap.get(closure_idx) {
+            if let ObjType::Closure(closure) = &obj.obj_type {
+                if let Some(Some(f_obj)) = self.memory.heap.get(closure.function_idx) {
+                    if let ObjType::Function(func) = &f_obj.obj_type {
+                        let byte = func.chunk.code[ip];
+                        self.frames.last_mut().unwrap().ip += 1;
+                        return byte;
+                    }
+                }
+            }
+        }
+        panic!("VM: could not read byte from function");
     }
 
     fn read_short(&mut self) -> u16 {
-        let frame = self.frames.last_mut().unwrap();
-        let code = &frame.function.chunk.code;
-        let res = ((code[frame.ip] as u16) << 8) | (code[frame.ip + 1] as u16);
-        frame.ip += 2;
-        res
+        let b1 = self.read_byte() as u16;
+        let b2 = self.read_byte() as u16;
+        (b1 << 8) | b2
     }
 
     fn read_constant(&mut self) -> Value {
         let index = self.read_byte() as usize;
-        self.frames.last().unwrap().function.chunk.constants[index].clone()
+        let closure_idx = self.frames.last().unwrap().closure_idx;
+        
+        if let Some(Some(obj)) = self.memory.heap.get(closure_idx) {
+            if let ObjType::Closure(closure) = &obj.obj_type {
+                if let Some(Some(f_obj)) = self.memory.heap.get(closure.function_idx) {
+                    if let ObjType::Function(func) = &f_obj.obj_type {
+                        return func.chunk.constants[index].clone();
+                    }
+                }
+            }
+        }
+        panic!("VM: could not read constant");
     }
 
     fn read_string_constant(&mut self) -> String {
-        let mut constant = self.read_constant();
-        if let Value::String(s) = constant {
-            let idx = self.memory.alloc(ObjType::String(s));
-            constant = Value::Object(idx);
-        }
+        let constant = self.read_constant();
         self.value_to_string(&constant)
     }
 
@@ -458,8 +646,22 @@ impl VM {
 
     fn runtime_error(&self, message: &str) -> InterpretResult {
         let frame = self.frames.last().unwrap();
-        let line = frame.function.chunk.lines[frame.ip - 1];
-        eprintln!("\x1b[1;31mruntime error\x1b[0m: {} [line {} in {}]", message, line, frame.function.name);
+        let closure_idx = frame.closure_idx;
+        let mut line = 0;
+        let mut name = "unknown".to_string();
+
+        if let Some(Some(obj)) = self.memory.heap.get(closure_idx) {
+            if let ObjType::Closure(closure) = &obj.obj_type {
+                if let Some(Some(f_obj)) = self.memory.heap.get(closure.function_idx) {
+                    if let ObjType::Function(func) = &f_obj.obj_type {
+                        line = func.chunk.lines[frame.ip - 1];
+                        name = func.name.clone();
+                    }
+                }
+            }
+        }
+
+        eprintln!("\x1b[1;31mruntime error\x1b[0m: {} [line {} in {}]", message, line, name);
         InterpretResult::RuntimeError
     }
 }

@@ -1,11 +1,13 @@
 vector[int] my_list = [1, 2, 3]
 print("List:", my_list)
+print("Type of the list is:", type(my_list))
 
 hashmap[string, int] my_map = {"a": 1, "b": 2}
 print("Map:", my_map)
 
 auto inferred_list = [1.1, 2.2]
 print("Inferred list (float):", inferred_list)
+print("Type of the list is:", type(inferred_list))
 
 dynamic flexible = 10
 print("Dynamic as int:", flexible)

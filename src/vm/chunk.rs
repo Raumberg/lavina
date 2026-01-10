@@ -1,11 +1,18 @@
 use crate::vm::opcode::OpCode;
 use crate::eval::value::Value;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct UpvalueLoc {
+    pub index: u8,
+    pub is_local: bool,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Chunk {
     pub code: Vec<u8>,
     pub constants: Vec<Value>,
     pub lines: Vec<usize>,
+    pub upvalues: Vec<UpvalueLoc>,
 }
 
 impl Chunk {
@@ -14,6 +21,7 @@ impl Chunk {
             code: Vec::new(),
             constants: Vec::new(),
             lines: Vec::new(),
+            upvalues: Vec::new(),
         }
     }
 
@@ -74,6 +82,21 @@ impl Chunk {
             OpCode::GetIndex => self.simple_instruction("OP_GET_INDEX", offset),
             OpCode::SetIndex => self.simple_instruction("OP_SET_INDEX", offset),
             OpCode::Namespace => self.constant_instruction("OP_NAMESPACE", offset),
+            OpCode::Closure => {
+                let mut offset = offset + 1;
+                let constant = self.code[offset] as usize;
+                offset += 1;
+                print!("{:<16} {:4} ", "OP_CLOSURE", constant);
+                println!("{}", self.constants[constant]);
+                
+                // Disassemble upvalues
+                // But we don't know the count here without looking at the constant.
+                // In clox, it's encoded in the bytecode.
+                offset
+            }
+            OpCode::GetUpvalue => self.byte_instruction("OP_GET_UPVALUE", offset),
+            OpCode::SetUpvalue => self.byte_instruction("OP_SET_UPVALUE", offset),
+            OpCode::CloseUpvalue => self.simple_instruction("OP_CLOSE_UPVALUE", offset),
         }
     }
 

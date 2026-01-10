@@ -7,8 +7,7 @@ pub use crate::vm::object::{ObjFunction, ObjType, Obj};
 /// It takes a reference to the heap and the arguments.
 pub type NativeFn = fn(&[Option<Obj>], Vec<Value>) -> Result<Value, String>;
 
-/// Represents any value in the Lavina language.
-#[derive(Clone, PartialEq, PartialOrd)]
+#[derive(Clone, PartialOrd)]
 pub enum Value {
     Int(i64),
     Float(f64),
@@ -18,8 +17,23 @@ pub enum Value {
     NativeFunction(String, NativeFn),
     String(String), // Used for constants
     Object(usize),  // Index into the GC heap
-    ObjFunction(Rc<ObjFunction>), // VM-internal function reference
+    TemplateFunction(Box<ObjFunction>), // Template for creating closures
     Function(Rc<LavinaFunction>), // Tree-walker compatibility
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Value::Int(a), Value::Int(b)) => a == b,
+            (Value::Float(a), Value::Float(b)) => a == b,
+            (Value::Bool(a), Value::Bool(b)) => a == b,
+            (Value::Null, Value::Null) => true,
+            (Value::String(a), Value::String(b)) => a == b,
+            (Value::Object(a), Value::Object(b)) => a == b,
+            (Value::NativeFunction(a, _), Value::NativeFunction(b, _)) => a == b,
+            _ => false,
+        }
+    }
 }
 
 impl Value {
@@ -53,7 +67,7 @@ impl fmt::Display for Value {
             Value::NativeFunction(name, _) => write!(f, "<native fn {}>", name),
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Object(idx) => write!(f, "<obj {}>", idx),
-            Value::ObjFunction(func) => write!(f, "<fn {}>", func.name),
+            Value::TemplateFunction(func) => write!(f, "<fn template {}>", func.name),
             Value::Function(func) => write!(f, "<fn {}>", func.declaration.name.lexeme),
         }
     }

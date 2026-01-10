@@ -38,17 +38,20 @@ impl Memory {
     }
 
     /// Mark-and-Sweep entry point.
-    pub fn collect_garbage(&mut self, roots: &[Value], globals: &HashMap<String, Value>) {
+    pub fn collect_garbage(&mut self, roots: &[Value], globals: &HashMap<String, Value>, open_upvalues: &[usize]) {
         #[cfg(debug_assertions)]
         println!("-- GC: mark roots --");
 
-        // 1. Mark roots (stack, globals, etc.)
+        // 1. Mark roots (stack, globals, upvalues, etc.)
         let mut worklist = Vec::new();
         for root in roots {
             self.mark_value(root, &mut worklist);
         }
         for val in globals.values() {
             self.mark_value(val, &mut worklist);
+        }
+        for uv_idx in open_upvalues {
+            self.mark_object(*uv_idx, &mut worklist);
         }
 
         // 2. Trace references
@@ -63,8 +66,14 @@ impl Memory {
     }
 
     fn mark_value(&mut self, value: &Value, worklist: &mut Vec<usize>) {
-        if let Value::Object(idx) = value {
-            self.mark_object(*idx, worklist);
+        match value {
+            Value::Object(idx) => self.mark_object(*idx, worklist),
+            Value::TemplateFunction(func) => {
+                for val in &func.chunk.constants {
+                    self.mark_value(val, worklist);
+                }
+            }
+            _ => {}
         }
     }
 
@@ -77,13 +86,14 @@ impl Memory {
     }
 
     fn blacken_object(&mut self, idx: usize, worklist: &mut Vec<usize>) {
-        // We need to clone to avoid borrow checker issues during tracing
-        let obj_type = self.heap[idx].as_ref().unwrap().obj_type.clone();
+        // We use a trick here: we take the object out, process it, and put it back
+        // to satisfy the borrow checker without cloning large data structures.
+        let mut obj = self.heap[idx].take().unwrap();
         
-        match obj_type {
+        match &mut obj.obj_type {
             ObjType::Vector(elements) => {
                 for val in elements {
-                    self.mark_value(&val, worklist);
+                    self.mark_value(val, worklist);
                 }
             }
             ObjType::HashMap(map) => {
@@ -96,8 +106,26 @@ impl Memory {
                     self.mark_value(val, worklist);
                 }
             }
+            ObjType::Function(func) => {
+                for val in &func.chunk.constants {
+                    self.mark_value(val, worklist);
+                }
+            }
+            ObjType::Closure(closure) => {
+                self.mark_object(closure.function_idx, worklist);
+                for uv_idx in &closure.upvalues {
+                    self.mark_object(*uv_idx, worklist);
+                }
+            }
+            ObjType::Upvalue(uv) => {
+                if let crate::vm::object::Upvalue::Closed(val) = uv {
+                    self.mark_value(val, worklist);
+                }
+            }
             _ => {}
         }
+
+        self.heap[idx] = Some(obj);
     }
 
     fn sweep(&mut self) {

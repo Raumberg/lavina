@@ -1,50 +1,68 @@
 use crate::parser::ast::{Expr, Stmt, Literal, Visibility};
-use crate::vm::chunk::Chunk;
+use crate::vm::chunk::{Chunk, UpvalueLoc};
 use crate::vm::opcode::OpCode;
 use crate::lexer::TokenType;
 use crate::lexer::scanner::Scanner;
 use crate::parser::parser::Parser;
 use crate::error::LavinaError;
-use crate::eval::value::{ObjFunction, Value};
+use crate::eval::value::{Value};
 use crate::compiler::scope::{Local, FunctionType};
 use crate::util::module_resolver::ModuleResolver;
 use crate::error::ErrorPhase;
-use std::rc::Rc;
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{PathBuf};
 use std::fs;
 
+pub struct CompilerLevel {
+    pub function: crate::vm::object::ObjFunction,
+    pub locals: Vec<Local>,
+    pub scope_depth: i32,
+    pub upvalues: Vec<UpvalueLoc>,
+    pub function_type: FunctionType,
+}
+
 pub struct Compiler {
-    function: ObjFunction,
-    locals: Vec<Local>,
-    scope_depth: i32,
-    compiled_modules: HashMap<PathBuf, Rc<ObjFunction>>,
-    resolver: ModuleResolver,
+    pub levels: Vec<CompilerLevel>,
+    pub compiled_modules: HashMap<PathBuf, crate::vm::object::ObjFunction>,
+    pub resolver: ModuleResolver,
 }
 
 impl Compiler {
-    pub fn new(name: String, _f_type: FunctionType) -> Self {
-        let mut compiler = Self {
-            function: ObjFunction {
+    pub fn new(name: String, f_type: FunctionType) -> Self {
+        let mut level = CompilerLevel {
+            function: crate::vm::object::ObjFunction {
                 arity: 0,
                 chunk: Chunk::new(),
                 name,
             },
             locals: Vec::new(),
             scope_depth: 0,
-            compiled_modules: HashMap::new(),
-            resolver: ModuleResolver::new(String::new()),
+            upvalues: Vec::new(),
+            function_type: f_type,
         };
         
-        compiler.locals.push(Local {
+        level.locals.push(Local {
             name: "".to_string(),
             depth: 0,
+            is_captured: false,
         });
-        
-        compiler
+
+        Self {
+            levels: vec![level],
+            compiled_modules: HashMap::new(),
+            resolver: ModuleResolver::new(String::new()),
+        }
     }
 
-    pub fn compile(mut self, statements: &[Stmt]) -> Result<Rc<ObjFunction>, LavinaError> {
+    fn current_level(&self) -> &CompilerLevel {
+        self.levels.last().unwrap()
+    }
+
+    fn current_level_mut(&mut self) -> &mut CompilerLevel {
+        self.levels.last_mut().unwrap()
+    }
+
+    pub fn compile(mut self, statements: &[Stmt]) -> Result<crate::vm::object::ObjFunction, LavinaError> {
         for stmt in statements {
             self.compile_stmt(stmt)?;
         }
@@ -52,7 +70,7 @@ impl Compiler {
         self.emit_byte(OpCode::Null as u8, 0);
         self.emit_byte(OpCode::Return as u8, 0);
         
-        Ok(Rc::new(self.function))
+        Ok(self.levels.pop().unwrap().function)
     }
 
     fn compile_stmt(&mut self, stmt: &Stmt) -> Result<(), LavinaError> {
@@ -69,95 +87,95 @@ impl Compiler {
                     self.emit_byte(OpCode::Null as u8, name.line);
                 }
                 
-                if self.scope_depth > 0 {
+                if self.current_level().function_type != FunctionType::Script || self.current_level().scope_depth > 0 {
                     self.add_local(name.lexeme.clone());
                 } else {
-                    let constant = self.function.chunk.add_constant(crate::eval::value::Value::String(name.lexeme.clone()));
+                    let constant = self.add_constant(Value::String(name.lexeme.clone()));
                     self.emit_byte(OpCode::DefineGlobal as u8, name.line);
                     self.emit_byte(constant as u8, name.line);
                 }
                 Ok(())
             }
             Stmt::Function(decl) => {
-                let mut compiler = Compiler::new(decl.name.lexeme.clone(), FunctionType::Function);
-                compiler.function.arity = decl.params.len();
-                compiler.begin_scope();
+                let name = decl.name.lexeme.clone();
+                let arity = decl.params.len();
                 
+                let mut level = CompilerLevel {
+                    function: crate::vm::object::ObjFunction {
+                        arity,
+                        chunk: Chunk::new(),
+                        name: name.clone(),
+                    },
+                    locals: Vec::new(),
+                    scope_depth: 0,
+                    upvalues: Vec::new(),
+                    function_type: FunctionType::Function,
+                };
+                level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
                 for (param_name, _) in &decl.params {
-                    compiler.add_local(param_name.lexeme.clone());
+                    level.locals.push(Local { name: param_name.lexeme.clone(), depth: 0, is_captured: false });
+                }
+                self.levels.push(level);
+
+                for s in &decl.body {
+                    self.compile_stmt(s)?;
                 }
                 
-                let function = compiler.compile(&decl.body)?;
-                let constant = self.function.chunk.add_constant(crate::eval::value::Value::ObjFunction(function));
+                self.emit_byte(OpCode::Null as u8, 0);
+                self.emit_byte(OpCode::Return as u8, 0);
+                let mut finished_level = self.levels.pop().unwrap();
+                finished_level.function.chunk.upvalues = finished_level.upvalues;
                 
-                self.emit_byte(OpCode::Constant as u8, decl.name.line);
+                let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+                self.emit_byte(OpCode::Closure as u8, decl.name.line);
                 self.emit_byte(constant as u8, decl.name.line);
                 
-                let name_const = self.function.chunk.add_constant(crate::eval::value::Value::String(decl.name.lexeme.clone()));
-                self.emit_byte(OpCode::DefineGlobal as u8, decl.name.line);
-                self.emit_byte(name_const as u8, decl.name.line);
+                if self.current_level().scope_depth > 0 {
+                    self.add_local(name);
+                } else {
+                    let name_const = self.add_constant(Value::String(name));
+                    self.emit_byte(OpCode::DefineGlobal as u8, decl.name.line);
+                    self.emit_byte(name_const as u8, decl.name.line);
+                }
+                
                 Ok(())
             }
             Stmt::Namespace(name, body) => {
-                // In a true namespace system, we'd handle visibility here.
-                // For now, let's keep the object-based approach but we could
-                // also do name mangling (e.g., math::add).
-                
-                // Let's use a simpler approach for now:
-                // Compile the body as if it were a function that returns a map of its public members.
-                
-                let mut compiler = Compiler::new(name.lexeme.clone(), FunctionType::Script);
-                
-                for s in body {
-                    compiler.compile_stmt(s)?;
-                }
-                
-                // Now collect all public members into a map
-                let mut public_members = Vec::new();
-                for s in body {
-                    match s {
-                        Stmt::Function(f) if f.visibility == Visibility::Public => {
-                            public_members.push(f.name.lexeme.clone());
-                        }
-                        Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
-                            public_members.push(n.lexeme.clone());
-                        }
-                        _ => {}
-                    }
-                }
+                let mut level = CompilerLevel {
+                    function: crate::vm::object::ObjFunction {
+                        arity: 0,
+                        chunk: Chunk::new(),
+                        name: name.lexeme.clone(),
+                    },
+                    locals: Vec::new(),
+                    scope_depth: 0,
+                    upvalues: Vec::new(),
+                    function_type: FunctionType::Script,
+                };
+                level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                self.levels.push(level);
 
-                // Emit code to build the namespace object
-                for m_name in &public_members {
-                    let name_const = compiler.function.chunk.add_constant(crate::eval::value::Value::String(m_name.clone()));
-                    compiler.emit_byte(OpCode::Constant as u8, 0);
-                    compiler.emit_byte(name_const as u8, 0);
-                    
-                    compiler.emit_byte(OpCode::GetGlobal as u8, 0);
-                    compiler.emit_byte(name_const as u8, 0);
+                for s in body {
+                    self.compile_stmt(s)?;
                 }
                 
-                compiler.emit_byte(OpCode::HashMap as u8, 0);
-                compiler.emit_byte(public_members.len() as u8, 0);
-                compiler.emit_byte(OpCode::Return as u8, 0);
+                // Epilogue: collect public members
+                self.emit_namespace_epilogue(body);
 
-                let function = Rc::new(compiler.function);
-                let constant = self.function.chunk.add_constant(crate::eval::value::Value::ObjFunction(function));
+                let mut finished_level = self.levels.pop().unwrap();
+                finished_level.function.chunk.upvalues = finished_level.upvalues;
                 
-                self.emit_byte(OpCode::Constant as u8, name.line);
+                let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+                self.emit_byte(OpCode::Closure as u8, name.line);
                 self.emit_byte(constant as u8, name.line);
-                
-                // Call it
                 self.emit_byte(OpCode::Call as u8, name.line);
                 self.emit_byte(0, name.line);
                 
-                // Wrap in Namespace object
-                let name_const = self.function.chunk.add_constant(crate::eval::value::Value::String(name.lexeme.clone()));
+                let name_const = self.add_constant(Value::String(name.lexeme.clone()));
                 self.emit_byte(OpCode::Namespace as u8, name.line);
                 self.emit_byte(name_const as u8, name.line);
-                
                 self.emit_byte(OpCode::DefineGlobal as u8, name.line);
                 self.emit_byte(name_const as u8, name.line);
-                
                 Ok(())
             }
             Stmt::Import(path_tokens, alias) => {
@@ -167,19 +185,12 @@ impl Compiler {
 
                 if !self.compiled_modules.contains_key(&path) {
                     let source = fs::read_to_string(&path).map_err(|e| {
-                        LavinaError::new(
-                            crate::error::ErrorPhase::Compiler,
-                            format!("Could not read module file {:?}: {}", path, e),
-                            path_tokens[0].line,
-                            path_tokens[0].column,
-                        )
+                        LavinaError::new(ErrorPhase::Compiler, format!("Could not read module file {:?}: {}", path, e), path_tokens[0].line, path_tokens[0].column)
                     })?;
 
                     let mut scanner = Scanner::new(source.clone());
                     let (tokens, errors) = scanner.scan_tokens();
-                    if !errors.is_empty() {
-                        return Err(errors[0].clone());
-                    }
+                    if !errors.is_empty() { return Err(errors[0].clone()); }
 
                     let mut parser = Parser::new(tokens.clone(), source.clone());
                     let statements = parser.parse_program().map_err(|e| e)?;
@@ -187,70 +198,33 @@ impl Compiler {
                     let mut sub_compiler = Compiler::new(module_name.clone(), FunctionType::Script);
                     sub_compiler.compiled_modules = self.compiled_modules.clone();
                     
-                    // Compile the module body
+                    // Manually compile with epilogue
                     for s in &statements {
                         sub_compiler.compile_stmt(s)?;
                     }
-
-                    // Collect public members for the namespace
-                    let mut public_members = Vec::new();
-                    for s in &statements {
-                        match s {
-                            Stmt::Function(f) if f.visibility == Visibility::Public => {
-                                public_members.push(f.name.lexeme.clone());
-                            }
-                            Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
-                                public_members.push(n.lexeme.clone());
-                            }
-                            _ => {}
-                        }
-                    }
-
-                    // Build the namespace object at the end of module execution
-                    for m_name in &public_members {
-                        let name_const = sub_compiler.function.chunk.add_constant(Value::String(m_name.clone()));
-                        sub_compiler.emit_byte(OpCode::Constant as u8, 0);
-                        sub_compiler.emit_byte(name_const as u8, 0);
-                        
-                        sub_compiler.emit_byte(OpCode::GetGlobal as u8, 0);
-                        sub_compiler.emit_byte(name_const as u8, 0);
-                    }
+                    sub_compiler.emit_namespace_epilogue(&statements);
                     
-                    sub_compiler.emit_byte(OpCode::HashMap as u8, 0);
-                    sub_compiler.emit_byte(public_members.len() as u8, 0);
-                    sub_compiler.emit_byte(OpCode::Return as u8, 0);
-
-                    let module_fn = Rc::new(sub_compiler.function);
-                    self.compiled_modules = sub_compiler.compiled_modules;
+                    let module_fn = sub_compiler.levels.pop().unwrap().function;
                     self.compiled_modules.insert(path.clone(), module_fn);
                 }
 
                 let function = self.compiled_modules.get(&path).unwrap().clone();
-                let constant = self.function.chunk.add_constant(Value::ObjFunction(function));
-                
-                self.emit_byte(OpCode::Constant as u8, path_tokens[0].line);
+                let constant = self.add_constant(Value::TemplateFunction(Box::new(function)));
+                self.emit_byte(OpCode::Closure as u8, path_tokens[0].line);
                 self.emit_byte(constant as u8, path_tokens[0].line);
-                
-                // Execute the module to get its namespace object
                 self.emit_byte(OpCode::Call as u8, path_tokens[0].line);
                 self.emit_byte(0, path_tokens[0].line);
                 
-                // Wrap in Namespace object
-                let name_const = self.function.chunk.add_constant(Value::String(namespace_name.clone()));
+                let name_const = self.add_constant(Value::String(namespace_name.clone()));
                 self.emit_byte(OpCode::Namespace as u8, path_tokens[0].line);
                 self.emit_byte(name_const as u8, path_tokens[0].line);
-                
-                // Define the module name globally
                 self.emit_byte(OpCode::DefineGlobal as u8, path_tokens[0].line);
                 self.emit_byte(name_const as u8, path_tokens[0].line);
-                
                 Ok(())
             }
             Stmt::Block(stmts) => {
                 self.begin_scope();
-                for s in stmts {
-                    self.compile_stmt(s)?;
-                }
+                for s in stmts { self.compile_stmt(s)?; }
                 self.end_scope();
                 Ok(())
             }
@@ -258,28 +232,21 @@ impl Compiler {
                 self.compile_expr(condition)?;
                 let then_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
                 self.emit_byte(OpCode::Pop as u8, 0);
-                
                 self.compile_stmt(then_branch)?;
                 let else_jump = self.emit_jump(OpCode::Jump as u8);
-                
                 self.patch_jump(then_jump);
                 self.emit_byte(OpCode::Pop as u8, 0);
-                
-                if let Some(else_stmt) = else_branch {
-                    self.compile_stmt(else_stmt)?;
-                }
+                if let Some(else_stmt) = else_branch { self.compile_stmt(else_stmt)?; }
                 self.patch_jump(else_jump);
                 Ok(())
             }
             Stmt::While(condition, body) => {
-                let loop_start = self.function.chunk.code.len();
+                let loop_start = self.current_level().function.chunk.code.len();
                 self.compile_expr(condition)?;
                 let exit_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
                 self.emit_byte(OpCode::Pop as u8, 0);
-                
                 self.compile_stmt(body)?;
                 self.emit_loop(loop_start);
-                
                 self.patch_jump(exit_jump);
                 self.emit_byte(OpCode::Pop as u8, 0);
                 Ok(())
@@ -287,22 +254,19 @@ impl Compiler {
             Stmt::For(item_name, collection, body) => {
                 self.begin_scope();
                 self.compile_expr(collection)?;
-                let coll_local = "_collection".to_string();
-                self.add_local(coll_local.clone());
-                
-                let zero = self.function.chunk.add_constant(crate::eval::value::Value::Int(0));
+                self.add_local("_collection".to_string());
+                let zero = self.add_constant(Value::Int(0));
                 self.emit_constant(zero as u8, item_name.line);
-                let index_local = "_i".to_string();
-                self.add_local(index_local.clone());
+                self.add_local("_i".to_string());
                 
-                let loop_start = self.function.chunk.code.len();
-                let coll_idx = self.resolve_local(&coll_local).unwrap();
-                let i_idx = self.resolve_local(&index_local).unwrap();
+                let loop_start = self.current_level().function.chunk.code.len();
+                let coll_idx = self.resolve_local("_collection").unwrap();
+                let i_idx = self.resolve_local("_i").unwrap();
                 
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
                 
-                let len_const = self.function.chunk.add_constant(crate::eval::value::Value::String("len".to_string()));
+                let len_const = self.add_constant(Value::String("len".to_string()));
                 self.emit_byte(OpCode::GetGlobal as u8, item_name.line);
                 self.emit_byte(len_const as u8, item_name.line);
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
@@ -327,7 +291,7 @@ impl Compiler {
                 
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
-                let one = self.function.chunk.add_constant(crate::eval::value::Value::Int(1));
+                let one = self.add_constant(Value::Int(1));
                 self.emit_constant(one as u8, item_name.line);
                 self.emit_byte(OpCode::Add as u8, item_name.line);
                 self.emit_byte(OpCode::SetLocal as u8, item_name.line);
@@ -341,11 +305,8 @@ impl Compiler {
                 Ok(())
             }
             Stmt::Return(keyword, value) => {
-                if let Some(expr) = value {
-                    self.compile_expr(expr)?;
-                } else {
-                    self.emit_byte(OpCode::Null as u8, keyword.line);
-                }
+                if let Some(expr) = value { self.compile_expr(expr)?; }
+                else { self.emit_byte(OpCode::Null as u8, keyword.line); }
                 self.emit_byte(OpCode::Return as u8, keyword.line);
                 Ok(())
             }
@@ -353,21 +314,40 @@ impl Compiler {
         }
     }
 
+    fn emit_namespace_epilogue(&mut self, body: &[Stmt]) {
+        let mut public_members = Vec::new();
+        for s in body {
+            match s {
+                Stmt::Function(f) if f.visibility == Visibility::Public => {
+                    public_members.push(f.name.lexeme.clone());
+                }
+                Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
+                    public_members.push(n.lexeme.clone());
+                }
+                _ => {}
+            }
+        }
+
+        for m_name in &public_members {
+            let name_const = self.add_constant(Value::String(m_name.clone()));
+            self.emit_byte(OpCode::Constant as u8, 0);
+            self.emit_byte(name_const as u8, 0);
+            self.emit_byte(OpCode::GetGlobal as u8, 0);
+            self.emit_byte(name_const as u8, 0);
+        }
+        
+        let count = public_members.len();
+        self.emit_byte(OpCode::HashMap as u8, 0);
+        self.emit_byte(count as u8, 0);
+        self.emit_byte(OpCode::Return as u8, 0);
+    }
+
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), LavinaError> {
         match expr {
             Expr::Literal(lit) => match lit {
-                Literal::Int(i) => {
-                    let constant = self.function.chunk.add_constant(crate::eval::value::Value::Int(*i));
-                    self.emit_constant(constant as u8, 0);
-                }
-                Literal::Float(f) => {
-                    let constant = self.function.chunk.add_constant(crate::eval::value::Value::Float(*f));
-                    self.emit_constant(constant as u8, 0);
-                }
-                Literal::String(s) => {
-                    let constant = self.function.chunk.add_constant(crate::eval::value::Value::String(s.clone()));
-                    self.emit_constant(constant as u8, 0);
-                }
+                Literal::Int(i) => { let c = self.add_constant(Value::Int(*i)); self.emit_constant(c as u8, 0); }
+                Literal::Float(f) => { let c = self.add_constant(Value::Float(*f)); self.emit_constant(c as u8, 0); }
+                Literal::String(s) => { let c = self.add_constant(Value::String(s.clone())); self.emit_constant(c as u8, 0); }
                 Literal::Bool(true) => self.emit_byte(OpCode::True as u8, 0),
                 Literal::Bool(false) => self.emit_byte(OpCode::False as u8, 0),
                 Literal::Null => self.emit_byte(OpCode::Null as u8, 0),
@@ -376,8 +356,11 @@ impl Compiler {
                 if let Some(arg) = self.resolve_local(&name.lexeme) {
                     self.emit_byte(OpCode::GetLocal as u8, name.line);
                     self.emit_byte(arg as u8, name.line);
+                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, &name.lexeme) {
+                    self.emit_byte(OpCode::GetUpvalue as u8, name.line);
+                    self.emit_byte(arg as u8, name.line);
                 } else {
-                    let constant = self.function.chunk.add_constant(crate::eval::value::Value::String(name.lexeme.clone()));
+                    let constant = self.add_constant(Value::String(name.lexeme.clone()));
                     self.emit_byte(OpCode::GetGlobal as u8, name.line);
                     self.emit_byte(constant as u8, name.line);
                 }
@@ -387,8 +370,11 @@ impl Compiler {
                 if let Some(arg) = self.resolve_local(&name.lexeme) {
                     self.emit_byte(OpCode::SetLocal as u8, name.line);
                     self.emit_byte(arg as u8, name.line);
+                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, &name.lexeme) {
+                    self.emit_byte(OpCode::SetUpvalue as u8, name.line);
+                    self.emit_byte(arg as u8, name.line);
                 } else {
-                    let constant = self.function.chunk.add_constant(crate::eval::value::Value::String(name.lexeme.clone()));
+                    let constant = self.add_constant(Value::String(name.lexeme.clone()));
                     self.emit_byte(OpCode::SetGlobal as u8, name.line);
                     self.emit_byte(constant as u8, name.line);
                 }
@@ -403,27 +389,16 @@ impl Compiler {
                     TokenType::Slash => self.emit_byte(OpCode::Divide as u8, op.line),
                     TokenType::EqualEqual => self.emit_byte(OpCode::Equal as u8, op.line),
                     TokenType::Greater => self.emit_byte(OpCode::Greater as u8, op.line),
-                    TokenType::GreaterEqual => {
-                        self.emit_byte(OpCode::Less as u8, op.line);
-                        self.emit_byte(OpCode::Not as u8, op.line);
-                    }
                     TokenType::Less => self.emit_byte(OpCode::Less as u8, op.line),
-                    TokenType::LessEqual => {
-                        self.emit_byte(OpCode::Greater as u8, op.line);
-                        self.emit_byte(OpCode::Not as u8, op.line);
-                    }
-                    TokenType::BangEqual => {
-                        self.emit_byte(OpCode::Equal as u8, op.line);
-                        self.emit_byte(OpCode::Not as u8, op.line);
-                    }
+                    TokenType::GreaterEqual => { self.emit_byte(OpCode::Less as u8, op.line); self.emit_byte(OpCode::Not as u8, op.line); }
+                    TokenType::LessEqual => { self.emit_byte(OpCode::Greater as u8, op.line); self.emit_byte(OpCode::Not as u8, op.line); }
+                    TokenType::BangEqual => { self.emit_byte(OpCode::Equal as u8, op.line); self.emit_byte(OpCode::Not as u8, op.line); }
                     _ => {}
                 }
             }
             Expr::Call(callee, paren, args) => {
                 self.compile_expr(callee)?;
-                for arg in args {
-                    self.compile_expr(arg)?;
-                }
+                for arg in args { self.compile_expr(arg)?; }
                 self.emit_byte(OpCode::Call as u8, paren.line);
                 self.emit_byte(args.len() as u8, paren.line);
             }
@@ -433,76 +408,88 @@ impl Compiler {
                 self.emit_byte(OpCode::GetIndex as u8, bracket.line);
             }
             Expr::Vector(elements) => {
-                for el in elements {
-                    self.compile_expr(el)?;
-                }
+                for el in elements { self.compile_expr(el)?; }
                 self.emit_byte(OpCode::Vector as u8, 0);
                 self.emit_byte(elements.len() as u8, 0);
             }
             Expr::Map(entries) => {
-                for (key, value) in entries {
-                    self.compile_expr(key)?;
-                    self.compile_expr(value)?;
-                }
+                for (key, value) in entries { self.compile_expr(key)?; self.compile_expr(value)?; }
                 self.emit_byte(OpCode::HashMap as u8, 0);
                 self.emit_byte(entries.len() as u8, 0);
             }
-            Expr::Grouping(expr) => { self.compile_expr(expr)?; }
+            Expr::Grouping(expr) => self.compile_expr(expr)?,
             _ => {}
         }
         Ok(())
     }
 
     fn add_local(&mut self, name: String) {
-        self.locals.push(Local { name, depth: self.scope_depth });
+        let depth = self.current_level().scope_depth;
+        self.current_level_mut().locals.push(Local { name, depth, is_captured: false });
     }
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
-        for (i, local) in self.locals.iter().enumerate().rev() {
-            if local.name == name {
-                return Some(i);
-            }
+        for (i, local) in self.current_level().locals.iter().enumerate().rev() {
+            if local.name == name { return Some(i); }
         }
         None
     }
 
-    fn begin_scope(&mut self) {
-        self.scope_depth += 1;
+    fn resolve_upvalue(&mut self, level_idx: usize, name: &str) -> Option<usize> {
+        if level_idx == 0 { return None; }
+        let parent_idx = level_idx - 1;
+        let mut local_idx = None;
+        for (i, local) in self.levels[parent_idx].locals.iter().enumerate().rev() {
+            if local.name == name { local_idx = Some(i); break; }
+        }
+        if let Some(idx) = local_idx {
+            self.levels[parent_idx].locals[idx].is_captured = true;
+            return Some(self.add_upvalue(level_idx, idx as u8, true));
+        }
+        if let Some(upvalue) = self.resolve_upvalue(parent_idx, name) { return Some(self.add_upvalue(level_idx, upvalue as u8, false)); }
+        None
     }
 
+    fn add_upvalue(&mut self, level_idx: usize, index: u8, is_local: bool) -> usize {
+        let level = &mut self.levels[level_idx];
+        for (i, uv) in level.upvalues.iter().enumerate() {
+            if uv.index == index && uv.is_local == is_local { return i; }
+        }
+        level.upvalues.push(UpvalueLoc { index, is_local });
+        level.upvalues.len() - 1
+    }
+
+    fn begin_scope(&mut self) { self.current_level_mut().scope_depth += 1; }
     fn end_scope(&mut self) {
-        self.scope_depth -= 1;
-        while !self.locals.is_empty() && self.locals.last().unwrap().depth > self.scope_depth {
-            self.emit_byte(OpCode::Pop as u8, 0);
-            self.locals.pop();
+        let depth = self.current_level().scope_depth;
+        self.current_level_mut().scope_depth -= 1;
+        while !self.current_level().locals.is_empty() && self.current_level().locals.last().unwrap().depth == depth {
+            if self.current_level().locals.last().unwrap().is_captured {
+                self.emit_byte(OpCode::CloseUpvalue as u8, 0);
+            } else {
+                self.emit_byte(OpCode::Pop as u8, 0);
+            }
+            self.current_level_mut().locals.pop();
         }
     }
 
-    fn emit_byte(&mut self, byte: u8, line: usize) {
-        self.function.chunk.write(byte, line);
-    }
-
-    fn emit_constant(&mut self, value: u8, line: usize) {
-        self.emit_byte(OpCode::Constant as u8, line);
-        self.emit_byte(value, line);
-    }
-
+    fn emit_byte(&mut self, byte: u8, line: usize) { self.current_level_mut().function.chunk.write(byte, line); }
+    fn emit_constant(&mut self, value: u8, line: usize) { self.emit_byte(OpCode::Constant as u8, line); self.emit_byte(value, line); }
+    fn add_constant(&mut self, value: Value) -> usize { self.current_level_mut().function.chunk.add_constant(value) }
     fn emit_jump(&mut self, instruction: u8) -> usize {
         self.emit_byte(instruction, 0);
         self.emit_byte(0xff, 0);
         self.emit_byte(0xff, 0);
-        self.function.chunk.code.len() - 2
+        self.current_level().function.chunk.code.len() - 2
     }
-
     fn patch_jump(&mut self, offset: usize) {
-        let jump = self.function.chunk.code.len() - offset - 2;
-        self.function.chunk.code[offset] = ((jump >> 8) & 0xff) as u8;
-        self.function.chunk.code[offset + 1] = (jump & 0xff) as u8;
+        let jump = self.current_level().function.chunk.code.len() - offset - 2;
+        self.current_level_mut().function.chunk.code[offset] = ((jump >> 8) & 0xff) as u8;
+        self.current_level_mut().function.chunk.code[offset + 1] = (jump & 0xff) as u8;
     }
-
     fn emit_loop(&mut self, loop_start: usize) {
         self.emit_byte(OpCode::Loop as u8, 0);
-        let offset = self.function.chunk.code.len() - loop_start + 2;
+        let offset = self.current_level().function.chunk.code.len() - loop_start + 2;
         self.emit_byte(((offset >> 8) & 0xff) as u8, 0);
         self.emit_byte((offset & 0xff) as u8, 0);
     }

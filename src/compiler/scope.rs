@@ -7,4 +7,5 @@ pub enum FunctionType {
 pub struct Local {
     pub name: String,
     pub depth: i32,
+    pub is_captured: bool,
 }

@@ -35,6 +35,15 @@ fn value_to_string(heap: &[Option<Obj>], value: &Value) -> String {
                     }
                     ObjType::Namespace(name, _) => format!("<namespace {}>", name),
                     ObjType::Function(f) => format!("<fn {}>", f.name),
+                    ObjType::Closure(c) => {
+                        if let Some(Some(f_obj)) = heap.get(c.function_idx) {
+                            if let ObjType::Function(f) = &f_obj.obj_type {
+                                return format!("<fn {}>", f.name);
+                            }
+                        }
+                        "<fn unknown>".to_string()
+                    }
+                    ObjType::Upvalue(_) => "<upvalue>".to_string(),
                 }
             } else {
                 "null".to_string()
@@ -95,7 +104,7 @@ fn native_type(_heap: &[Option<Obj>], args: Vec<Value>) -> Result<Value, String>
         Value::Null => "null",
         Value::NativeFunction(_, _) => "native function",
         Value::Object(_) => "object",
-        Value::ObjFunction(_) => "vm function",
+        Value::TemplateFunction(_) => "template function",
         Value::Function(_) => "function",
     };
     Ok(Value::String(type_name.to_string()))
