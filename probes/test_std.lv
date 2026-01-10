@@ -1,0 +1,7 @@
+import lavina::math
+
+print("PI: " + math::PI)
+print("E: " + math::E)
+print("sqrt(16): " + math::sqrt(16))
+print("abs(-42): " + math::abs(-42))
+print("sin(PI/2): " + math::sin(math::PI / 2.0))

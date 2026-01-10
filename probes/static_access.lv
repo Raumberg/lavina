@@ -1,0 +1,8 @@
+class Utils:
+    void fn __init__():
+        print("Utils init")
+
+    public int fn add(int a, int b):
+        return a + b
+
+print("Static call: " + Utils::add(10, 20))

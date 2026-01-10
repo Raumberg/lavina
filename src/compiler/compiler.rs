@@ -62,6 +62,10 @@ impl Compiler {
         self.levels.last_mut().unwrap()
     }
 
+    fn error(&self, message: String, line: usize, column: usize) -> LavinaError {
+        LavinaError::new(ErrorPhase::Compiler, message, line, column)
+    }
+
     pub fn compile(mut self, statements: &[Stmt]) -> Result<crate::vm::object::ObjFunction, LavinaError> {
         for stmt in statements {
             self.compile_stmt(stmt)?;
@@ -305,12 +309,195 @@ impl Compiler {
                 Ok(())
             }
             Stmt::Return(keyword, value) => {
-                if let Some(expr) = value { self.compile_expr(expr)?; }
-                else { self.emit_byte(OpCode::Null as u8, keyword.line); }
+                if let Some(expr) = value {
+                    if self.current_level().function.name.ends_with("::__init__") {
+                        return Err(self.error("Can't return a value from an initializer.".to_string(), keyword.line, keyword.column));
+                    }
+                    self.compile_expr(expr)?;
+                } else {
+                    if self.current_level().function.name.ends_with("::__init__") {
+                        self.emit_byte(OpCode::GetLocal as u8, keyword.line);
+                        self.emit_byte(0, keyword.line);
+                    } else {
+                        self.emit_byte(OpCode::Null as u8, keyword.line);
+                    }
+                }
                 self.emit_byte(OpCode::Return as u8, keyword.line);
                 Ok(())
             }
             Stmt::Directive(_) => Ok(()),
+            Stmt::Class(name, body) => {
+                let name_str = name.lexeme.clone();
+                let name_const = self.add_constant(Value::String(name_str.clone()));
+                self.emit_byte(OpCode::Class as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+                
+                // Define global early so we can refer to the class in its methods
+                self.emit_byte(OpCode::DefineGlobal as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+                
+                // Now get it back on stack for methods
+                self.emit_byte(OpCode::GetGlobal as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+
+                for s in body {
+                    match s {
+                        Stmt::Function(decl) => {
+                            let method_name = decl.name.lexeme.clone();
+                            let is_init = method_name == "__init__";
+                            
+                            // Push new level for method
+                            let mut level = CompilerLevel {
+                                function: crate::vm::object::ObjFunction {
+                                    arity: decl.params.len(),
+                                    chunk: Chunk::new(),
+                                    name: format!("{}::{}", name_str, method_name),
+                                },
+                                locals: Vec::new(),
+                                scope_depth: 0,
+                                upvalues: Vec::new(),
+                                function_type: FunctionType::Function,
+                            };
+                            
+                            if !decl.is_static {
+                                // Slot 0 is 'this' for instance methods
+                                level.locals.push(Local { name: "this".to_string(), depth: 0, is_captured: false });
+                            } else {
+                                // Slot 0 is empty for static methods (script-like)
+                                level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                            }
+                            
+                            for (param_name, _) in &decl.params {
+                                level.locals.push(Local { name: param_name.lexeme.clone(), depth: 0, is_captured: false });
+                            }
+                            self.levels.push(level);
+
+                            for body_stmt in &decl.body {
+                                self.compile_stmt(body_stmt)?;
+                            }
+                            
+                            if is_init {
+                                self.emit_byte(OpCode::GetLocal as u8, 0);
+                                self.emit_byte(0, 0); // slot 0 is 'this'
+                            } else {
+                                self.emit_byte(OpCode::Null as u8, 0);
+                            }
+                            self.emit_byte(OpCode::Return as u8, 0);
+                            
+                            let mut finished_level = self.levels.pop().unwrap();
+                            finished_level.function.chunk.upvalues = finished_level.upvalues;
+                            
+                            let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+                            self.emit_byte(OpCode::Closure as u8, decl.name.line);
+                            self.emit_byte(constant as u8, decl.name.line);
+                            
+                            let method_const = self.add_constant(Value::String(method_name));
+                            self.emit_byte(OpCode::Method as u8, decl.name.line);
+                            self.emit_byte(method_const as u8, decl.name.line);
+                        }
+                        _ => {} // Ignore fields for now, they are dynamic
+                    }
+                }
+
+                self.emit_byte(OpCode::Pop as u8, name.line);
+                Ok(())
+            }
+            Stmt::Struct(name, body) => {
+                // For now, structs are just classes
+                self.compile_stmt(&Stmt::Class(name.clone(), body.clone()))?;
+                Ok(())
+            }
+            Stmt::Enum(name, variants) => {
+                let enum_name = name.lexeme.clone();
+                let mut public_members = Vec::new();
+
+                for variant in variants {
+                    let variant_name = variant.name.lexeme.clone();
+                    let arity = variant.types.len();
+                    
+                    if arity == 0 {
+                        // Constant variant: just a map { "_tag": "variant_name" }
+                        let tag_key = self.add_constant(Value::String("_tag".to_string()));
+                        let tag_val = self.add_constant(Value::String(variant_name.clone()));
+                        self.emit_constant(tag_key as u8, variant.name.line);
+                        self.emit_constant(tag_val as u8, variant.name.line);
+                        self.emit_byte(OpCode::HashMap as u8, variant.name.line);
+                        self.emit_byte(1, variant.name.line); // 1 pair
+                        
+                        let name_const = self.add_constant(Value::String(variant_name.clone()));
+                        self.emit_byte(OpCode::DefineGlobal as u8, variant.name.line);
+                        self.emit_byte(name_const as u8, variant.name.line);
+                        public_members.push(variant_name);
+                    } else {
+                        // Function variant
+                        let mut level = CompilerLevel {
+                            function: crate::vm::object::ObjFunction {
+                                arity,
+                                chunk: Chunk::new(),
+                                name: format!("{}::{}", enum_name, variant_name),
+                            },
+                            locals: Vec::new(),
+                            scope_depth: 0,
+                            upvalues: Vec::new(),
+                            function_type: FunctionType::Function,
+                        };
+                        level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                        for i in 0..arity {
+                            level.locals.push(Local { name: format!("arg{}", i), depth: 0, is_captured: false });
+                        }
+                        self.levels.push(level);
+
+                        // Build the enum object
+                        // Tag
+                        let tag_key = self.add_constant(Value::String("_tag".to_string()));
+                        let tag_val = self.add_constant(Value::String(variant_name.clone()));
+                        self.emit_constant(tag_key as u8, variant.name.line);
+                        self.emit_constant(tag_val as u8, variant.name.line);
+
+                        // Arguments
+                        for i in 0..arity {
+                            let arg_key = self.add_constant(Value::String(i.to_string()));
+                            self.emit_constant(arg_key as u8, variant.name.line);
+                            self.emit_byte(OpCode::GetLocal as u8, variant.name.line);
+                            self.emit_byte((i + 1) as u8, variant.name.line);
+                        }
+
+                        self.emit_byte(OpCode::HashMap as u8, variant.name.line);
+                        self.emit_byte((arity + 1) as u8, variant.name.line); // arity + tag
+
+                        self.emit_byte(OpCode::Return as u8, variant.name.line);
+                        let finished_level = self.levels.pop().unwrap();
+                        let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+                        
+                        self.emit_byte(OpCode::Closure as u8, variant.name.line);
+                        self.emit_byte(constant as u8, variant.name.line);
+                        
+                        let name_const = self.add_constant(Value::String(variant_name.clone()));
+                        self.emit_byte(OpCode::DefineGlobal as u8, variant.name.line);
+                        self.emit_byte(name_const as u8, variant.name.line);
+                        public_members.push(variant_name);
+                    }
+                }
+                
+                // Now create a namespace for the enum
+                for member in &public_members {
+                    let m_const = self.add_constant(Value::String(member.clone()));
+                    self.emit_constant(m_const as u8, name.line);
+                    self.emit_byte(OpCode::GetGlobal as u8, name.line);
+                    self.emit_byte(m_const as u8, name.line);
+                }
+                self.emit_byte(OpCode::HashMap as u8, name.line);
+                self.emit_byte(public_members.len() as u8, name.line);
+                
+                let ns_const = self.add_constant(Value::String(enum_name.clone()));
+                self.emit_byte(OpCode::Namespace as u8, name.line);
+                self.emit_byte(ns_const as u8, name.line);
+                
+                self.emit_byte(OpCode::DefineGlobal as u8, name.line);
+                self.emit_byte(ns_const as u8, name.line);
+                
+                Ok(())
+            }
         }
     }
 
@@ -418,7 +605,60 @@ impl Compiler {
                 self.emit_byte(entries.len() as u8, 0);
             }
             Expr::Grouping(expr) => self.compile_expr(expr)?,
-            _ => {}
+            Expr::Unary(op, expr) => {
+                self.compile_expr(expr)?;
+                match op.token_type {
+                    TokenType::Minus => self.emit_byte(OpCode::Negate as u8, op.line),
+                    TokenType::Bang => self.emit_byte(OpCode::Not as u8, op.line),
+                    _ => {}
+                }
+            }
+            Expr::Logical(left, op, right) => {
+                self.compile_expr(left)?;
+                if op.token_type == TokenType::Or {
+                    let else_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
+                    let end_jump = self.emit_jump(OpCode::Jump as u8);
+                    self.patch_jump(else_jump);
+                    self.emit_byte(OpCode::Pop as u8, 0);
+                    self.compile_expr(right)?;
+                    self.patch_jump(end_jump);
+                } else { // AND
+                    let end_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
+                    self.emit_byte(OpCode::Pop as u8, 0);
+                    self.compile_expr(right)?;
+                    self.patch_jump(end_jump);
+                }
+            }
+            Expr::Get(obj, name) => {
+                self.compile_expr(obj)?;
+                let name_const = self.add_constant(Value::String(name.lexeme.clone()));
+                self.emit_byte(OpCode::GetProperty as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+            }
+            Expr::StaticGet(obj, name) => {
+                self.compile_expr(obj)?;
+                let name_const = self.add_constant(Value::String(name.lexeme.clone()));
+                self.emit_byte(OpCode::GetProperty as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+            }
+            Expr::Set(obj, name, value) => {
+                self.compile_expr(obj)?;
+                self.compile_expr(value)?;
+                let name_const = self.add_constant(Value::String(name.lexeme.clone()));
+                self.emit_byte(OpCode::SetProperty as u8, name.line);
+                self.emit_byte(name_const as u8, name.line);
+            }
+            Expr::This(token) => {
+                if let Some(arg) = self.resolve_local("this") {
+                    self.emit_byte(OpCode::GetLocal as u8, token.line);
+                    self.emit_byte(arg as u8, token.line);
+                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, "this") {
+                    self.emit_byte(OpCode::GetUpvalue as u8, token.line);
+                    self.emit_byte(arg as u8, token.line);
+                } else {
+                    return Err(self.error("Can't use 'this' outside of a class method.".to_string(), token.line, token.column));
+                }
+            }
         }
         Ok(())
     }

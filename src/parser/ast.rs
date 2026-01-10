@@ -37,6 +37,10 @@ pub enum Expr {
     Index(Box<Expr>, Token, Box<Expr>),
     Vector(Vec<Expr>),
     Map(Vec<(Expr, Expr)>),
+    Get(Box<Expr>, Token), // property access: object.property
+    Set(Box<Expr>, Token, Box<Expr>), // property assignment: object.property = value
+    StaticGet(Box<Expr>, Token), // static/namespace access: namespace::member
+    This(Token),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -61,6 +65,15 @@ pub enum Stmt {
     Directive(Directive),
     Namespace(Token, Vec<Stmt>),
     Import(Vec<Token>, Option<Token>),
+    Class(Token, Vec<Stmt>),
+    Struct(Token, Vec<Stmt>),
+    Enum(Token, Vec<EnumVariant>),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct EnumVariant {
+    pub name: Token,
+    pub types: Vec<Type>, // Optional data associated with variant
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -72,6 +85,7 @@ pub struct FunctionDecl {
     pub directives: Vec<Directive>,
     pub is_inline: bool,
     pub is_comptime: bool,
+    pub is_static: bool,
     pub visibility: Visibility,
 }
 

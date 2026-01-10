@@ -111,6 +111,9 @@ impl TreeWalker {
             Stmt::Namespace(_, _) => todo!("Namespace not implemented in tree-walker."),
             Stmt::Import(_, _) => todo!("Import not implemented in tree-walker."),
             Stmt::Directive(_) => Ok(ControlFlow::None),
+            Stmt::Class(_, _) | Stmt::Struct(_, _) | Stmt::Enum(_, _) => {
+                todo!("OOP in tree-walker not implemented")
+            }
         }
     }
 
@@ -181,6 +184,9 @@ impl TreeWalker {
                     }
                     _ => Err(self.error("Can only call functions.".to_string(), paren.line, paren.column)),
                 }
+            }
+            Expr::Get(_, _) | Expr::Set(_, _, _) | Expr::StaticGet(_, _) | Expr::This(_) => {
+                todo!("OOP in tree-walker not implemented")
             }
             _ => todo!("Expression not implemented in tree-walker."),
         }

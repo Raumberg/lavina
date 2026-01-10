@@ -68,7 +68,7 @@ public int fn add(int a, int b):
 
     let main_code = r#"
 import math
-int res = math.add(5, 10)
+int res = math::add(5, 10)
 if res != 15:
     print("Failed")
 else:
@@ -91,7 +91,7 @@ public string fn greet(string name):
 
     let main_code = r#"
 import lib as m
-string res = m.greet("Alina")
+string res = m::greet("Alina")
 "#;
 
     let result = run_lavina_code(main_code.to_string(), test_dir);
@@ -113,8 +113,8 @@ public int fn visible():
 
     let main_code = r#"
 import secret
-int x = secret.visible() // OK
-int y = secret.hidden()  // Should fail
+int x = secret::visible() // OK
+int y = secret::hidden()  // Should fail
 "#;
 
     let result = run_lavina_code(main_code.to_string(), test_dir);
@@ -136,7 +136,7 @@ public int fn get_val():
 
     let main_code = r#"
 import ext
-int x = ext.get_val()
+int x = ext::get_val()
 "#;
 
     // Set LVPATH

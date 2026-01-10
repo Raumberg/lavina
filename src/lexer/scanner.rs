@@ -49,6 +49,11 @@ impl Scanner {
         keywords.insert("namespace".to_string(), TokenType::Namespace);
         keywords.insert("public".to_string(), TokenType::Public);
         keywords.insert("private".to_string(), TokenType::Private);
+        keywords.insert("static".to_string(), TokenType::Static);
+        keywords.insert("class".to_string(), TokenType::Class);
+        keywords.insert("struct".to_string(), TokenType::Struct);
+        keywords.insert("enum".to_string(), TokenType::Enum);
+        keywords.insert("this".to_string(), TokenType::This);
 
         Self {
             source: source.chars().collect(),

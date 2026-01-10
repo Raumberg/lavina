@@ -1,5 +1,5 @@
 use crate::vm::opcode::OpCode;
-use crate::vm::object::{ObjFunction, ObjType};
+use crate::vm::object::{ObjType};
 use crate::vm::memory::Memory;
 use crate::vm::frame::CallFrame;
 use crate::eval::value::{Value};
@@ -38,18 +38,12 @@ impl VM {
         vm
     }
 
-    pub fn interpret(&mut self, function: ObjFunction) -> InterpretResult {
+    pub fn interpret(&mut self, function: crate::vm::object::ObjFunction) -> InterpretResult {
         self.stack.clear();
         self.open_upvalues.clear();
         
         let mut function = function;
-        // Transform string constants into heap objects once
-        for i in 0..function.chunk.constants.len() {
-            if let Value::String(s) = &function.chunk.constants[i] {
-                let idx = self.memory.alloc(ObjType::String(s.clone()));
-                function.chunk.constants[i] = Value::Object(idx);
-            }
-        }
+        self.prepare_function(&mut function);
 
         let function_idx = self.memory.alloc(ObjType::Function(function));
         let closure = crate::vm::object::ObjClosure {
@@ -66,6 +60,21 @@ impl VM {
         };
         self.frames.push(frame);
         self.run()
+    }
+
+    fn prepare_function(&mut self, function: &mut crate::vm::object::ObjFunction) {
+        for i in 0..function.chunk.constants.len() {
+            match &mut function.chunk.constants[i] {
+                Value::String(s) => {
+                    let idx = self.memory.alloc(ObjType::String(s.clone()));
+                    function.chunk.constants[i] = Value::Object(idx);
+                }
+                Value::TemplateFunction(f) => {
+                    self.prepare_function(f);
+                }
+                _ => {}
+            }
+        }
     }
 
     fn push(&mut self, value: Value) {
@@ -157,7 +166,9 @@ impl VM {
                 OpCode::Equal => {
                     let b = self.pop();
                     let a = self.pop();
-                    self.push(Value::Bool(self.values_equal(a, b)));
+                    let res = self.values_equal(a.clone(), b.clone());
+                    // println!("DEBUG: {} == {} -> {}", a, b, res);
+                    self.push(Value::Bool(res));
                 }
                 OpCode::Greater => {
                     let b = self.pop();
@@ -308,25 +319,110 @@ impl VM {
 
                 OpCode::Namespace => {
                     let name = self.read_string_constant();
-                    // In a real implementation, we would collect defined members.
-                    // For now, let's create a Namespace from a HashMap.
                     let val = self.pop();
                     if let Value::Object(idx) = val {
-                        // This is a hack: we assume the namespace "init" returned a HashMap
-                        // of its members. We convert it to a Namespace object.
+                        let mut members = HashMap::new();
                         let obj_type = self.memory.heap[idx].as_ref().unwrap().obj_type.clone();
-                        if let ObjType::HashMap(members) = obj_type {
-                            let ns_idx = self.memory.alloc(ObjType::Namespace(name, members));
-                            self.push(Value::Object(ns_idx));
-                        } else {
-                            // If it's not a hashmap, maybe it's just null? 
-                            // Create empty namespace.
-                            let ns_idx = self.memory.alloc(ObjType::Namespace(name, HashMap::new()));
-                            self.push(Value::Object(ns_idx));
+                        if let ObjType::HashMap(m) = obj_type {
+                            members = m;
                         }
+                        let ns_idx = self.memory.alloc(ObjType::Namespace(name, members));
+                        self.push(Value::Object(ns_idx));
                     } else {
                         let ns_idx = self.memory.alloc(ObjType::Namespace(name, HashMap::new()));
                         self.push(Value::Object(ns_idx));
+                    }
+                }
+
+                OpCode::Class => {
+                    let name = self.read_string_constant();
+                    let class_idx = self.memory.alloc(ObjType::Class(crate::vm::object::ObjClass {
+                        name,
+                        methods: HashMap::new(),
+                    }));
+                    self.push(Value::Object(class_idx));
+                }
+
+                OpCode::Method => {
+                    let name = self.read_string_constant();
+                    let method = self.pop();
+                    let class_idx = match self.peek(0) {
+                        Value::Object(idx) => *idx,
+                        _ => panic!("OP_METHOD: class not on stack"),
+                    };
+
+                    let obj = self.memory.heap[class_idx].as_mut().unwrap();
+                    if let ObjType::Class(class) = &mut obj.obj_type {
+                        class.methods.insert(name, method);
+                    } else {
+                        panic!("OP_METHOD: not a class");
+                    }
+                }
+
+                OpCode::GetProperty => {
+                    let name = self.read_string_constant();
+                    let instance_idx = match self.pop() {
+                        Value::Object(idx) => idx,
+                        val => return self.runtime_error(&format!("Only instances have properties, got {}", val)),
+                    };
+
+                    let obj = self.memory.heap[instance_idx].as_ref().unwrap();
+                    match &obj.obj_type {
+                        ObjType::Instance(instance) => {
+                            if let Some(val) = instance.fields.get(&name) {
+                                self.push(val.clone());
+                            } else {
+                                // Look up method
+                                let class_obj = self.memory.heap[instance.class_idx].as_ref().unwrap();
+                                if let ObjType::Class(class) = &class_obj.obj_type {
+                                    if let Some(method) = class.methods.get(&name) {
+                                        if let Value::Object(m_idx) = method {
+                                            let bound_idx = self.memory.alloc(ObjType::BoundMethod(crate::vm::object::ObjBoundMethod {
+                                                receiver: instance_idx,
+                                                method: *m_idx,
+                                            }));
+                                            self.push(Value::Object(bound_idx));
+                                        } else {
+                                            self.push(method.clone());
+                                        }
+                                    } else {
+                                        return self.runtime_error(&format!("Undefined property '{}'.", name));
+                                    }
+                                }
+                            }
+                        }
+                        ObjType::Namespace(_, members) => {
+                            if let Some(val) = members.get(&name) {
+                                self.push(val.clone());
+                            } else {
+                                return self.runtime_error(&format!("Undefined member '{}' in namespace.", name));
+                            }
+                        }
+                        ObjType::Class(class) => {
+                            if let Some(val) = class.methods.get(&name) {
+                                self.push(val.clone());
+                            } else {
+                                return self.runtime_error(&format!("Undefined static member '{}' in class '{}'.", name, class.name));
+                            }
+                        }
+                        _ => return self.runtime_error("Only instances, classes and namespaces have properties."),
+                    }
+                }
+
+                OpCode::SetProperty => {
+                    let name = self.read_string_constant();
+                    let value = self.pop();
+                    let instance_idx = match self.pop() {
+                        Value::Object(idx) => idx,
+                        _ => return self.runtime_error("Only instances have properties."),
+                    };
+
+                    let obj = self.memory.heap[instance_idx].as_mut().unwrap();
+                    if let ObjType::Instance(instance) = &mut obj.obj_type {
+                        instance.fields.insert(name, value.clone());
+                        self.push(value);
+                    } else {
+                        return self.runtime_error("Only instances have properties.");
                     }
                 }
 
@@ -464,6 +560,25 @@ impl VM {
                         }
                         ObjType::Namespace(name, _) => format!("<namespace {}>", name),
                         ObjType::Function(f) => format!("<fn {}>", f.name),
+                        ObjType::Class(c) => format!("<class {}>", c.name),
+                        ObjType::Instance(i) => {
+                            let class_obj = self.memory.heap[i.class_idx].as_ref().unwrap();
+                            if let ObjType::Class(c) = &class_obj.obj_type {
+                                format!("<instance of {}>", c.name)
+                            } else {
+                                "<instance of unknown>".to_string()
+                            }
+                        },
+                        ObjType::BoundMethod(b) => {
+                            let method_obj = self.memory.heap[b.method].as_ref().unwrap();
+                            if let ObjType::Closure(c) = &method_obj.obj_type {
+                                let f_obj = self.memory.heap[c.function_idx].as_ref().unwrap();
+                                if let ObjType::Function(f) = &f_obj.obj_type {
+                                    return format!("<bound method {}>", f.name);
+                                }
+                            }
+                            "<bound method unknown>".to_string()
+                        },
                         ObjType::Closure(c) => {
                             if let Some(Some(f_obj)) = self.memory.heap.get(c.function_idx) {
                                 if let ObjType::Function(f) = &f_obj.obj_type {
@@ -542,29 +657,84 @@ impl VM {
                 }
             }
             Value::Object(idx) => {
-                let obj = self.memory.heap[idx].as_ref().ok_or("Invalid object")?;
-                if let ObjType::Closure(closure) = &obj.obj_type {
-                    let f_obj = self.memory.heap[closure.function_idx].as_ref().ok_or("Invalid function index")?;
-                    if let ObjType::Function(func) = &f_obj.obj_type {
-                        if arg_count != func.arity {
-                            return Err(format!("Expected {} arguments but got {}.", func.arity, arg_count));
+                let obj_type = {
+                    let obj = self.memory.heap[idx].as_ref().ok_or("Invalid object")?;
+                    obj.obj_type.clone()
+                };
+
+                match obj_type {
+                    ObjType::Closure(closure) => {
+                        let f_obj = self.memory.heap[closure.function_idx].as_ref().ok_or("Invalid function index")?;
+                        if let ObjType::Function(func) = &f_obj.obj_type {
+                            if arg_count != func.arity {
+                                return Err(format!("Expected {} arguments but got {}.", func.arity, arg_count));
+                            }
+                            if self.frames.len() >= 64 {
+                                return Err("Stack overflow".to_string());
+                            }
+                            let frame = CallFrame {
+                                closure_idx: idx,
+                                ip: 0,
+                                slots_offset: self.stack.len() - arg_count - 1,
+                            };
+                            self.frames.push(frame);
+                            return Ok(());
                         }
-                        if self.frames.len() >= 64 {
-                            return Err("Stack overflow".to_string());
-                        }
-                        let frame = CallFrame {
-                            closure_idx: idx,
-                            ip: 0,
-                            slots_offset: self.stack.len() - arg_count - 1,
-                        };
-                        self.frames.push(frame);
-                        return Ok(());
+                        Err("Object is not a function".to_string())
                     }
+                    ObjType::Class(class) => {
+                        let instance_idx = self.memory.alloc(ObjType::Instance(crate::vm::object::ObjInstance {
+                            class_idx: idx,
+                            fields: HashMap::new(),
+                        }));
+                        
+                        // Replace class with instance on stack
+                        let stack_pos = self.stack.len() - arg_count - 1;
+                        self.stack[stack_pos] = Value::Object(instance_idx);
+
+                        if let Some(init) = class.methods.get("__init__") {
+                            if let Value::Object(m_idx) = init {
+                                return self.call_value_idx(*m_idx, arg_count);
+                            }
+                        } else if arg_count != 0 {
+                            return Err(format!("Expected 0 arguments but got {}.", arg_count));
+                        }
+                        Ok(())
+                    }
+                    ObjType::BoundMethod(bound) => {
+                        // Place receiver at slot 0
+                        let stack_pos = self.stack.len() - arg_count - 1;
+                        self.stack[stack_pos] = Value::Object(bound.receiver);
+                        return self.call_value_idx(bound.method, arg_count);
+                    }
+                    _ => Err(format!("Can only call functions and classes, got {}", callee)),
                 }
-                Err(format!("Can only call closures, got {}", callee))
             }
             _ => Err(format!("Can only call functions, got {}", callee)),
         }
+    }
+
+    fn call_value_idx(&mut self, idx: usize, arg_count: usize) -> Result<(), String> {
+        let obj = self.memory.heap[idx].as_ref().ok_or("Invalid object")?;
+        if let ObjType::Closure(closure) = &obj.obj_type {
+            let f_obj = self.memory.heap[closure.function_idx].as_ref().ok_or("Invalid function index")?;
+            if let ObjType::Function(func) = &f_obj.obj_type {
+                if arg_count != func.arity {
+                    return Err(format!("Expected {} arguments but got {}.", func.arity, arg_count));
+                }
+                if self.frames.len() >= 64 {
+                    return Err("Stack overflow".to_string());
+                }
+                let frame = CallFrame {
+                    closure_idx: idx,
+                    ip: 0,
+                    slots_offset: self.stack.len() - arg_count - 1,
+                };
+                self.frames.push(frame);
+                return Ok(());
+            }
+        }
+        Err("Not a callable object".to_string())
     }
 
     fn values_equal(&self, a: Value, b: Value) -> bool {

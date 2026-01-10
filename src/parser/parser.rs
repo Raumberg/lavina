@@ -44,6 +44,8 @@ impl Parser {
             visibility = Visibility::Public;
         }
 
+        let is_static = self.match_types(&[TokenType::Static]);
+
         let mut directives = Vec::new();
         while self.check(&TokenType::Hash) || self.check(&TokenType::HashBracket) {
             if self.check(&TokenType::Hash) && self.peek_next().token_type != TokenType::LeftBracket {
@@ -91,7 +93,7 @@ impl Parser {
                next_token == TokenType::Inline || next_token == TokenType::Comptime {
                 
                 if self.check_function_start() {
-                    return self.function_declaration(directives, visibility);
+                    return self.function_declaration(directives, visibility, is_static);
                 }
                 return self.var_declaration(visibility);
             }
@@ -103,6 +105,18 @@ impl Parser {
 
         if self.match_types(&[TokenType::Namespace]) {
             return self.namespace_statement();
+        }
+
+        if self.match_types(&[TokenType::Class]) {
+            return self.class_declaration();
+        }
+
+        if self.match_types(&[TokenType::Struct]) {
+            return self.struct_declaration();
+        }
+
+        if self.match_types(&[TokenType::Enum]) {
+            return self.enum_declaration();
         }
 
         self.statement()
@@ -130,6 +144,47 @@ impl Parser {
         
         let body = self.block()?;
         Ok(Stmt::Namespace(name, body))
+    }
+
+    fn class_declaration(&mut self) -> Result<Stmt, LavinaError> {
+        let name = self.consume(TokenType::Identifier, "Expect class name.")?.clone();
+        self.consume(TokenType::Colon, "Expect ':' after class name.")?;
+        let body = self.block()?;
+        Ok(Stmt::Class(name, body))
+    }
+
+    fn struct_declaration(&mut self) -> Result<Stmt, LavinaError> {
+        let name = self.consume(TokenType::Identifier, "Expect struct name.")?.clone();
+        self.consume(TokenType::Colon, "Expect ':' after struct name.")?;
+        let body = self.block()?;
+        Ok(Stmt::Struct(name, body))
+    }
+
+    fn enum_declaration(&mut self) -> Result<Stmt, LavinaError> {
+        let name = self.consume(TokenType::Identifier, "Expect enum name.")?.clone();
+        self.consume(TokenType::Colon, "Expect ':' after enum name.")?;
+        
+        self.match_types(&[TokenType::Newline]);
+        self.consume(TokenType::Indent, "Expect indentation to start enum body.")?;
+        
+        let mut variants = Vec::new();
+        while !self.check(&TokenType::Dedent) && !self.is_at_end() {
+            if self.match_types(&[TokenType::Newline]) { continue; }
+            
+            let type_ann = self.parse_type()?;
+            let variant_name = self.consume(TokenType::Identifier, "Expect variant name.")?.clone();
+            
+            let mut types = Vec::new();
+            if type_ann != Type::Null && type_ann != Type::Void {
+                types.push(type_ann);
+            }
+            
+            variants.push(crate::parser::ast::EnumVariant { name: variant_name, types });
+            self.match_types(&[TokenType::Newline]);
+        }
+        
+        self.consume(TokenType::Dedent, "Expect dedent to end enum body.")?;
+        Ok(Stmt::Enum(name, variants))
     }
 
     fn single_directive(&mut self) -> Result<Directive, LavinaError> {
@@ -266,7 +321,7 @@ impl Parser {
                   TokenType::HashMap | TokenType::Identifier)
     }
 
-    fn function_declaration(&mut self, directives: Vec<Directive>, visibility: Visibility) -> Result<Stmt, LavinaError> {
+    fn function_declaration(&mut self, directives: Vec<Directive>, visibility: Visibility, is_static: bool) -> Result<Stmt, LavinaError> {
         let return_type = self.parse_type()?;
 
         let mut is_inline = false;
@@ -302,6 +357,7 @@ impl Parser {
             directives,
             is_inline,
             is_comptime,
+            is_static,
             visibility,
         }))
     }
@@ -404,6 +460,7 @@ impl Parser {
 
             match expr {
                 Expr::Variable(name) => return Ok(Expr::Assign(name, Box::new(value))),
+                Expr::Get(obj, name) => return Ok(Expr::Set(obj, name, Box::new(value))),
                 Expr::Index(_coll, bracket, _idx) => {
                     return Err(self.error("Index assignment not yet implemented.".to_string(), bracket.line, bracket.column));
                 }
@@ -494,8 +551,10 @@ impl Parser {
                 expr = Expr::Index(Box::new(expr), bracket, Box::new(index));
             } else if self.match_types(&[TokenType::Dot]) {
                 let name = self.consume(TokenType::Identifier, "Expect property name after '.'.")?.clone();
-                let literal_name = Expr::Literal(Literal::String(name.lexeme.clone()));
-                expr = Expr::Index(Box::new(expr), name, Box::new(literal_name));
+                expr = Expr::Get(Box::new(expr), name);
+            } else if self.match_types(&[TokenType::DoubleColon]) {
+                let name = self.consume(TokenType::Identifier, "Expect member name after '::'.")?.clone();
+                expr = Expr::StaticGet(Box::new(expr), name);
             } else {
                 break;
             }
@@ -536,6 +595,10 @@ impl Parser {
 
         if self.match_types(&[TokenType::Identifier]) {
             return Ok(Expr::Variable(self.previous().clone()));
+        }
+
+        if self.match_types(&[TokenType::This]) {
+            return Ok(Expr::This(self.previous().clone()));
         }
 
         if self.match_types(&[TokenType::LeftParen]) {
@@ -594,6 +657,7 @@ impl Parser {
         else if self.match_types(&[TokenType::Void]) { Type::Void }
         else if self.match_types(&[TokenType::Auto]) { Type::Auto }
         else if self.match_types(&[TokenType::Dynamic]) { Type::Dynamic }
+        else if self.match_types(&[TokenType::Null]) { Type::Null }
         else if self.match_types(&[TokenType::Vector]) {
             self.consume(TokenType::LeftBracket, "Expect '[' after 'vector'.")?;
             let inner = self.parse_type()?;

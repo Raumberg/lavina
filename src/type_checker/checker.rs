@@ -14,6 +14,7 @@ pub struct TypeChecker {
     source: String,
     checked_modules: HashMap<PathBuf, HashMap<String, (TypeInfo, Visibility)>>,
     resolver: ModuleResolver,
+    current_class: Option<String>,
 }
 
 impl TypeChecker {
@@ -23,13 +24,25 @@ impl TypeChecker {
             source: String::new(),
             checked_modules: HashMap::new(),
             resolver: ModuleResolver::new(String::new()),
+            current_class: None,
         };
         
-        // Register native functions as public
-        checker.env.define("print".to_string(), TypeInfo::Function(Type::Void, vec![Type::Dynamic]), Visibility::Public);
-        checker.env.define("len".to_string(), TypeInfo::Function(Type::Int, vec![Type::Dynamic]), Visibility::Public);
-        checker.env.define("clock".to_string(), TypeInfo::Function(Type::Float, vec![]), Visibility::Public);
-        checker.env.define("type".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic]), Visibility::Public);
+        // Register internal native functions
+        checker.env.define("__native_print".to_string(), TypeInfo::Function(Type::Void, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_len".to_string(), TypeInfo::Function(Type::Int, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_clock".to_string(), TypeInfo::Function(Type::Float, vec![], false), Visibility::Private);
+        checker.env.define("__native_type".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_sqrt".to_string(), TypeInfo::Function(Type::Float, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_abs".to_string(), TypeInfo::Function(Type::Dynamic, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_sin".to_string(), TypeInfo::Function(Type::Float, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_cos".to_string(), TypeInfo::Function(Type::Float, vec![Type::Dynamic], false), Visibility::Private);
+        checker.env.define("__native_tan".to_string(), TypeInfo::Function(Type::Float, vec![Type::Dynamic], false), Visibility::Private);
+        
+        // Expose top-level print/len/etc for convenience (until we have core lib)
+        checker.env.define("print".to_string(), TypeInfo::Function(Type::Void, vec![Type::Dynamic], false), Visibility::Public);
+        checker.env.define("len".to_string(), TypeInfo::Function(Type::Int, vec![Type::Dynamic], false), Visibility::Public);
+        checker.env.define("clock".to_string(), TypeInfo::Function(Type::Float, vec![], false), Visibility::Public);
+        checker.env.define("type".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic], false), Visibility::Public);
         
         checker
     }
@@ -53,16 +66,10 @@ impl TypeChecker {
                 Ok(())
             }
             Stmt::Let(name, type_ann, initializer, visibility) => {
-                let mut inferred_type = Type::Auto;
-                if let Some(init) = initializer {
-                    inferred_type = self.check_expr(init)?;
-                }
-
-                let final_type = if let Some(ann) = type_ann {
-                    if ann == &Type::Auto {
-                        inferred_type
-                    } else {
-                        if !self.is_assignable(ann, &inferred_type) {
+                let final_type = if let Some(init) = initializer {
+                    let inferred_type = self.check_expr(init)?;
+                    if let Some(ann) = type_ann {
+                        if ann != &Type::Auto && !self.is_assignable(ann, &inferred_type) {
                             return Err(LavinaError::new(
                                 ErrorPhase::TypeChecker,
                                 format!("Type mismatch: expected {:?}, but got {:?}", ann, inferred_type),
@@ -70,10 +77,24 @@ impl TypeChecker {
                                 name.column,
                             ).with_context(&self.source));
                         }
-                        ann.clone()
+                        if ann == &Type::Auto { inferred_type } else { ann.clone() }
+                    } else {
+                        inferred_type
                     }
                 } else {
-                    inferred_type
+                    if let Some(ann) = type_ann {
+                        if ann == &Type::Auto {
+                            return Err(LavinaError::new(
+                                ErrorPhase::TypeChecker,
+                                "Variable with 'auto' type must have an initializer.".to_string(),
+                                name.line,
+                                name.column,
+                            ).with_context(&self.source));
+                        }
+                        ann.clone()
+                    } else {
+                        Type::Dynamic // Default for unannotated, uninitialized variables
+                    }
                 };
 
                 self.env.define(name.lexeme.clone(), TypeInfo::Variable(final_type), visibility.clone());
@@ -81,12 +102,19 @@ impl TypeChecker {
             }
             Stmt::Function(decl) => {
                 let param_types: Vec<Type> = decl.params.iter().map(|(_, t)| t.clone()).collect();
-                self.env.define(decl.name.lexeme.clone(), TypeInfo::Function(decl.return_type.clone(), param_types), decl.visibility.clone());
+                self.env.define(decl.name.lexeme.clone(), TypeInfo::Function(decl.return_type.clone(), param_types, decl.is_static), decl.visibility.clone());
                 
                 // Check body in a new scope
                 let mut previous_env = TypeEnvironment::new();
                 std::mem::swap(&mut self.env, &mut previous_env);
                 self.env.enclosing = Some(Box::new(previous_env));
+
+                // If it's an instance method, define 'this'
+                if !decl.is_static {
+                    if let Some(class_name) = &self.current_class {
+                        self.env.define("this".to_string(), TypeInfo::Variable(Type::Custom(class_name.clone())), Visibility::Public);
+                    }
+                }
 
                 for (param_name, param_type) in &decl.params {
                     self.env.define(param_name.lexeme.clone(), TypeInfo::Variable(param_type.clone()), Visibility::Public);
@@ -107,7 +135,7 @@ impl TypeChecker {
                     match s {
                         Stmt::Function(f) => {
                             let pts: Vec<Type> = f.params.iter().map(|(_, t)| t.clone()).collect();
-                            members.insert(f.name.lexeme.clone(), (TypeInfo::Function(f.return_type.clone(), pts), f.visibility.clone()));
+                            members.insert(f.name.lexeme.clone(), (TypeInfo::Function(f.return_type.clone(), pts, f.is_static), f.visibility.clone()));
                         }
                         Stmt::Let(n, t, _, v) => {
                             let final_t = t.clone().unwrap_or(Type::Auto);
@@ -238,6 +266,54 @@ impl TypeChecker {
                 Ok(())
             }
             Stmt::Directive(_) => Ok(()),
+            Stmt::Class(name, body) => {
+                let name_str = name.lexeme.clone();
+                let mut members = HashMap::new();
+                
+                // First pass: register method signatures
+                for s in body {
+                    if let Stmt::Function(decl) = s {
+                        let ret_type = decl.return_type.clone();
+                        let mut param_types = Vec::new();
+                        for (_, t) in &decl.params {
+                            param_types.push(t.clone());
+                        }
+                        members.insert(decl.name.lexeme.clone(), (TypeInfo::Function(ret_type, param_types, decl.is_static), Visibility::Public));
+                    }
+                }
+                
+                self.env.define(name_str.clone(), TypeInfo::Class(name_str.clone(), members), Visibility::Public);
+                
+                // Second pass: check method bodies
+                let old_class = self.current_class.take();
+                self.current_class = Some(name_str);
+                
+                for s in body {
+                    self.check_stmt(s)?;
+                }
+                
+                self.current_class = old_class;
+                Ok(())
+            }
+            Stmt::Struct(name, body) => {
+                self.check_stmt(&Stmt::Class(name.clone(), body.clone()))
+            }
+            Stmt::Enum(name, variants) => {
+                let mut members = HashMap::new();
+                for variant in variants {
+                    let mut param_types = Vec::new();
+                    for t in &variant.types {
+                        param_types.push(t.clone());
+                    }
+                    if param_types.is_empty() {
+                        members.insert(variant.name.lexeme.clone(), (TypeInfo::Variable(Type::Dynamic), Visibility::Public));
+                    } else {
+                        members.insert(variant.name.lexeme.clone(), (TypeInfo::Function(Type::Dynamic, param_types, true), Visibility::Public));
+                    }
+                }
+                self.env.define(name.lexeme.clone(), TypeInfo::Namespace(name.lexeme.clone(), members), Visibility::Public);
+                Ok(())
+            }
         }
     }
 
@@ -253,8 +329,9 @@ impl TypeChecker {
             Expr::Variable(name) => {
                 match self.env.get(&name.lexeme) {
                     Some(TypeInfo::Variable(t)) => Ok(t),
-                    Some(TypeInfo::Function(ret, params)) => Ok(Type::Function(Box::new(ret), params)),
-                    Some(TypeInfo::Namespace(_, _)) => Ok(Type::Dynamic), // Or a specific Namespace type
+                    Some(TypeInfo::Function(ret, params, _)) => Ok(Type::Function(Box::new(ret), params)),
+                    Some(TypeInfo::Namespace(_, _)) => Ok(Type::Dynamic),
+                    Some(TypeInfo::Class(_, _)) => Ok(Type::Dynamic),
                     None => Err(LavinaError::new(
                         ErrorPhase::TypeChecker,
                         format!("Undefined variable '{}'", name.lexeme),
@@ -264,38 +341,6 @@ impl TypeChecker {
                 }
             }
             Expr::Index(collection, bracket, index) => {
-                let _coll_type = self.check_expr(collection)?;
-                
-                // If it's a static namespace access like math.add
-                if let Expr::Variable(name) = &**collection {
-                    if let Some(TypeInfo::Namespace(ns_name, members)) = self.env.get(&name.lexeme) {
-                        if let Expr::Literal(Literal::String(member_name)) = &**index {
-                            if let Some((info, visibility)) = members.get(member_name) {
-                                if visibility == &Visibility::Private {
-                                    return Err(LavinaError::new(
-                                        ErrorPhase::TypeChecker,
-                                        format!("Cannot access private member '{}' of namespace '{}'", member_name, ns_name),
-                                        bracket.line,
-                                        bracket.column,
-                                    ).with_context(&self.source));
-                                }
-                                return Ok(match info {
-                                    TypeInfo::Variable(t) => t.clone(),
-                                    TypeInfo::Function(ret, params) => Type::Function(Box::new(ret.clone()), params.clone()),
-                                    TypeInfo::Namespace(_, _) => Type::Dynamic,
-                                });
-                            } else {
-                                return Err(LavinaError::new(
-                                    ErrorPhase::TypeChecker,
-                                    format!("Namespace '{}' has no member '{}'", ns_name, member_name),
-                                    bracket.line,
-                                    bracket.column,
-                                ).with_context(&self.source));
-                            }
-                        }
-                    }
-                }
-
                 let coll_type = self.check_expr(collection)?;
                 // Normal collection indexing
                 match coll_type {
@@ -314,16 +359,46 @@ impl TypeChecker {
                     _ => Err(LavinaError::new(ErrorPhase::TypeChecker, "Can only index vectors and hashmaps.".to_string(), bracket.line, bracket.column).with_context(&self.source)),
                 }
             }
-            Expr::Call(callee, _paren, args) => {
+            Expr::Call(callee, paren, args) => {
                 let callee_type = self.check_expr(callee)?;
+                let mut arg_types = Vec::new();
                 for arg in args {
-                    self.check_expr(arg)?;
+                    arg_types.push(self.check_expr(arg)?);
                 }
                 
+                if let Expr::Variable(name) = &**callee {
+                    if let Some(TypeInfo::Class(class_name, members)) = self.env.get(&name.lexeme) {
+                        // Check __init__ method if exists
+                        if let Some((TypeInfo::Function(_, params, _), _)) = members.get("__init__") {
+                            if params.len() != arg_types.len() {
+                                return Err(LavinaError::new(ErrorPhase::TypeChecker, format!("Class '{}' constructor expected {} arguments, but got {}.", class_name, params.len(), arg_types.len()), paren.line, paren.column).with_context(&self.source));
+                            }
+                            for (i, (expected, actual)) in params.iter().zip(arg_types.iter()).enumerate() {
+                                if !self.is_assignable(expected, actual) {
+                                    return Err(LavinaError::new(ErrorPhase::TypeChecker, format!("Type mismatch for argument {} of '{}' constructor: expected {:?}, but got {:?}.", i + 1, class_name, expected, actual), paren.line, paren.column).with_context(&self.source));
+                                }
+                            }
+                        } else if !arg_types.is_empty() {
+                            return Err(LavinaError::new(ErrorPhase::TypeChecker, format!("Class '{}' has no constructor, expected 0 arguments.", class_name), paren.line, paren.column).with_context(&self.source));
+                        }
+                        return Ok(Type::Custom(class_name));
+                    }
+                }
+
                 match callee_type {
-                    Type::Function(ret, _) => Ok(*ret),
+                    Type::Function(ret, params) => {
+                        if params.len() != arg_types.len() {
+                            return Err(LavinaError::new(ErrorPhase::TypeChecker, format!("Expected {} arguments, but got {}.", params.len(), arg_types.len()), paren.line, paren.column).with_context(&self.source));
+                        }
+                        for (i, (expected, actual)) in params.iter().zip(arg_types.iter()).enumerate() {
+                            if !self.is_assignable(expected, actual) {
+                                return Err(LavinaError::new(ErrorPhase::TypeChecker, format!("Type mismatch for argument {}: expected {:?}, but got {:?}.", i + 1, expected, actual), paren.line, paren.column).with_context(&self.source));
+                            }
+                        }
+                        Ok(*ret)
+                    }
                     Type::Dynamic => Ok(Type::Dynamic),
-                    _ => Ok(Type::Dynamic), // Should probably be an error in a strict language
+                    _ => Ok(Type::Dynamic),
                 }
             }
             Expr::Binary(left, op, right) => {
@@ -381,7 +456,118 @@ impl TypeChecker {
                 Ok(Type::Dict(Box::new(key_type), Box::new(val_type)))
             }
             Expr::Grouping(expr) => self.check_expr(expr),
-            _ => Ok(Type::Dynamic),
+            Expr::Unary(_, expr) => {
+                let _ = self.check_expr(expr)?;
+                Ok(Type::Dynamic) // Simplified
+            }
+            Expr::Logical(left, _, right) => {
+                let _ = self.check_expr(left)?;
+                let _ = self.check_expr(right)?;
+                Ok(Type::Bool)
+            }
+            Expr::Get(obj, name) => {
+                let obj_type = self.check_expr(obj)?;
+                
+                // Class static access or Instance access
+                match obj_type {
+                    Type::Custom(class_name) => {
+                        if let Some(TypeInfo::Class(_, members)) = self.env.get(&class_name) {
+                            if let Some((info, _)) = members.get(&name.lexeme) {
+                                if let TypeInfo::Function(_, _, is_static) = info {
+                                    if *is_static {
+                                        return Err(LavinaError::new(
+                                            ErrorPhase::TypeChecker,
+                                            format!("Member '{}' of class '{}' is static. Use '::' to access it.", name.lexeme, class_name),
+                                            name.line,
+                                            name.column,
+                                        ).with_context(&self.source));
+                                    }
+                                }
+                                return Ok(match info {
+                                    TypeInfo::Variable(t) => t.clone(),
+                                    TypeInfo::Function(ret, params, _) => Type::Function(Box::new(ret.clone()), params.clone()),
+                                    TypeInfo::Namespace(_, _) => Type::Dynamic,
+                                    TypeInfo::Class(_, _) => Type::Dynamic,
+                                });
+                            }
+                        }
+                        Ok(Type::Dynamic)
+                    }
+                    Type::Dynamic => Ok(Type::Dynamic),
+                    _ => Ok(Type::Dynamic), 
+                }
+            }
+            Expr::StaticGet(obj, name) => {
+                let _ = self.check_expr(obj)?;
+                
+                // Static Namespace Access
+                if let Expr::Variable(obj_name) = &**obj {
+                    if let Some(TypeInfo::Namespace(ns_name, members)) = self.env.get(&obj_name.lexeme) {
+                        if let Some((info, visibility)) = members.get(&name.lexeme) {
+                            if visibility == &Visibility::Private {
+                                return Err(LavinaError::new(
+                                    ErrorPhase::TypeChecker,
+                                    format!("Cannot access private member '{}' of namespace '{}'", name.lexeme, ns_name),
+                                    name.line,
+                                    name.column,
+                                ).with_context(&self.source));
+                            }
+                            return Ok(match info {
+                                TypeInfo::Variable(t) => t.clone(),
+                                TypeInfo::Function(ret, params, _) => Type::Function(Box::new(ret.clone()), params.clone()),
+                                TypeInfo::Namespace(_, _) => Type::Dynamic,
+                                TypeInfo::Class(_, _) => Type::Dynamic,
+                            });
+                        } else {
+                            return Err(LavinaError::new(
+                                ErrorPhase::TypeChecker,
+                                format!("Namespace '{}' has no member '{}'", ns_name, name.lexeme),
+                                name.line,
+                                name.column,
+                            ).with_context(&self.source));
+                        }
+                    }
+                    
+                    if let Some(TypeInfo::Class(class_name, members)) = self.env.get(&obj_name.lexeme) {
+                        if let Some((info, _)) = members.get(&name.lexeme) {
+                            match info {
+                                TypeInfo::Function(_, _, is_static) => {
+                                    if !is_static {
+                                        return Err(LavinaError::new(
+                                            ErrorPhase::TypeChecker,
+                                            format!("Member '{}' of class '{}' is not static. Use '.' to access it from an instance.", name.lexeme, class_name),
+                                            name.line,
+                                            name.column,
+                                        ).with_context(&self.source));
+                                    }
+                                }
+                                _ => {}
+                            }
+                            return Ok(match info {
+                                TypeInfo::Variable(t) => t.clone(),
+                                TypeInfo::Function(ret, params, _) => Type::Function(Box::new(ret.clone()), params.clone()),
+                                TypeInfo::Namespace(_, _) => Type::Dynamic,
+                                TypeInfo::Class(_, _) => Type::Dynamic,
+                            });
+                        } else {
+                            return Err(LavinaError::new(
+                                ErrorPhase::TypeChecker,
+                                format!("Class '{}' has no static member '{}'", class_name, name.lexeme),
+                                name.line,
+                                name.column,
+                            ).with_context(&self.source));
+                        }
+                    }
+                }
+                
+                Ok(Type::Dynamic)
+            }
+            Expr::Set(obj, _, value) => {
+                let _ = self.check_expr(obj)?;
+                let val_type = self.check_expr(value)?;
+                Ok(val_type)
+            }
+            Expr::This(_) => Ok(Type::Dynamic),
         }
     }
 

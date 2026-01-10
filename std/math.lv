@@ -1,5 +1,17 @@
-fn add(int a, int b) -> int:
-    return a + b
+public auto fn sqrt(dynamic x):
+    return __native_sqrt(x)
 
-private fn internal_utility():
-    print("This is hidden")
+public auto fn abs(dynamic x):
+    return __native_abs(x)
+
+public auto fn sin(dynamic x):
+    return __native_sin(x)
+
+public auto fn cos(dynamic x):
+    return __native_cos(x)
+
+public auto fn tan(dynamic x):
+    return __native_tan(x)
+
+public float PI = 3.141592653589793
+public float E = 2.718281828459045

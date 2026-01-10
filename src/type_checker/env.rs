@@ -4,8 +4,9 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub enum TypeInfo {
     Variable(Type),
-    Function(Type, Vec<Type>),
+    Function(Type, Vec<Type>, bool), // Return type, params, is_static
     Namespace(String, HashMap<String, (TypeInfo, Visibility)>),
+    Class(String, HashMap<String, (TypeInfo, Visibility)>),
 }
 
 pub struct TypeEnvironment {

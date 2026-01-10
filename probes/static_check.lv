@@ -1,0 +1,20 @@
+class Math:
+    static int fn add(int a, int b):
+        return a + b
+    
+    void fn __init__():
+        print("Math instance created")
+
+// Correct static access
+print("Static: " + Math::add(10, 20))
+
+// Incorrect instance access to static method
+auto m = Math()
+// print("Instance: " + m.add(1, 2)) // Should fail in type checker
+
+class Utils:
+    int fn get_val():
+        return 42
+
+// Incorrect static access to instance method
+// print("Static utils: " + Utils::get_val()) // Should fail in type checker

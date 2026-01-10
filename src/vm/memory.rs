@@ -122,6 +122,21 @@ impl Memory {
                     self.mark_value(val, worklist);
                 }
             }
+            ObjType::Class(class) => {
+                for val in class.methods.values() {
+                    self.mark_value(val, worklist);
+                }
+            }
+            ObjType::Instance(instance) => {
+                self.mark_object(instance.class_idx, worklist);
+                for val in instance.fields.values() {
+                    self.mark_value(val, worklist);
+                }
+            }
+            ObjType::BoundMethod(bound) => {
+                self.mark_object(bound.receiver, worklist);
+                self.mark_object(bound.method, worklist);
+            }
             _ => {}
         }
 

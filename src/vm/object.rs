@@ -36,6 +36,27 @@ impl PartialOrd for ObjClosure {
     }
 }
 
+/// Represents a class definition.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjClass {
+    pub name: String,
+    pub methods: HashMap<String, Value>, // Value should be a Closure
+}
+
+/// Represents an instance of a class.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjInstance {
+    pub class_idx: usize,
+    pub fields: HashMap<String, Value>,
+}
+
+/// Represents a method bound to an instance.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjBoundMethod {
+    pub receiver: usize, // Index of the instance
+    pub method: usize,   // Index of the closure
+}
+
 /// The types of objects that can live on the VM's heap.
 #[derive(Debug, PartialEq, Clone)]
 pub enum ObjType {
@@ -45,7 +66,10 @@ pub enum ObjType {
     Function(ObjFunction),
     Closure(ObjClosure),
     Upvalue(Upvalue),
-    Namespace(String, HashMap<String, Value>), // New: namespace name, members
+    Namespace(String, HashMap<String, Value>),
+    Class(ObjClass),
+    Instance(ObjInstance),
+    BoundMethod(ObjBoundMethod),
 }
 
 /// A header for any heap-allocated object.

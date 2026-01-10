@@ -1,0 +1,24 @@
+class Player:
+    string name
+    int health
+
+    void fn __init__(string name):
+        this.name = name
+        this.health = 100
+        print("Player " + this.name + " created")
+
+    void fn take_damage(int amount):
+        this.health = this.health - amount
+        print(this.name + " took " + amount + " damage")
+
+// Test 1: Constructor type error
+auto p1 = Player(42) // Should fail (expected string)
+
+// Test 2: Method call type error
+auto p2 = Player("Alina")
+// p2.take_damage("a lot") // Should fail (expected int)
+
+// Test 3: Arity error
+// p2.take_damage(10, 20) // Should fail (expected 1)
+
+print("Check completed successfully")
