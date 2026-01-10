@@ -2,19 +2,19 @@ use lavina::lexer::{Scanner, TokenType};
 
 #[test]
 fn test_basic_tokens() {
-    let source = "let x = 10 + 5.5;".to_string();
+    let source = "int x = 10 + 5.5;".to_string();
     let mut scanner = Scanner::new(source);
     let (tokens, errors) = scanner.scan_tokens();
 
     assert!(errors.is_empty());
-    assert_eq!(tokens[0].token_type, TokenType::Let);
+    assert_eq!(tokens[0].token_type, TokenType::IntType);
     assert_eq!(tokens[1].token_type, TokenType::Identifier);
     assert_eq!(tokens[3].token_type, TokenType::Int);
 }
 
 #[test]
 fn test_unexpected_character() {
-    let source = "let x = @;".to_string();
+    let source = "int x = @;".to_string();
     let mut scanner = Scanner::new(source);
     let (_, errors) = scanner.scan_tokens();
 
@@ -24,7 +24,7 @@ fn test_unexpected_character() {
 
 #[test]
 fn test_unterminated_string() {
-    let source = "let s = \"hello;".to_string();
+    let source = "string s = \"hello;".to_string();
     let mut scanner = Scanner::new(source);
     let (_, errors) = scanner.scan_tokens();
 
@@ -36,8 +36,8 @@ fn test_unterminated_string() {
 fn test_inconsistent_indentation() {
     let source = "
 fn main():
-    let x = 1
-   let y = 2
+    int x = 1
+   int y = 2
 ".to_string();
     let mut scanner = Scanner::new(source);
     let (_, errors) = scanner.scan_tokens();

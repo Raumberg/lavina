@@ -14,6 +14,7 @@ pub enum Value {
     Float(f64),
     Bool(bool),
     Null,
+    #[allow(unpredictable_function_pointer_comparisons)]
     NativeFunction(String, NativeFn),
     String(String), // Used for constants
     Object(usize),  // Index into the GC heap

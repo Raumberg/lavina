@@ -25,7 +25,7 @@ pub enum TokenType {
     And, Auto, Bool, Comptime, Dynamic, Else, False, FloatType,
     Fn, If, Inline, IntType, Null, Or, Return,
     StringType, True, Void, While, For, In, Vector, HashMap,
-    Import, As, Namespace, Private,
+    Import, As, Namespace, Public, Private,
 
     // Special for directives
     HashBracket, // #[

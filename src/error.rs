@@ -5,6 +5,7 @@ pub enum ErrorPhase {
     Lexer,
     Parser,
     TypeChecker,
+    Compiler,
     Runtime,
 }
 
@@ -43,6 +44,7 @@ impl fmt::Display for LavinaError {
             ErrorPhase::Lexer => "lexical error",
             ErrorPhase::Parser => "syntax error",
             ErrorPhase::TypeChecker => "type error",
+            ErrorPhase::Compiler => "compiler error",
             ErrorPhase::Runtime => "runtime error",
         };
 

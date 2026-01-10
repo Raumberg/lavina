@@ -2,16 +2,21 @@ use crate::parser::ast::{Expr, Stmt, Literal, Visibility};
 use crate::vm::chunk::Chunk;
 use crate::vm::opcode::OpCode;
 use crate::lexer::TokenType;
+use crate::lexer::scanner::Scanner;
+use crate::parser::parser::Parser;
 use crate::error::LavinaError;
-use crate::eval::value::ObjFunction;
+use crate::eval::value::{ObjFunction, Value};
 use std::rc::Rc;
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::fs;
 
 struct Local {
     name: String,
     depth: i32,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Clone)]
 pub enum FunctionType {
     Script,
     Function,
@@ -19,22 +24,22 @@ pub enum FunctionType {
 
 pub struct Compiler {
     function: ObjFunction,
-    function_type: FunctionType,
     locals: Vec<Local>,
     scope_depth: i32,
+    compiled_modules: HashMap<PathBuf, Rc<ObjFunction>>,
 }
 
 impl Compiler {
-    pub fn new(name: String, f_type: FunctionType) -> Self {
+    pub fn new(name: String, _f_type: FunctionType) -> Self {
         let mut compiler = Self {
             function: ObjFunction {
                 arity: 0,
                 chunk: Chunk::new(),
                 name,
             },
-            function_type: f_type,
             locals: Vec::new(),
             scope_depth: 0,
+            compiled_modules: HashMap::new(),
         };
         
         compiler.locals.push(Local {
@@ -161,14 +166,90 @@ impl Compiler {
                 
                 Ok(())
             }
-            Stmt::Import(path, alias) => {
-                let path_str: Vec<String> = path.iter().map(|t| t.lexeme.clone()).collect();
-                let name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or_else(|| path_str.last().unwrap().clone());
+            Stmt::Import(path_tokens, alias) => {
+                let path = self.resolve_module_path(path_tokens)?;
+                let module_name = path_tokens.last().unwrap().lexeme.clone();
+                let namespace_name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or(module_name.clone());
+
+                if !self.compiled_modules.contains_key(&path) {
+                    let source = fs::read_to_string(&path).map_err(|e| {
+                        LavinaError::new(
+                            crate::error::ErrorPhase::Compiler,
+                            format!("Could not read module file {:?}: {}", path, e),
+                            path_tokens[0].line,
+                            path_tokens[0].column,
+                        )
+                    })?;
+
+                    let mut scanner = Scanner::new(source.clone());
+                    let (tokens, errors) = scanner.scan_tokens();
+                    if !errors.is_empty() {
+                        return Err(errors[0].clone());
+                    }
+
+                    let mut parser = Parser::new(tokens.clone(), source.clone());
+                    let statements = parser.parse_program().map_err(|e| e)?;
+
+                    let mut sub_compiler = Compiler::new(module_name.clone(), FunctionType::Script);
+                    sub_compiler.compiled_modules = self.compiled_modules.clone();
+                    
+                    // Compile the module body
+                    for s in &statements {
+                        sub_compiler.compile_stmt(s)?;
+                    }
+
+                    // Collect public members for the namespace
+                    let mut public_members = Vec::new();
+                    for s in &statements {
+                        match s {
+                            Stmt::Function(f) if f.visibility == Visibility::Public => {
+                                public_members.push(f.name.lexeme.clone());
+                            }
+                            Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
+                                public_members.push(n.lexeme.clone());
+                            }
+                            _ => {}
+                        }
+                    }
+
+                    // Build the namespace object at the end of module execution
+                    for m_name in &public_members {
+                        let name_const = sub_compiler.function.chunk.add_constant(Value::String(m_name.clone()));
+                        sub_compiler.emit_byte(OpCode::Constant as u8, 0);
+                        sub_compiler.emit_byte(name_const as u8, 0);
+                        
+                        sub_compiler.emit_byte(OpCode::GetGlobal as u8, 0);
+                        sub_compiler.emit_byte(name_const as u8, 0);
+                    }
+                    
+                    sub_compiler.emit_byte(OpCode::HashMap as u8, 0);
+                    sub_compiler.emit_byte(public_members.len() as u8, 0);
+                    sub_compiler.emit_byte(OpCode::Return as u8, 0);
+
+                    let module_fn = Rc::new(sub_compiler.function);
+                    self.compiled_modules = sub_compiler.compiled_modules;
+                    self.compiled_modules.insert(path.clone(), module_fn);
+                }
+
+                let function = self.compiled_modules.get(&path).unwrap().clone();
+                let constant = self.function.chunk.add_constant(Value::ObjFunction(function));
                 
-                let name_const = self.function.chunk.add_constant(crate::eval::value::Value::String(name));
-                self.emit_byte(OpCode::Null as u8, 0);
-                self.emit_byte(OpCode::DefineGlobal as u8, 0);
-                self.emit_byte(name_const as u8, 0);
+                self.emit_byte(OpCode::Constant as u8, path_tokens[0].line);
+                self.emit_byte(constant as u8, path_tokens[0].line);
+                
+                // Execute the module to get its namespace object
+                self.emit_byte(OpCode::Call as u8, path_tokens[0].line);
+                self.emit_byte(0, path_tokens[0].line);
+                
+                // Wrap in Namespace object
+                let name_const = self.function.chunk.add_constant(Value::String(namespace_name.clone()));
+                self.emit_byte(OpCode::Namespace as u8, path_tokens[0].line);
+                self.emit_byte(name_const as u8, path_tokens[0].line);
+                
+                // Define the module name globally
+                self.emit_byte(OpCode::DefineGlobal as u8, path_tokens[0].line);
+                self.emit_byte(name_const as u8, path_tokens[0].line);
+                
                 Ok(())
             }
             Stmt::Block(stmts) => {
@@ -430,5 +511,47 @@ impl Compiler {
         let offset = self.function.chunk.code.len() - loop_start + 2;
         self.emit_byte(((offset >> 8) & 0xff) as u8, 0);
         self.emit_byte((offset & 0xff) as u8, 0);
+    }
+
+    fn resolve_module_path(&self, path_tokens: &[crate::lexer::Token]) -> Result<PathBuf, LavinaError> {
+        let mut relative_path = PathBuf::new();
+        for token in path_tokens {
+            relative_path.push(&token.lexeme);
+        }
+        relative_path.set_extension("lv");
+
+        // 1. Check relative to current directory
+        if relative_path.exists() {
+            return Ok(fs::canonicalize(relative_path).unwrap());
+        }
+
+        // 2. Check LVPATH environment variable
+        if let Ok(lv_path) = std::env::var("LVPATH") {
+            for dir in std::env::split_paths(&lv_path) {
+                let full_path = dir.join(&relative_path);
+                if full_path.exists() {
+                    return Ok(fs::canonicalize(full_path).unwrap());
+                }
+            }
+        }
+
+        // 3. Special case for 'lavina' (std lib)
+        if path_tokens[0].lexeme == "lavina" {
+            let mut std_path = PathBuf::from("std");
+            for token in &path_tokens[1..] {
+                std_path.push(&token.lexeme);
+            }
+            std_path.set_extension("lv");
+            if std_path.exists() {
+                return Ok(fs::canonicalize(std_path).unwrap());
+            }
+        }
+
+        Err(LavinaError::new(
+            crate::error::ErrorPhase::Compiler,
+            format!("Module not found: {:?}", relative_path),
+            path_tokens[0].line,
+            path_tokens[0].column,
+        ))
     }
 }

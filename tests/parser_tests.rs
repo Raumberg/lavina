@@ -61,7 +61,7 @@ fn test_parse_unary() {
 #[test]
 fn test_parse_function_with_if() {
     let source = r#"
-fn abs(int n) -> int:
+int fn abs(int n):
     if n < 0:
         return -n
     return n
@@ -87,7 +87,7 @@ fn test_parse_variable_declarations() {
     let source = r#"
 auto x = 10
 int y = 20
-let z: string = "hello"
+string z = "hello"
 "#.to_string();
     let mut scanner = Scanner::new(source.clone());
     let (tokens, _) = scanner.scan_tokens();
@@ -96,9 +96,9 @@ let z: string = "hello"
     let program = parser.parse_program().unwrap();
 
     assert_eq!(program.len(), 3);
-    assert!(matches!(program[0], Stmt::Let(_, Some(Type::Auto), _)));
-    assert!(matches!(program[1], Stmt::Let(_, Some(Type::Int), _)));
-    assert!(matches!(program[2], Stmt::Let(_, Some(Type::String), _)));
+    assert!(matches!(program[0], Stmt::Let(_, Some(Type::Auto), _, _)));
+    assert!(matches!(program[1], Stmt::Let(_, Some(Type::Int), _, _)));
+    assert!(matches!(program[2], Stmt::Let(_, Some(Type::String), _, _)));
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn test_parse_directives() {
     let source = r#"
 #pure
 #[inline, optimize[3]]
-fn fast():
+void fn fast():
     return
 "#.to_string();
     let mut scanner = Scanner::new(source.clone());
@@ -146,7 +146,7 @@ fn fast():
 fn test_parse_set_directive() {
     let source = r#"
 #set[target[jit]]:
-    fn x():
+    void fn x():
         return
 "#.to_string();
     let mut scanner = Scanner::new(source.clone());

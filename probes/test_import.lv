@@ -1,0 +1,9 @@
+// test_import.lv
+import probes::math_lib as m
+
+print("Testing import...")
+int res = m.add(10, 5)
+print("10 + 5 = " + res)
+
+int res2 = m.sub(10, 5)
+print("10 - 5 = " + res2)

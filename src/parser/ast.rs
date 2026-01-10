@@ -15,6 +15,7 @@ pub enum Type {
     Void,
     Auto,
     Dynamic,
+    Null,
     Array(Box<Type>),
     Tuple(Vec<Type>),
     Dict(Box<Type>, Box<Type>),

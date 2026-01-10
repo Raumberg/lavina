@@ -40,6 +40,8 @@ impl Parser {
         let mut visibility = Visibility::Public;
         if self.match_types(&[TokenType::Private]) {
             visibility = Visibility::Private;
+        } else if self.match_types(&[TokenType::Public]) {
+            visibility = Visibility::Public;
         }
 
         let mut directives = Vec::new();

@@ -47,6 +47,7 @@ impl Scanner {
         keywords.insert("import".to_string(), TokenType::Import);
         keywords.insert("as".to_string(), TokenType::As);
         keywords.insert("namespace".to_string(), TokenType::Namespace);
+        keywords.insert("public".to_string(), TokenType::Public);
         keywords.insert("private".to_string(), TokenType::Private);
 
         Self {

@@ -1,7 +1,11 @@
 use crate::parser::ast::{Expr, Stmt, Type, Literal, Visibility};
 use crate::error::{LavinaError, ErrorPhase};
 use crate::lexer::TokenType;
+use crate::lexer::scanner::Scanner;
+use crate::parser::parser::Parser;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::fs;
 
 #[derive(Clone)]
 pub enum TypeInfo {
@@ -41,6 +45,7 @@ impl TypeEnvironment {
 pub struct TypeChecker {
     env: TypeEnvironment,
     source: String,
+    checked_modules: HashMap<PathBuf, HashMap<String, (TypeInfo, Visibility)>>,
 }
 
 impl TypeChecker {
@@ -48,6 +53,7 @@ impl TypeChecker {
         let mut checker = Self {
             env: TypeEnvironment::new(),
             source: String::new(),
+            checked_modules: HashMap::new(),
         };
         
         // Register native functions as public
@@ -210,9 +216,101 @@ impl TypeChecker {
                 }
                 Ok(())
             }
-            Stmt::Import(_, _) => Ok(()),
+            Stmt::Import(path_tokens, alias) => {
+                let path = self.resolve_module_path(path_tokens)?;
+                let module_name = path_tokens.last().unwrap().lexeme.clone();
+                let namespace_name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or(module_name.clone());
+
+                if !self.checked_modules.contains_key(&path) {
+                    let source = fs::read_to_string(&path).map_err(|e| {
+                        LavinaError::new(
+                            ErrorPhase::TypeChecker,
+                            format!("Could not read module file {:?}: {}", path, e),
+                            path_tokens[0].line,
+                            path_tokens[0].column,
+                        ).with_context(&self.source)
+                    })?;
+
+                    let mut scanner = Scanner::new(source.clone());
+                    let (tokens, errors) = scanner.scan_tokens();
+                    if !errors.is_empty() {
+                        return Err(errors[0].clone());
+                    }
+
+                    let mut parser = Parser::new(tokens.clone(), source.clone());
+                    let statements = parser.parse_program().map_err(|e| e)?;
+
+                    let mut sub_checker = TypeChecker::new();
+                    sub_checker.set_source(source);
+                    sub_checker.checked_modules = self.checked_modules.clone();
+                    sub_checker.check_statements(&statements)?;
+                    
+                    // After checking, merge back the modules checked by sub_checker
+                    self.checked_modules = sub_checker.checked_modules;
+                    
+                    // Filter public members for the new namespace
+                    let mut public_members = HashMap::new();
+                    for (name, (info, vis)) in sub_checker.env.values {
+                        if vis == Visibility::Public {
+                            public_members.insert(name, (info, vis));
+                        }
+                    }
+                    self.checked_modules.insert(path.clone(), public_members);
+                }
+
+                let members = self.checked_modules.get(&path).unwrap().clone();
+                self.env.define(
+                    namespace_name.clone(),
+                    TypeInfo::Namespace(namespace_name, members),
+                    Visibility::Private, // The import itself is private to this module unless specified otherwise
+                );
+
+                Ok(())
+            }
             Stmt::Directive(_) => Ok(()),
         }
+    }
+
+    fn resolve_module_path(&self, path_tokens: &[crate::lexer::Token]) -> Result<PathBuf, LavinaError> {
+        let mut relative_path = PathBuf::new();
+        for token in path_tokens {
+            relative_path.push(&token.lexeme);
+        }
+        relative_path.set_extension("lv");
+
+        // 1. Check relative to current directory
+        if relative_path.exists() {
+            return Ok(fs::canonicalize(relative_path).unwrap());
+        }
+
+        // 2. Check LVPATH environment variable
+        if let Ok(lv_path) = std::env::var("LVPATH") {
+            for dir in std::env::split_paths(&lv_path) {
+                let full_path = dir.join(&relative_path);
+                if full_path.exists() {
+                    return Ok(fs::canonicalize(full_path).unwrap());
+                }
+            }
+        }
+
+        // 3. Special case for 'lavina' (std lib)
+        if path_tokens[0].lexeme == "lavina" {
+            let mut std_path = PathBuf::from("std");
+            for token in &path_tokens[1..] {
+                std_path.push(&token.lexeme);
+            }
+            std_path.set_extension("lv");
+            if std_path.exists() {
+                return Ok(fs::canonicalize(std_path).unwrap());
+            }
+        }
+
+        Err(LavinaError::new(
+            ErrorPhase::TypeChecker,
+            format!("Module not found: {:?}", relative_path),
+            path_tokens[0].line,
+            path_tokens[0].column,
+        ).with_context(&self.source))
     }
 
     pub fn check_expr(&mut self, expr: &Expr) -> Result<Type, LavinaError> {
@@ -222,12 +320,12 @@ impl TypeChecker {
                 Literal::Float(_) => Ok(Type::Float),
                 Literal::String(_) => Ok(Type::String),
                 Literal::Bool(_) => Ok(Type::Bool),
-                Literal::Null => Ok(Type::Dynamic),
+                Literal::Null => Ok(Type::Null),
             },
             Expr::Variable(name) => {
                 match self.env.get(&name.lexeme) {
                     Some(TypeInfo::Variable(t)) => Ok(t),
-                    Some(TypeInfo::Function(ret, _)) => Ok(Type::Function(Box::new(ret), vec![])),
+                    Some(TypeInfo::Function(ret, params)) => Ok(Type::Function(Box::new(ret), params)),
                     Some(TypeInfo::Namespace(_, _)) => Ok(Type::Dynamic), // Or a specific Namespace type
                     None => Err(LavinaError::new(
                         ErrorPhase::TypeChecker,
@@ -238,7 +336,7 @@ impl TypeChecker {
                 }
             }
             Expr::Index(collection, bracket, index) => {
-                let coll_type = self.check_expr(collection)?;
+                let _coll_type = self.check_expr(collection)?;
                 
                 // If it's a static namespace access like math.add
                 if let Expr::Variable(name) = &**collection {
@@ -255,14 +353,22 @@ impl TypeChecker {
                                 }
                                 return Ok(match info {
                                     TypeInfo::Variable(t) => t.clone(),
-                                    TypeInfo::Function(ret, _) => ret.clone(),
+                                    TypeInfo::Function(ret, params) => Type::Function(Box::new(ret.clone()), params.clone()),
                                     TypeInfo::Namespace(_, _) => Type::Dynamic,
                                 });
+                            } else {
+                                return Err(LavinaError::new(
+                                    ErrorPhase::TypeChecker,
+                                    format!("Namespace '{}' has no member '{}'", ns_name, member_name),
+                                    bracket.line,
+                                    bracket.column,
+                                ).with_context(&self.source));
                             }
                         }
                     }
                 }
 
+                let coll_type = self.check_expr(collection)?;
                 // Normal collection indexing
                 match coll_type {
                     Type::Array(inner) => {
@@ -281,12 +387,16 @@ impl TypeChecker {
                 }
             }
             Expr::Call(callee, _paren, args) => {
-                let _callee_type = self.check_expr(callee)?;
+                let callee_type = self.check_expr(callee)?;
                 for arg in args {
                     self.check_expr(arg)?;
                 }
-                // Simplified call check
-                Ok(Type::Dynamic)
+                
+                match callee_type {
+                    Type::Function(ret, _) => Ok(*ret),
+                    Type::Dynamic => Ok(Type::Dynamic),
+                    _ => Ok(Type::Dynamic), // Should probably be an error in a strict language
+                }
             }
             Expr::Binary(left, op, right) => {
                 let l = self.check_expr(left)?;
@@ -348,12 +458,13 @@ impl TypeChecker {
     }
 
     fn is_assignable(&self, target: &Type, value: &Type) -> bool {
-        if target == &Type::Auto || target == &Type::Dynamic || value == &Type::Dynamic { return true; }
+        if target == &Type::Auto || target == &Type::Dynamic { return true; }
         if target == value { return true; }
         
         match (target, value) {
             (Type::Array(t1), Type::Array(t2)) => self.is_assignable(t1, t2),
             (Type::Dict(k1, v1), Type::Dict(k2, v2)) => self.is_assignable(k1, k2) && self.is_assignable(v1, v2),
+            (Type::Nullable(_), Type::Null) => true,
             (Type::Nullable(t1), t2) => self.is_assignable(t1, t2),
             _ => false,
         }
