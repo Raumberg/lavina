@@ -50,10 +50,10 @@ pub struct ObjInstance {
     pub fields: HashMap<String, Value>,
 }
 
-/// Represents a method bound to an instance.
+/// Represents a method bound to an instance or primitive.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjBoundMethod {
-    pub receiver: usize, // Index of the instance
+    pub receiver: Value, // Can be an instance (Value::Object(idx)) or a primitive
     pub method: usize,   // Index of the closure
 }
 

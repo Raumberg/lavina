@@ -4,7 +4,7 @@ use std::collections::HashMap;
 #[derive(Clone)]
 pub enum TypeInfo {
     Variable(Type),
-    Function(Type, Vec<Type>, bool), // Return type, params, is_static
+    Function(Type, Vec<Type>, bool, bool), // Return type, params, is_static, is_variadic
     Namespace(String, HashMap<String, (TypeInfo, Visibility)>),
     Class(String, HashMap<String, (TypeInfo, Visibility)>),
 }

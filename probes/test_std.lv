@@ -1,4 +1,4 @@
-import lavina::math
+import std::math
 
 print("PI: " + math::PI)
 print("E: " + math::E)

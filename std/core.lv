@@ -1,0 +1,38 @@
+// Lavina Core Library
+// This module contains fundamental types and functions.
+
+public auto fn len(dynamic x):
+    return __native_len(x)
+
+public auto fn clock():
+    return __native_clock()
+
+public auto fn typeof(dynamic x):
+    return __native_typeof(x)
+
+public auto fn cast(dynamic x, string t):
+    return __native_cast(x, t)
+
+public enum Result:
+    dynamic Ok
+    string Error
+
+public enum Option:
+    dynamic Some
+    null None
+
+public class String:
+    public auto fn lower():
+        return __native_string_lower(this)
+    public auto fn upper():
+        return __native_string_upper(this)
+    public auto fn len():
+        return __native_string_len(this)
+
+public class Int:
+    public auto fn to_string():
+        return "" + this
+
+public class Vector:
+    public auto fn len():
+        return __native_len(this)

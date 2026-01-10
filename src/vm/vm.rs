@@ -19,6 +19,7 @@ pub struct VM {
     globals: HashMap<String, Value>,
     memory: Memory,
     open_upvalues: Vec<usize>, // Indices of ObjUpvalue in the heap
+    intrinsic_classes: HashMap<String, usize>,
 }
 
 impl VM {
@@ -29,6 +30,7 @@ impl VM {
             globals: HashMap::new(),
             memory: Memory::new(),
             open_upvalues: Vec::new(),
+            intrinsic_classes: HashMap::new(),
         };
         
         for (name, func) in get_native_functions() {
@@ -337,9 +339,18 @@ impl VM {
                 OpCode::Class => {
                     let name = self.read_string_constant();
                     let class_idx = self.memory.alloc(ObjType::Class(crate::vm::object::ObjClass {
-                        name,
+                        name: name.clone(),
                         methods: HashMap::new(),
                     }));
+                    
+                    // Register intrinsic classes if they match our core types
+                    match name.as_str() {
+                        "String" | "Int" | "Float" | "Bool" | "Vector" | "HashMap" => {
+                            self.intrinsic_classes.insert(name.to_lowercase(), class_idx);
+                        }
+                        _ => {}
+                    }
+                    
                     self.push(Value::Object(class_idx));
                 }
 
@@ -361,51 +372,64 @@ impl VM {
 
                 OpCode::GetProperty => {
                     let name = self.read_string_constant();
-                    let instance_idx = match self.pop() {
-                        Value::Object(idx) => idx,
-                        val => return self.runtime_error(&format!("Only instances have properties, got {}", val)),
-                    };
-
-                    let obj = self.memory.heap[instance_idx].as_ref().unwrap();
-                    match &obj.obj_type {
-                        ObjType::Instance(instance) => {
-                            if let Some(val) = instance.fields.get(&name) {
-                                self.push(val.clone());
-                            } else {
-                                // Look up method
-                                let class_obj = self.memory.heap[instance.class_idx].as_ref().unwrap();
-                                if let ObjType::Class(class) = &class_obj.obj_type {
-                                    if let Some(method) = class.methods.get(&name) {
-                                        if let Value::Object(m_idx) = method {
-                                            let bound_idx = self.memory.alloc(ObjType::BoundMethod(crate::vm::object::ObjBoundMethod {
-                                                receiver: instance_idx,
-                                                method: *m_idx,
-                                            }));
-                                            self.push(Value::Object(bound_idx));
-                                        } else {
-                                            self.push(method.clone());
-                                        }
+                    let receiver = self.pop();
+                    
+                    let method = match &receiver {
+                        Value::Object(idx) => {
+                            let obj = self.memory.heap[*idx].as_ref().unwrap();
+                            match &obj.obj_type {
+                                ObjType::Instance(instance) => {
+                                    if let Some(val) = instance.fields.get(&name) {
+                                        self.push(val.clone());
+                                        continue;
+                                    }
+                                    // Look up method
+                                    let class_obj = self.memory.heap[instance.class_idx].as_ref().unwrap();
+                                    if let ObjType::Class(class) = &class_obj.obj_type {
+                                        class.methods.get(&name).cloned()
+                                    } else { None }
+                                }
+                                ObjType::Namespace(_, members) => {
+                                    if let Some(val) = members.get(&name) {
+                                        self.push(val.clone());
+                                        continue;
                                     } else {
-                                        return self.runtime_error(&format!("Undefined property '{}'.", name));
+                                        return self.runtime_error(&format!("Undefined member '{}' in namespace.", name));
                                     }
                                 }
+                                ObjType::Class(class) => {
+                                    if let Some(val) = class.methods.get(&name) {
+                                        self.push(val.clone());
+                                        continue;
+                                    } else {
+                                        return self.runtime_error(&format!("Undefined static member '{}' in class '{}'.", name, class.name));
+                                    }
+                                }
+                                ObjType::String(_) => self.get_intrinsic_method("string", &name),
+                                ObjType::Vector(_) => self.get_intrinsic_method("vector", &name),
+                                ObjType::HashMap(_) => self.get_intrinsic_method("hashmap", &name),
+                                _ => None,
                             }
                         }
-                        ObjType::Namespace(_, members) => {
-                            if let Some(val) = members.get(&name) {
-                                self.push(val.clone());
-                            } else {
-                                return self.runtime_error(&format!("Undefined member '{}' in namespace.", name));
-                            }
+                        Value::String(_) => self.get_intrinsic_method("string", &name),
+                        Value::Int(_) => self.get_intrinsic_method("int", &name),
+                        Value::Float(_) => self.get_intrinsic_method("float", &name),
+                        Value::Bool(_) => self.get_intrinsic_method("bool", &name),
+                        _ => None,
+                    };
+
+                    if let Some(method_val) = method {
+                        if let Value::Object(m_idx) = method_val {
+                            let bound_idx = self.memory.alloc(ObjType::BoundMethod(crate::vm::object::ObjBoundMethod {
+                                receiver,
+                                method: m_idx,
+                            }));
+                            self.push(Value::Object(bound_idx));
+                        } else {
+                            self.push(method_val);
                         }
-                        ObjType::Class(class) => {
-                            if let Some(val) = class.methods.get(&name) {
-                                self.push(val.clone());
-                            } else {
-                                return self.runtime_error(&format!("Undefined static member '{}' in class '{}'.", name, class.name));
-                            }
-                        }
-                        _ => return self.runtime_error("Only instances, classes and namespaces have properties."),
+                    } else {
+                        return self.runtime_error(&format!("Undefined property '{}' on {}.", name, receiver));
                     }
                 }
 
@@ -533,6 +557,17 @@ impl VM {
     }
 
     // --- Internal Helpers ---
+
+    fn get_intrinsic_method(&self, type_name: &str, method_name: &str) -> Option<Value> {
+        if let Some(class_idx) = self.intrinsic_classes.get(type_name) {
+            if let Some(Some(obj)) = self.memory.heap.get(*class_idx) {
+                if let ObjType::Class(class) = &obj.obj_type {
+                    return class.methods.get(method_name).cloned();
+                }
+            }
+        }
+        None
+    }
 
     fn value_to_string(&self, value: &Value) -> String {
         match value {
@@ -704,7 +739,7 @@ impl VM {
                     ObjType::BoundMethod(bound) => {
                         // Place receiver at slot 0
                         let stack_pos = self.stack.len() - arg_count - 1;
-                        self.stack[stack_pos] = Value::Object(bound.receiver);
+                        self.stack[stack_pos] = bound.receiver.clone();
                         return self.call_value_idx(bound.method, arg_count);
                     }
                     _ => Err(format!("Can only call functions and classes, got {}", callee)),

@@ -33,8 +33,8 @@ impl ModuleResolver {
             }
         }
 
-        // 3. Special case for 'lavina' (std lib)
-        if !path_tokens.is_empty() && path_tokens[0].lexeme == "lavina" {
+        // 3. Special case for 'std' (std lib)
+        if !path_tokens.is_empty() && path_tokens[0].lexeme == "std" {
             let mut std_path = PathBuf::from("std");
             for token in &path_tokens[1..] {
                 std_path.push(&token.lexeme);

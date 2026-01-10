@@ -1,0 +1,13 @@
+// Lavina String Library
+
+public auto fn contains(string s, string sub):
+    // Placeholder until we have more natives
+    return false
+
+public auto fn lower(string s):
+    // Placeholder
+    return s
+
+public auto fn upper(string s):
+    // Placeholder
+    return s

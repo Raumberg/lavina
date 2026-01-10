@@ -1,0 +1,22 @@
+import std::core
+
+string s = "Hello World"
+print(s.lower())
+print(s.upper())
+print("Length: " + s.upper().len())
+print("typeof s: " + typeof(s))
+
+int i = 42
+print("Number: " + i.to_string())
+print("typeof i: " + typeof(i))
+
+vector[int] v = [1, 2, 3]
+print("Vector length: " + v.len())
+print("typeof v: " + typeof(v))
+
+// Testing cast and smart print
+string str_num = "123"
+int n = cast(str_num, "int")
+print("Casted {} to int: {}", str_num, n)
+print("Type of n is {}", typeof(n))
+print("Formatting: {} + {} = {}", 1, 1, 2)

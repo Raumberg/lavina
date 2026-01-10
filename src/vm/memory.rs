@@ -134,7 +134,7 @@ impl Memory {
                 }
             }
             ObjType::BoundMethod(bound) => {
-                self.mark_object(bound.receiver, worklist);
+                self.mark_value(&bound.receiver, worklist);
                 self.mark_object(bound.method, worklist);
             }
             _ => {}
