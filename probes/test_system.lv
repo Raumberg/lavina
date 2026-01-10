@@ -1,0 +1,36 @@
+import std::fs
+import std::os
+
+print("Lavina OS/FS Test")
+print("----------------")
+
+// Test OS
+auto arguments = os::args()
+print("Args count: {}", len(arguments))
+for a in arguments:
+    print("Arg: {}", a)
+
+auto path_env = os::env("PATH")
+if path_env != null:
+    print("PATH env found (len: {})", len(path_env))
+else:
+    print("PATH env not found")
+
+// Test FS
+string filename = "target/tmp_test.txt"
+string secret = "Alina was here 🐾"
+
+print("Writing to {}...", filename)
+fs::write(filename, secret)
+
+if fs::exists(filename):
+    print("File exists!")
+    string content = fs::read(filename)
+    print("Content: '{}'", content)
+    
+    if content == secret:
+        print("Success! Data matches.")
+    else:
+        print("Error: Data mismatch!")
+else:
+    print("Error: File not found after writing!")

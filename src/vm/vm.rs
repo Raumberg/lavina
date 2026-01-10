@@ -20,6 +20,13 @@ pub struct VM {
     memory: Memory,
     open_upvalues: Vec<usize>, // Indices of ObjUpvalue in the heap
     intrinsic_classes: HashMap<String, usize>,
+    handlers: Vec<ExceptionHandler>,
+}
+
+struct ExceptionHandler {
+    handler_ip: usize,
+    stack_depth: usize,
+    frame_depth: usize,
 }
 
 impl VM {
@@ -31,6 +38,7 @@ impl VM {
             memory: Memory::new(),
             open_upvalues: Vec::new(),
             intrinsic_classes: HashMap::new(),
+            handlers: Vec::new(),
         };
         
         for (name, func) in get_native_functions() {
@@ -346,11 +354,11 @@ impl VM {
                     // Register intrinsic classes if they match our core types
                     match name.as_str() {
                         "String" | "Int" | "Float" | "Bool" | "Vector" | "HashMap" => {
-                            self.intrinsic_classes.insert(name.to_lowercase(), class_idx);
+                            self.intrinsic_classes.insert(name.clone(), class_idx);
                         }
                         _ => {}
                     }
-                    
+
                     self.push(Value::Object(class_idx));
                 }
 
@@ -412,6 +420,40 @@ impl VM {
                     self.push(result);
                 }
 
+                OpCode::Try => {
+                    let jump = self.read_short() as usize;
+                    let frame = self.frames.last().unwrap();
+                    let handler_ip = frame.ip + jump;
+                    self.handlers.push(ExceptionHandler {
+                        handler_ip,
+                        stack_depth: self.stack.len(),
+                        frame_depth: self.frames.len(),
+                    });
+                }
+
+                OpCode::EndTry => {
+                    self.handlers.pop();
+                }
+
+                OpCode::Throw => {
+                    let exception_value = self.pop();
+                    if let Some(handler) = self.handlers.pop() {
+                        // Unwind stack and frames
+                        while self.frames.len() > handler.frame_depth {
+                            self.frames.pop();
+                        }
+                        while self.stack.len() > handler.stack_depth {
+                            self.stack.pop();
+                        }
+                        
+                        // Push exception value and jump to handler
+                        self.push(exception_value);
+                        self.frames.last_mut().unwrap().ip = handler.handler_ip;
+                    } else {
+                        return self.runtime_error(&format!("Uncaught exception: {}", exception_value));
+                    }
+                }
+
                 OpCode::GetProperty => {
                     let name = self.read_string_constant();
                     let receiver = self.pop();
@@ -447,16 +489,16 @@ impl VM {
                                         return self.runtime_error(&format!("Undefined static member '{}' in class '{}'.", name, class.name));
                                     }
                                 }
-                                ObjType::String(_) => self.get_intrinsic_method("string", &name),
-                                ObjType::Vector(_) => self.get_intrinsic_method("vector", &name),
-                                ObjType::HashMap(_) => self.get_intrinsic_method("hashmap", &name),
+                                ObjType::String(_) => self.get_intrinsic_method("String", &name),
+                                ObjType::Vector(_) => self.get_intrinsic_method("Vector", &name),
+                                ObjType::HashMap(_) => self.get_intrinsic_method("HashMap", &name),
                                 _ => None,
                             }
                         }
-                        Value::String(_) => self.get_intrinsic_method("string", &name),
-                        Value::Int(_) => self.get_intrinsic_method("int", &name),
-                        Value::Float(_) => self.get_intrinsic_method("float", &name),
-                        Value::Bool(_) => self.get_intrinsic_method("bool", &name),
+                        Value::String(_) => self.get_intrinsic_method("String", &name),
+                        Value::Int(_) => self.get_intrinsic_method("Int", &name),
+                        Value::Float(_) => self.get_intrinsic_method("Float", &name),
+                        Value::Bool(_) => self.get_intrinsic_method("Bool", &name),
                         _ => None,
                     };
 
@@ -728,7 +770,7 @@ impl VM {
                 args.reverse();
                 self.pop(); // Callee
                 
-                match func(&self.memory.heap, args) {
+                match func(&mut self.memory, args) {
                     Ok(result) => { self.push(result); Ok(()) }
                     Err(e) => Err(e),
                 }
@@ -820,6 +862,7 @@ impl VM {
             (Value::Float(x), Value::Float(y)) => x == y,
             (Value::Bool(x), Value::Bool(y)) => x == y,
             (Value::Null, Value::Null) => true,
+            (Value::String(s1), Value::String(s2)) => s1 == s2,
             (Value::Object(idx1), Value::Object(idx2)) => {
                 if idx1 == idx2 { return true; }
                 let obj1 = self.memory.heap[idx1].as_ref().unwrap();
@@ -828,6 +871,14 @@ impl VM {
                     (ObjType::String(s1), ObjType::String(s2)) => s1 == s2,
                     _ => false,
                 }
+            }
+            (Value::Object(idx), Value::String(s2)) => {
+                let obj = self.memory.heap[idx].as_ref().unwrap();
+                if let ObjType::String(s1) = &obj.obj_type { s1 == &s2 } else { false }
+            }
+            (Value::String(s1), Value::Object(idx)) => {
+                let obj = self.memory.heap[idx].as_ref().unwrap();
+                if let ObjType::String(s2) = &obj.obj_type { &s1 == s2 } else { false }
             }
             _ => false,
         }

@@ -104,22 +104,48 @@ impl Parser {
         }
 
         if self.match_types(&[TokenType::Namespace]) {
-            return self.namespace_statement();
+            return self.namespace_statement(visibility);
         }
 
         if self.match_types(&[TokenType::Class]) {
-            return self.class_declaration();
+            return self.class_declaration(visibility);
         }
 
         if self.match_types(&[TokenType::Struct]) {
-            return self.struct_declaration();
+            return self.struct_declaration(visibility);
         }
 
         if self.match_types(&[TokenType::Enum]) {
-            return self.enum_declaration();
+            return self.enum_declaration(visibility);
+        }
+
+        if self.match_types(&[TokenType::Try]) {
+            return self.try_statement();
         }
 
         self.statement()
+    }
+
+    fn try_statement(&mut self) -> Result<Stmt, LavinaError> {
+        self.consume(TokenType::Colon, "Expect ':' after 'try'.")?;
+        let try_body = self.block()?;
+        
+        let catch_token = self.consume(TokenType::Catch, "Expect 'catch' after 'try' block.")?.clone();
+        
+        let mut exception_name = None;
+        if self.match_types(&[TokenType::Identifier]) {
+            exception_name = Some(self.previous().clone());
+        }
+        
+        self.consume(TokenType::Colon, "Expect ':' after 'catch'.")?;
+        let catch_body = self.block()?;
+        
+        Ok(Stmt::Try(
+            Box::new(Stmt::Block(try_body)), 
+            catch_token, 
+            exception_name, 
+            Box::new(Stmt::Block(catch_body))
+        ))
     }
 
     fn import_statement(&mut self) -> Result<Stmt, LavinaError> {
@@ -138,29 +164,29 @@ impl Parser {
         Ok(Stmt::Import(path, alias))
     }
 
-    fn namespace_statement(&mut self) -> Result<Stmt, LavinaError> {
+    fn namespace_statement(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect namespace name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after namespace name.")?;
         
         let body = self.block()?;
-        Ok(Stmt::Namespace(name, body))
+        Ok(Stmt::Namespace(name, body, visibility))
     }
 
-    fn class_declaration(&mut self) -> Result<Stmt, LavinaError> {
+    fn class_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect class name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after class name.")?;
         let body = self.block()?;
-        Ok(Stmt::Class(name, body))
+        Ok(Stmt::Class(name, body, visibility))
     }
 
-    fn struct_declaration(&mut self) -> Result<Stmt, LavinaError> {
+    fn struct_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect struct name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after struct name.")?;
         let body = self.block()?;
-        Ok(Stmt::Struct(name, body))
+        Ok(Stmt::Struct(name, body, visibility))
     }
 
-    fn enum_declaration(&mut self) -> Result<Stmt, LavinaError> {
+    fn enum_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect enum name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after enum name.")?;
         
@@ -184,7 +210,7 @@ impl Parser {
         }
         
         self.consume(TokenType::Dedent, "Expect dedent to end enum body.")?;
-        Ok(Stmt::Enum(name, variants))
+        Ok(Stmt::Enum(name, variants, visibility))
     }
 
     fn single_directive(&mut self) -> Result<Directive, LavinaError> {
@@ -380,8 +406,15 @@ impl Parser {
         if self.match_types(&[TokenType::While]) { return self.while_statement(); }
         if self.match_types(&[TokenType::For]) { return self.for_statement(); }
         if self.match_types(&[TokenType::Return]) { return self.return_statement(); }
+        if self.match_types(&[TokenType::Throw]) { return self.throw_statement(); }
         
         self.expression_statement()
+    }
+
+    fn throw_statement(&mut self) -> Result<Stmt, LavinaError> {
+        let expr = self.expression()?;
+        self.match_types(&[TokenType::Semicolon, TokenType::Newline]);
+        Ok(Stmt::Expression(Expr::Throw(Box::new(expr))))
     }
 
     fn if_statement(&mut self) -> Result<Stmt, LavinaError> {

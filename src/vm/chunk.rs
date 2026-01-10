@@ -102,6 +102,9 @@ impl Chunk {
             OpCode::Class => self.constant_instruction("OP_CLASS", offset),
             OpCode::Method => self.constant_instruction("OP_METHOD", offset),
             OpCode::Cast => self.simple_instruction("OP_CAST", offset),
+            OpCode::Try => self.byte_instruction("OP_TRY", offset),
+            OpCode::EndTry => self.simple_instruction("OP_END_TRY", offset),
+            OpCode::Throw => self.simple_instruction("OP_THROW", offset),
         }
     }
 

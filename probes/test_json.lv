@@ -1,0 +1,33 @@
+import std::json
+
+print("Lavina JSON Test")
+print("----------------")
+
+// 1. Test Stringify
+auto data = {
+    "name": "Alina",
+    "age": 21,
+    "skills": ["Rust", "Lavina", "Beauty"],
+    "active": true,
+    "meta": null
+}
+
+string json_str = json::stringify(data)
+print("Stringified: {}", json_str)
+
+// 2. Test Parse
+auto parsed = json::parse(json_str)
+print("Parsed name: {}", parsed["name"])
+print("Parsed age: {}", parsed["age"])
+print("Parsed skills count: {}", len(parsed["skills"]))
+print("Parsed active: {}", parsed["active"])
+
+if parsed["name"] == "Alina":
+    print("Success: Data matches after round-trip!")
+else:
+    print("Error: Data mismatch!")
+
+// 3. Test nested structures
+string nested_json = "{\"user\": {\"id\": 1, \"roles\": [\"admin\", \"user\"]}}"
+auto nested_data = json::parse(nested_json)
+print("Nested role: {}", nested_data["user"]["roles"][0])

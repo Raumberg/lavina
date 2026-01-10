@@ -54,6 +54,9 @@ impl Scanner {
         keywords.insert("struct".to_string(), TokenType::Struct);
         keywords.insert("enum".to_string(), TokenType::Enum);
         keywords.insert("this".to_string(), TokenType::This);
+        keywords.insert("try".to_string(), TokenType::Try);
+        keywords.insert("catch".to_string(), TokenType::Catch);
+        keywords.insert("throw".to_string(), TokenType::Throw);
 
         Self {
             source: source.chars().collect(),
@@ -272,10 +275,14 @@ impl Scanner {
     }
 
     fn string(&mut self) {
-        while self.peek() != '"' && !self.is_at_end() {
+        while !self.is_at_end() {
+            if self.peek() == '"' { break; }
             if self.peek() == '\n' {
                 self.line += 1;
                 self.column = 1;
+            }
+            if self.peek() == '\\' {
+                self.advance(); // consume '\'
             }
             self.advance();
         }
@@ -292,8 +299,26 @@ impl Scanner {
         }
 
         self.advance();
-        let value: String = self.source[self.start + 1..self.current - 1].iter().collect();
-        self.add_token_with_lexeme(TokenType::String, value);
+        let raw_value: Vec<char> = self.source[self.start + 1..self.current - 1].to_vec();
+        let mut processed_value = String::new();
+        let mut i = 0;
+        while i < raw_value.len() {
+            if raw_value[i] == '\\' && i + 1 < raw_value.len() {
+                match raw_value[i + 1] {
+                    '"' => processed_value.push('"'),
+                    '\\' => processed_value.push('\\'),
+                    'n' => processed_value.push('\n'),
+                    'r' => processed_value.push('\r'),
+                    't' => processed_value.push('\t'),
+                    _ => processed_value.push(raw_value[i + 1]),
+                }
+                i += 2;
+            } else {
+                processed_value.push(raw_value[i]);
+                i += 1;
+            }
+        }
+        self.add_token_with_lexeme(TokenType::String, processed_value);
     }
 
     fn match_keyword_at_pos(&self, keyword: &str) -> bool {

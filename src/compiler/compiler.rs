@@ -144,7 +144,7 @@ impl Compiler {
                 
                 Ok(())
             }
-            Stmt::Namespace(name, body) => {
+            Stmt::Namespace(name, body, _) => {
                 let mut level = CompilerLevel {
                     function: crate::vm::object::ObjFunction {
                         arity: 0,
@@ -326,7 +326,7 @@ impl Compiler {
                 Ok(())
             }
             Stmt::Directive(_) => Ok(()),
-            Stmt::Class(name, body) => {
+            Stmt::Class(name, body, _) => {
                 let name_str = name.lexeme.clone();
                 let name_const = self.add_constant(Value::String(name_str.clone()));
                 self.emit_byte(OpCode::Class as u8, name.line);
@@ -402,12 +402,12 @@ impl Compiler {
                 self.emit_byte(OpCode::Pop as u8, name.line);
                 Ok(())
             }
-            Stmt::Struct(name, body) => {
+            Stmt::Struct(name, body, visibility) => {
                 // For now, structs are just classes
-                self.compile_stmt(&Stmt::Class(name.clone(), body.clone()))?;
+                self.compile_stmt(&Stmt::Class(name.clone(), body.clone(), visibility.clone()))?;
                 Ok(())
             }
-            Stmt::Enum(name, variants) => {
+            Stmt::Enum(name, variants, _) => {
                 let enum_name = name.lexeme.clone();
                 let mut public_members = Vec::new();
 
@@ -498,6 +498,30 @@ impl Compiler {
                 
                 Ok(())
             }
+            Stmt::Try(try_body, catch_token, exception_name, catch_body) => {
+                let try_jump = self.emit_jump(OpCode::Try as u8);
+                
+                self.compile_stmt(try_body)?;
+                self.emit_byte(OpCode::EndTry as u8, catch_token.line);
+                
+                let catch_jump = self.emit_jump(OpCode::Jump as u8);
+                
+                self.patch_jump(try_jump);
+                
+                // Exception value is on stack
+                if let Some(name) = exception_name {
+                    self.begin_scope();
+                    self.add_local(name.lexeme.clone());
+                    self.compile_stmt(catch_body)?;
+                    self.end_scope();
+                } else {
+                    self.emit_byte(OpCode::Pop as u8, catch_token.line);
+                    self.compile_stmt(catch_body)?;
+                }
+                
+                self.patch_jump(catch_jump);
+                Ok(())
+            }
         }
     }
 
@@ -511,6 +535,10 @@ impl Compiler {
                 Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
                     public_members.push(n.lexeme.clone());
                 }
+                Stmt::Class(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
+                Stmt::Struct(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
+                Stmt::Enum(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
+                Stmt::Namespace(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
                 _ => {}
             }
         }
@@ -665,6 +693,10 @@ impl Compiler {
                 let constant = self.add_constant(Value::String(type_name));
                 self.emit_constant(constant as u8, 0);
                 self.emit_byte(OpCode::Cast as u8, 0);
+            }
+            Expr::Throw(expr) => {
+                self.compile_expr(expr)?;
+                self.emit_byte(OpCode::Throw as u8, 0);
             }
         }
         Ok(())

@@ -1,1 +1,2 @@
-import remote_mod; remote_mod.hello()
+import remote_mod
+remote_mod::hello()

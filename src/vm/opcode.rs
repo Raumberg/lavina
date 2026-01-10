@@ -39,6 +39,9 @@ pub enum OpCode {
     Class,
     Method,
     Cast,
+    Try,
+    EndTry,
+    Throw,
 }
 
 impl From<u8> for OpCode {
@@ -82,6 +85,9 @@ impl From<u8> for OpCode {
             35 => OpCode::Class,
             36 => OpCode::Method,
             37 => OpCode::Cast,
+            38 => OpCode::Try,
+            39 => OpCode::EndTry,
+            40 => OpCode::Throw,
             _ => panic!("Unknown opcode: {}", value),
         }
     }

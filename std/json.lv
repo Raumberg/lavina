@@ -1,0 +1,6 @@
+// JSON serialization and parsing
+public string fn stringify(dynamic obj):
+    return __native_json_stringify(obj)
+
+public dynamic fn parse(string json_str):
+    return __native_json_parse(json_str)

@@ -32,6 +32,9 @@ fn run_oop_code(source: &str) -> Result<(), String> {
 fn test_class_basic() {
     let code = r#"
 class Point:
+    int x
+    int y
+
     void fn __init__(int x, int y):
         this.x = x
         this.y = y
@@ -43,7 +46,11 @@ auto p = Point(10, 20)
 if p.sum() != 30:
     print("Error")
 "#;
-    assert!(run_oop_code(code).is_ok());
+    let result = run_oop_code(code);
+    if let Err(e) = &result {
+        println!("Error in test_class_basic: {}", e);
+    }
+    assert!(result.is_ok());
 }
 
 #[test]

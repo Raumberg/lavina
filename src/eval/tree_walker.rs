@@ -4,6 +4,7 @@ use crate::error::{LavinaError, ErrorPhase};
 use crate::eval::environment::Environment;
 use crate::eval::native::get_native_functions;
 use crate::eval::value::Value;
+use crate::vm::memory::Memory;
 use std::rc::Rc;
 use std::cell::RefCell;
 
@@ -15,11 +16,13 @@ pub enum ControlFlow {
 pub struct TreeWalker {
     env: Rc<RefCell<Environment>>,
     source: String,
+    memory: Memory,
 }
 
 impl TreeWalker {
     pub fn new(source: String) -> Self {
         let env = Rc::new(RefCell::new(Environment::new()));
+        let memory = Memory::new();
         
         for (name, func) in get_native_functions() {
             env.borrow_mut().define(name.clone(), Value::NativeFunction(name, func));
@@ -28,6 +31,7 @@ impl TreeWalker {
         Self {
             env,
             source,
+            memory,
         }
     }
 
@@ -108,11 +112,11 @@ impl TreeWalker {
                 };
                 Ok(ControlFlow::Return(result))
             }
-            Stmt::Namespace(_, _) => todo!("Namespace not implemented in tree-walker."),
+            Stmt::Namespace(_, _, _) => todo!("Namespace not implemented in tree-walker."),
             Stmt::Import(_, _) => todo!("Import not implemented in tree-walker."),
             Stmt::Directive(_) => Ok(ControlFlow::None),
-            Stmt::Class(_, _) | Stmt::Struct(_, _) | Stmt::Enum(_, _) => {
-                todo!("OOP in tree-walker not implemented")
+            Stmt::Class(_, _, _) | Stmt::Struct(_, _, _) | Stmt::Enum(_, _, _) | Stmt::Try(_, _, _, _) => {
+                todo!("OOP and Try/Catch in tree-walker not implemented")
             }
         }
     }
@@ -180,7 +184,7 @@ impl TreeWalker {
 
                 match func {
                     Value::NativeFunction(_, native_fn) => {
-                        native_fn(&[], evaluated_args).map_err(|e| self.error(e, paren.line, paren.column))
+                        native_fn(&mut self.memory, evaluated_args).map_err(|e| self.error(e, paren.line, paren.column))
                     }
                     _ => Err(self.error("Can only call functions.".to_string(), paren.line, paren.column)),
                 }

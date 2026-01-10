@@ -1,0 +1,23 @@
+import std::memory as mem
+
+class Data:
+    int value
+    void fn __init__(int v):
+        this.value = v
+
+auto d = Data(42)
+int address = mem::addrof(d)
+print("Object address: {}", address)
+print("Object size: {} bytes", mem::sizeof(d))
+
+// Dereference
+auto d2 = mem::deref(address)
+print("Dereferenced value: {}", d2.value)
+
+// Delete
+print("Deleting object at address {}...", address)
+mem::delete(address)
+
+print("Allocated bytes: {}", mem::allocated_bytes())
+print("Object deleted. Any further access to address {} will cause a runtime error.", address)
+// mem::deref(address) // This would crash the VM with our custom error

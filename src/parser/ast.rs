@@ -42,6 +42,7 @@ pub enum Expr {
     StaticGet(Box<Expr>, Token), // static/namespace access: namespace::member
     This(Token),
     Cast(Box<Expr>, Type),
+    Throw(Box<Expr>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -64,11 +65,12 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Function(FunctionDecl),
     Directive(Directive),
-    Namespace(Token, Vec<Stmt>),
+    Namespace(Token, Vec<Stmt>, Visibility),
     Import(Vec<Token>, Option<Token>),
-    Class(Token, Vec<Stmt>),
-    Struct(Token, Vec<Stmt>),
-    Enum(Token, Vec<EnumVariant>),
+    Class(Token, Vec<Stmt>, Visibility),
+    Struct(Token, Vec<Stmt>, Visibility),
+    Enum(Token, Vec<EnumVariant>, Visibility),
+    Try(Box<Stmt>, Token, Option<Token>, Box<Stmt>), // try_body, catch_token, exception_name, catch_body
 }
 
 #[derive(Debug, Clone, PartialEq)]

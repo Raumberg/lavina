@@ -64,3 +64,15 @@ if a:
     assert_eq!(indents, 2);
     assert_eq!(dedents, 2);
 }
+
+#[test]
+fn test_string_escapes() {
+    let source = r#""line1\nline2\ttab\"quote\\slash""#.to_string();
+    let mut scanner = Scanner::new(source);
+    let (tokens, errors) = scanner.scan_tokens();
+
+    assert!(errors.is_empty());
+    assert_eq!(tokens[0].token_type, TokenType::String);
+    // The lexer should have processed the escapes
+    assert_eq!(tokens[0].lexeme, "line1\nline2\ttab\"quote\\slash");
+}

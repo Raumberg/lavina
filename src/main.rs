@@ -12,10 +12,8 @@ fn main() {
 
     if args.len() == 1 {
         lavina::repl::run();
-    } else if args.len() == 2 {
-        run_file(&args[1]);
     } else {
-        eprintln!("Usage: lavina [path]");
+        run_file(&args[1]);
     }
 }
 

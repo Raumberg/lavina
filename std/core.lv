@@ -10,6 +10,9 @@ public auto fn clock():
 public auto fn typeof(dynamic x):
     return __native_typeof(x)
 
+public auto fn range(int start, int end):
+    return __native_range(start, end)
+
 public enum Result:
     dynamic Ok
     string Error
@@ -25,6 +28,26 @@ public class String:
         return __native_string_upper(this)
     public auto fn len():
         return __native_string_len(this)
+    public auto fn trim():
+        return __native_string_trim(this)
+    public auto fn replace(string from, string to):
+        return __native_string_replace(this, from, to)
+    public auto fn contains(string sub):
+        return __native_string_contains(this, sub)
+    public auto fn starts_with(string prefix):
+        return __native_string_starts_with(this, prefix)
+    public auto fn ends_with(string suffix):
+        return __native_string_ends_with(this, suffix)
+    public auto fn split(string delim):
+        return __native_string_split(this, delim)
+    public auto fn idxof(string sub):
+        return __native_string_idxof(this, sub)
+    public auto fn is_empty():
+        return __native_string_is_empty(this)
+    public auto fn to_int():
+        return cast(this, int)
+    public auto fn to_float():
+        return cast(this, float)
 
 public class Int:
     public auto fn to_string():
@@ -33,3 +56,35 @@ public class Int:
 public class Vector:
     public auto fn len():
         return __native_len(this)
+    public auto fn push(dynamic item):
+        return __native_vector_push(this, item)
+    public auto fn pop():
+        return __native_vector_pop(this)
+    public auto fn clear():
+        return __native_vector_clear(this)
+    public auto fn remove(int index):
+        return __native_vector_remove(this, index)
+    public auto fn join(string delim):
+        return __native_vector_join(this, delim)
+    public auto fn contains(dynamic item):
+        return __native_vector_contains(this, item)
+    public auto fn reverse():
+        return __native_vector_reverse(this)
+    public auto fn is_empty():
+        return __native_vector_is_empty(this)
+
+public class HashMap:
+    public auto fn len():
+        return __native_len(this)
+    public auto fn has(string key):
+        return __native_hashmap_has(this, key)
+    public auto fn clear():
+        return __native_hashmap_clear(this)
+    public auto fn remove(string key):
+        return __native_hashmap_remove(this, key)
+    public auto fn keys():
+        return __native_hashmap_keys(this)
+    public auto fn values():
+        return __native_hashmap_values(this)
+    public auto fn is_empty():
+        return __native_hashmap_is_empty(this)

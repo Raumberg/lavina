@@ -13,5 +13,20 @@ public auto fn cos(dynamic x):
 public auto fn tan(dynamic x):
     return __native_tan(x)
 
+public auto fn min(dynamic a, dynamic b):
+    return __native_min(a, b)
+
+public auto fn max(dynamic a, dynamic b):
+    return __native_max(a, b)
+
+public auto fn floor(dynamic x):
+    return __native_floor(x)
+
+public auto fn ceil(dynamic x):
+    return __native_ceil(x)
+
+public auto fn round(dynamic x):
+    return __native_round(x)
+
 public float PI = 3.141592653589793
 public float E = 2.718281828459045

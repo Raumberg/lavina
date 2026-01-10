@@ -1,11 +1,12 @@
 use std::fmt;
 use std::rc::Rc;
 use crate::eval::function::LavinaFunction;
+use crate::vm::memory::Memory;
 pub use crate::vm::object::{ObjFunction, ObjType, Obj};
 
 /// A callback for native functions.
-/// It takes a reference to the heap and the arguments.
-pub type NativeFn = fn(&[Option<Obj>], Vec<Value>) -> Result<Value, String>;
+/// It takes a mutable reference to the memory manager and the arguments.
+pub type NativeFn = fn(&mut Memory, Vec<Value>) -> Result<Value, String>;
 
 #[derive(Clone, PartialOrd)]
 pub enum Value {

@@ -1,0 +1,42 @@
+void fn level3():
+    print("Level 3: throwing")
+    throw "Error from deep down"
+
+void fn level2():
+    print("Level 2: calling level 3")
+    level3()
+
+void fn level1():
+    print("Level 1: calling level 2")
+    level2()
+
+print("--- Starting try/catch test ---")
+
+try:
+    print("Inside try block")
+    throw "Something went wrong!"
+    print("This should not be printed")
+catch err:
+    print("Caught an error: " + err)
+
+print("--- Testing nested try/catch ---")
+
+try:
+    print("Outer try")
+    try:
+        print("Inner try")
+        throw 42
+    catch inner_err:
+        print("Caught inner: " + cast(inner_err, string))
+        throw "Rethrowing from inner"
+catch outer_err:
+    print("Caught outer: " + outer_err)
+
+print("--- Testing deep stack unwinding ---")
+
+try:
+    level1()
+catch err:
+    print("Caught deep error: " + err)
+
+print("--- End of tests ---")
