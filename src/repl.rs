@@ -2,7 +2,8 @@ use std::io::{self, Write};
 use crate::lexer::scanner::Scanner;
 use crate::parser::parser::Parser;
 use crate::type_checker::checker::TypeChecker;
-use crate::compiler::compiler::{Compiler, FunctionType};
+use crate::compiler::compiler::{Compiler};
+use crate::compiler::scope::FunctionType;
 use crate::vm::vm::{VM, InterpretResult};
 
 pub fn run() {

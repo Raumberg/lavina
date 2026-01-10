@@ -1,6 +1,7 @@
 use crate::vm::opcode::OpCode;
 use crate::vm::object::{ObjFunction, ObjType};
 use crate::vm::memory::Memory;
+use crate::vm::frame::CallFrame;
 use crate::eval::value::{Value};
 use crate::eval::native::get_native_functions;
 use std::collections::HashMap;
@@ -11,12 +12,6 @@ pub enum InterpretResult {
     Ok,
     CompileError,
     RuntimeError,
-}
-
-struct CallFrame {
-    function: Rc<ObjFunction>,
-    ip: usize,
-    slots_offset: usize,
 }
 
 pub struct VM {

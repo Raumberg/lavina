@@ -1,7 +1,8 @@
 use lavina::lexer::Scanner;
 use lavina::parser::parser::Parser;
 use lavina::type_checker::checker::TypeChecker;
-use lavina::compiler::compiler::{Compiler, FunctionType};
+use lavina::compiler::compiler::{Compiler};
+use lavina::compiler::scope::FunctionType;
 use lavina::vm::vm::VM;
 use std::fs;
 use std::path::PathBuf;

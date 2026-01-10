@@ -3,7 +3,8 @@ use std::fs;
 use lavina::lexer::scanner::Scanner;
 use lavina::parser::parser::Parser;
 use lavina::type_checker::checker::TypeChecker;
-use lavina::compiler::compiler::{Compiler, FunctionType};
+use lavina::compiler::compiler::{Compiler};
+use lavina::compiler::scope::FunctionType;
 use lavina::vm::vm::VM;
 
 fn main() {

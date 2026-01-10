@@ -6,27 +6,20 @@ use crate::lexer::scanner::Scanner;
 use crate::parser::parser::Parser;
 use crate::error::LavinaError;
 use crate::eval::value::{ObjFunction, Value};
+use crate::compiler::scope::{Local, FunctionType};
+use crate::util::module_resolver::ModuleResolver;
+use crate::error::ErrorPhase;
 use std::rc::Rc;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fs;
-
-struct Local {
-    name: String,
-    depth: i32,
-}
-
-#[derive(PartialEq, Clone)]
-pub enum FunctionType {
-    Script,
-    Function,
-}
 
 pub struct Compiler {
     function: ObjFunction,
     locals: Vec<Local>,
     scope_depth: i32,
     compiled_modules: HashMap<PathBuf, Rc<ObjFunction>>,
+    resolver: ModuleResolver,
 }
 
 impl Compiler {
@@ -40,6 +33,7 @@ impl Compiler {
             locals: Vec::new(),
             scope_depth: 0,
             compiled_modules: HashMap::new(),
+            resolver: ModuleResolver::new(String::new()),
         };
         
         compiler.locals.push(Local {
@@ -167,7 +161,7 @@ impl Compiler {
                 Ok(())
             }
             Stmt::Import(path_tokens, alias) => {
-                let path = self.resolve_module_path(path_tokens)?;
+                let path = self.resolver.resolve(path_tokens, ErrorPhase::Compiler)?;
                 let module_name = path_tokens.last().unwrap().lexeme.clone();
                 let namespace_name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or(module_name.clone());
 
@@ -511,47 +505,5 @@ impl Compiler {
         let offset = self.function.chunk.code.len() - loop_start + 2;
         self.emit_byte(((offset >> 8) & 0xff) as u8, 0);
         self.emit_byte((offset & 0xff) as u8, 0);
-    }
-
-    fn resolve_module_path(&self, path_tokens: &[crate::lexer::Token]) -> Result<PathBuf, LavinaError> {
-        let mut relative_path = PathBuf::new();
-        for token in path_tokens {
-            relative_path.push(&token.lexeme);
-        }
-        relative_path.set_extension("lv");
-
-        // 1. Check relative to current directory
-        if relative_path.exists() {
-            return Ok(fs::canonicalize(relative_path).unwrap());
-        }
-
-        // 2. Check LVPATH environment variable
-        if let Ok(lv_path) = std::env::var("LVPATH") {
-            for dir in std::env::split_paths(&lv_path) {
-                let full_path = dir.join(&relative_path);
-                if full_path.exists() {
-                    return Ok(fs::canonicalize(full_path).unwrap());
-                }
-            }
-        }
-
-        // 3. Special case for 'lavina' (std lib)
-        if path_tokens[0].lexeme == "lavina" {
-            let mut std_path = PathBuf::from("std");
-            for token in &path_tokens[1..] {
-                std_path.push(&token.lexeme);
-            }
-            std_path.set_extension("lv");
-            if std_path.exists() {
-                return Ok(fs::canonicalize(std_path).unwrap());
-            }
-        }
-
-        Err(LavinaError::new(
-            crate::error::ErrorPhase::Compiler,
-            format!("Module not found: {:?}", relative_path),
-            path_tokens[0].line,
-            path_tokens[0].column,
-        ))
     }
 }

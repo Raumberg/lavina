@@ -3,49 +3,17 @@ use crate::error::{LavinaError, ErrorPhase};
 use crate::lexer::TokenType;
 use crate::lexer::scanner::Scanner;
 use crate::parser::parser::Parser;
+use crate::type_checker::env::{TypeInfo, TypeEnvironment};
+use crate::util::module_resolver::ModuleResolver;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::fs;
-
-#[derive(Clone)]
-pub enum TypeInfo {
-    Variable(Type),
-    Function(Type, Vec<Type>),
-    Namespace(String, HashMap<String, (TypeInfo, Visibility)>), // Added visibility to members
-}
-
-pub struct TypeEnvironment {
-    pub values: HashMap<String, (TypeInfo, Visibility)>, // Added visibility
-    pub enclosing: Option<Box<TypeEnvironment>>,
-}
-
-impl TypeEnvironment {
-    pub fn new() -> Self {
-        Self {
-            values: HashMap::new(),
-            enclosing: None,
-        }
-    }
-
-    pub fn define(&mut self, name: String, info: TypeInfo, visibility: Visibility) {
-        self.values.insert(name, (info, visibility));
-    }
-
-    pub fn get(&self, name: &str) -> Option<TypeInfo> {
-        if let Some((info, _)) = self.values.get(name) {
-            return Some(info.clone());
-        }
-        if let Some(enclosing) = &self.enclosing {
-            return enclosing.get(name);
-        }
-        None
-    }
-}
 
 pub struct TypeChecker {
     env: TypeEnvironment,
     source: String,
     checked_modules: HashMap<PathBuf, HashMap<String, (TypeInfo, Visibility)>>,
+    resolver: ModuleResolver,
 }
 
 impl TypeChecker {
@@ -54,6 +22,7 @@ impl TypeChecker {
             env: TypeEnvironment::new(),
             source: String::new(),
             checked_modules: HashMap::new(),
+            resolver: ModuleResolver::new(String::new()),
         };
         
         // Register native functions as public
@@ -66,7 +35,8 @@ impl TypeChecker {
     }
 
     pub fn set_source(&mut self, source: String) {
-        self.source = source;
+        self.source = source.clone();
+        self.resolver = ModuleResolver::new(source);
     }
 
     pub fn check_statements(&mut self, statements: &[Stmt]) -> Result<(), LavinaError> {
@@ -217,7 +187,7 @@ impl TypeChecker {
                 Ok(())
             }
             Stmt::Import(path_tokens, alias) => {
-                let path = self.resolve_module_path(path_tokens)?;
+                let path = self.resolver.resolve(path_tokens, ErrorPhase::TypeChecker)?;
                 let module_name = path_tokens.last().unwrap().lexeme.clone();
                 let namespace_name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or(module_name.clone());
 
@@ -269,48 +239,6 @@ impl TypeChecker {
             }
             Stmt::Directive(_) => Ok(()),
         }
-    }
-
-    fn resolve_module_path(&self, path_tokens: &[crate::lexer::Token]) -> Result<PathBuf, LavinaError> {
-        let mut relative_path = PathBuf::new();
-        for token in path_tokens {
-            relative_path.push(&token.lexeme);
-        }
-        relative_path.set_extension("lv");
-
-        // 1. Check relative to current directory
-        if relative_path.exists() {
-            return Ok(fs::canonicalize(relative_path).unwrap());
-        }
-
-        // 2. Check LVPATH environment variable
-        if let Ok(lv_path) = std::env::var("LVPATH") {
-            for dir in std::env::split_paths(&lv_path) {
-                let full_path = dir.join(&relative_path);
-                if full_path.exists() {
-                    return Ok(fs::canonicalize(full_path).unwrap());
-                }
-            }
-        }
-
-        // 3. Special case for 'lavina' (std lib)
-        if path_tokens[0].lexeme == "lavina" {
-            let mut std_path = PathBuf::from("std");
-            for token in &path_tokens[1..] {
-                std_path.push(&token.lexeme);
-            }
-            std_path.set_extension("lv");
-            if std_path.exists() {
-                return Ok(fs::canonicalize(std_path).unwrap());
-            }
-        }
-
-        Err(LavinaError::new(
-            ErrorPhase::TypeChecker,
-            format!("Module not found: {:?}", relative_path),
-            path_tokens[0].line,
-            path_tokens[0].column,
-        ).with_context(&self.source))
     }
 
     pub fn check_expr(&mut self, expr: &Expr) -> Result<Type, LavinaError> {
