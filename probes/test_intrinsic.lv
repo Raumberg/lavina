@@ -16,7 +16,7 @@ print("typeof v: " + typeof(v))
 
 // Testing cast and smart print
 string str_num = "123"
-int n = cast(str_num, "int")
+int n = cast(str_num, int)
 print("Casted {} to int: {}", str_num, n)
 print("Type of n is {}", typeof(n))
 print("Formatting: {} + {} = {}", 1, 1, 2)

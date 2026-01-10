@@ -370,6 +370,48 @@ impl VM {
                     }
                 }
 
+                OpCode::Cast => {
+                    let target_type_val = self.pop();
+                    let value = self.pop();
+                    
+                    let target_type = match target_type_val {
+                        Value::Object(idx) => {
+                            let obj = self.memory.heap[idx].as_ref().unwrap();
+                            if let ObjType::String(s) = &obj.obj_type {
+                                s.clone()
+                            } else { return self.runtime_error("Target type must be a string."); }
+                        }
+                        Value::String(s) => s,
+                        _ => return self.runtime_error("Target type must be a string."),
+                    };
+
+                    // Reusing logic similar to native_cast
+                    let result = match target_type.as_str() {
+                        "int" => match &value {
+                            Value::Int(i) => Value::Int(*i),
+                            Value::Float(f) => Value::Int(*f as i64),
+                            Value::String(s) => s.parse::<i64>().map(Value::Int).unwrap_or(Value::Null),
+                            Value::Object(idx) => {
+                                let obj = self.memory.heap[*idx].as_ref().unwrap();
+                                if let ObjType::String(s) = &obj.obj_type {
+                                    s.parse::<i64>().map(Value::Int).unwrap_or(Value::Null)
+                                } else { Value::Null }
+                            }
+                            _ => Value::Null,
+                        },
+                        "float" => match &value {
+                            Value::Int(i) => Value::Float(*i as f64),
+                            Value::Float(f) => Value::Float(*f),
+                            Value::String(s) => s.parse::<f64>().map(Value::Float).unwrap_or(Value::Null),
+                            _ => Value::Null,
+                        },
+                        "string" => Value::String(self.value_to_string(&value)),
+                        "bool" => Value::Bool(value.is_truthy()),
+                        _ => return self.runtime_error(&format!("Unknown target type for cast: {}", target_type)),
+                    };
+                    self.push(result);
+                }
+
                 OpCode::GetProperty => {
                     let name = self.read_string_constant();
                     let receiver = self.pop();

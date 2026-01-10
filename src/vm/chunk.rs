@@ -101,6 +101,7 @@ impl Chunk {
             OpCode::SetProperty => self.constant_instruction("OP_SET_PROPERTY", offset),
             OpCode::Class => self.constant_instruction("OP_CLASS", offset),
             OpCode::Method => self.constant_instruction("OP_METHOD", offset),
+            OpCode::Cast => self.simple_instruction("OP_CAST", offset),
         }
     }
 

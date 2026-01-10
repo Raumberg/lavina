@@ -10,9 +10,6 @@ public auto fn clock():
 public auto fn typeof(dynamic x):
     return __native_typeof(x)
 
-public auto fn cast(dynamic x, string t):
-    return __native_cast(x, t)
-
 public enum Result:
     dynamic Ok
     string Error

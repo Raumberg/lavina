@@ -563,6 +563,16 @@ impl Parser {
     }
 
     fn finish_call(&mut self, callee: Expr) -> Result<Expr, LavinaError> {
+        if let Expr::Variable(name) = &callee {
+            if name.lexeme == "cast" {
+                let expr = self.expression()?;
+                self.consume(TokenType::Comma, "Expect ',' after value in cast().")?;
+                let target_type = self.parse_type()?;
+                self.consume(TokenType::RightParen, "Expect ')' after type in cast().")?;
+                return Ok(Expr::Cast(Box::new(expr), target_type));
+            }
+        }
+        
         let mut arguments = Vec::new();
         if !self.check(&TokenType::RightParen) {
             loop {

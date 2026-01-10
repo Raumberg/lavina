@@ -34,7 +34,6 @@ impl TypeChecker {
         checker.env.define("__native_len".to_string(), TypeInfo::Function(Type::Int, vec![Type::Dynamic], false, false), Visibility::Private);
         checker.env.define("__native_clock".to_string(), TypeInfo::Function(Type::Float, vec![], false, false), Visibility::Private);
         checker.env.define("__native_typeof".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic], false, false), Visibility::Private);
-        checker.env.define("__native_cast".to_string(), TypeInfo::Function(Type::Dynamic, vec![Type::Dynamic, Type::String], false, false), Visibility::Private);
         checker.env.define("__native_sqrt".to_string(), TypeInfo::Function(Type::Float, vec![Type::Dynamic], false, false), Visibility::Private);
         checker.env.define("__native_abs".to_string(), TypeInfo::Function(Type::Dynamic, vec![Type::Dynamic], false, false), Visibility::Private);
         checker.env.define("__native_sin".to_string(), TypeInfo::Function(Type::Float, vec![Type::Dynamic], false, false), Visibility::Private);
@@ -50,7 +49,6 @@ impl TypeChecker {
         checker.env.define("len".to_string(), TypeInfo::Function(Type::Int, vec![Type::Dynamic], false, false), Visibility::Public);
         checker.env.define("clock".to_string(), TypeInfo::Function(Type::Float, vec![], false, false), Visibility::Public);
         checker.env.define("typeof".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic], false, false), Visibility::Public);
-        checker.env.define("cast".to_string(), TypeInfo::Function(Type::Dynamic, vec![Type::Dynamic, Type::String], false, false), Visibility::Public);
         
         checker
     }
@@ -650,6 +648,10 @@ impl TypeChecker {
                 Ok(val_type)
             }
             Expr::This(_) => Ok(Type::Dynamic),
+            Expr::Cast(expr, target_type) => {
+                self.check_expr(expr)?;
+                Ok(target_type.clone())
+            }
         }
     }
 

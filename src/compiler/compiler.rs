@@ -1,4 +1,4 @@
-use crate::parser::ast::{Expr, Stmt, Literal, Visibility};
+use crate::parser::ast::{Expr, Stmt, Literal, Type, Visibility};
 use crate::vm::chunk::{Chunk, UpvalueLoc};
 use crate::vm::opcode::OpCode;
 use crate::lexer::TokenType;
@@ -659,8 +659,30 @@ impl Compiler {
                     return Err(self.error("Can't use 'this' outside of a class method.".to_string(), token.line, token.column));
                 }
             }
+            Expr::Cast(expr, target_type) => {
+                self.compile_expr(expr)?;
+                let type_name = self.type_to_string(target_type);
+                let constant = self.add_constant(Value::String(type_name));
+                self.emit_constant(constant as u8, 0);
+                self.emit_byte(OpCode::Cast as u8, 0);
+            }
         }
         Ok(())
+    }
+
+    fn type_to_string(&self, t: &Type) -> String {
+        match t {
+            Type::Int => "int".to_string(),
+            Type::Float => "float".to_string(),
+            Type::String => "string".to_string(),
+            Type::Bool => "bool".to_string(),
+            Type::Array(_) => "vector".to_string(),
+            Type::Dict(_, _) => "hashmap".to_string(),
+            Type::Dynamic => "dynamic".to_string(),
+            Type::Null => "null".to_string(),
+            Type::Custom(name) => name.clone(),
+            _ => "dynamic".to_string(),
+        }
     }
 
     fn add_local(&mut self, name: String) {

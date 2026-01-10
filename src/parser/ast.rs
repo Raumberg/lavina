@@ -41,6 +41,7 @@ pub enum Expr {
     Set(Box<Expr>, Token, Box<Expr>), // property assignment: object.property = value
     StaticGet(Box<Expr>, Token), // static/namespace access: namespace::member
     This(Token),
+    Cast(Box<Expr>, Type),
 }
 
 #[derive(Debug, Clone, PartialEq)]
