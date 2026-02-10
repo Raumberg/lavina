@@ -7,3 +7,4 @@ pub mod type_checker;
 pub mod vm;
 pub mod compiler;
 pub mod util;
+pub mod codegen;

@@ -1,0 +1,18 @@
+enum Result:
+    int Ok
+    string Error
+    null Loading
+
+auto r1 = Result::Ok(42)
+auto r2 = Result::Error("Something went wrong")
+auto r3 = Result::Loading()
+
+print(r1["_tag"])
+print(r2["_tag"])
+print(r3["_tag"])
+
+if r1["_tag"] == "Ok":
+    print("R1 is OK, value: " + r1["0"])
+
+if r2["_tag"] == "Error":
+    print("R2 is Error, msg: " + r2["0"])

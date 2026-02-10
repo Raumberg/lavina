@@ -1,17 +1,17 @@
-use crate::parser::ast::{Expr, Stmt, Literal, Type, Visibility};
-use crate::vm::chunk::{Chunk, UpvalueLoc};
-use crate::vm::opcode::OpCode;
+use crate::compiler::scope::{FunctionType, Local};
+use crate::error::ErrorPhase;
+use crate::error::LavinaError;
+use crate::eval::value::Value;
 use crate::lexer::TokenType;
 use crate::lexer::scanner::Scanner;
+use crate::parser::ast::{Expr, Literal, Stmt, Type, Visibility};
 use crate::parser::parser::Parser;
-use crate::error::LavinaError;
-use crate::eval::value::{Value};
-use crate::compiler::scope::{Local, FunctionType};
 use crate::util::module_resolver::ModuleResolver;
-use crate::error::ErrorPhase;
+use crate::vm::chunk::{Chunk, UpvalueLoc};
+use crate::vm::opcode::OpCode;
 use std::collections::HashMap;
-use std::path::{PathBuf};
 use std::fs;
+use std::path::PathBuf;
 
 pub struct CompilerLevel {
     pub function: crate::vm::object::ObjFunction,
@@ -40,7 +40,7 @@ impl Compiler {
             upvalues: Vec::new(),
             function_type: f_type,
         };
-        
+
         level.locals.push(Local {
             name: "".to_string(),
             depth: 0,
@@ -66,14 +66,17 @@ impl Compiler {
         LavinaError::new(ErrorPhase::Compiler, message, line, column)
     }
 
-    pub fn compile(mut self, statements: &[Stmt]) -> Result<crate::vm::object::ObjFunction, LavinaError> {
+    pub fn compile(
+        mut self,
+        statements: &[Stmt],
+    ) -> Result<crate::vm::object::ObjFunction, LavinaError> {
         for stmt in statements {
             self.compile_stmt(stmt)?;
         }
-        
+
         self.emit_byte(OpCode::Null as u8, 0);
         self.emit_byte(OpCode::Return as u8, 0);
-        
+
         Ok(self.levels.pop().unwrap().function)
     }
 
@@ -90,8 +93,10 @@ impl Compiler {
                 } else {
                     self.emit_byte(OpCode::Null as u8, name.line);
                 }
-                
-                if self.current_level().function_type != FunctionType::Script || self.current_level().scope_depth > 0 {
+
+                if self.current_level().function_type != FunctionType::Script
+                    || self.current_level().scope_depth > 0
+                {
                     self.add_local(name.lexeme.clone());
                 } else {
                     let constant = self.add_constant(Value::String(name.lexeme.clone()));
@@ -103,7 +108,7 @@ impl Compiler {
             Stmt::Function(decl) => {
                 let name = decl.name.lexeme.clone();
                 let arity = decl.params.len();
-                
+
                 let mut level = CompilerLevel {
                     function: crate::vm::object::ObjFunction {
                         arity,
@@ -115,25 +120,34 @@ impl Compiler {
                     upvalues: Vec::new(),
                     function_type: FunctionType::Function,
                 };
-                level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                level.locals.push(Local {
+                    name: "".to_string(),
+                    depth: 0,
+                    is_captured: false,
+                });
                 for (param_name, _) in &decl.params {
-                    level.locals.push(Local { name: param_name.lexeme.clone(), depth: 0, is_captured: false });
+                    level.locals.push(Local {
+                        name: param_name.lexeme.clone(),
+                        depth: 0,
+                        is_captured: false,
+                    });
                 }
                 self.levels.push(level);
 
                 for s in &decl.body {
                     self.compile_stmt(s)?;
                 }
-                
+
                 self.emit_byte(OpCode::Null as u8, 0);
                 self.emit_byte(OpCode::Return as u8, 0);
                 let mut finished_level = self.levels.pop().unwrap();
                 finished_level.function.chunk.upvalues = finished_level.upvalues;
-                
-                let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+
+                let constant =
+                    self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
                 self.emit_byte(OpCode::Closure as u8, decl.name.line);
                 self.emit_byte(constant as u8, decl.name.line);
-                
+
                 if self.current_level().scope_depth > 0 {
                     self.add_local(name);
                 } else {
@@ -141,7 +155,7 @@ impl Compiler {
                     self.emit_byte(OpCode::DefineGlobal as u8, decl.name.line);
                     self.emit_byte(name_const as u8, decl.name.line);
                 }
-                
+
                 Ok(())
             }
             Stmt::Namespace(name, body, _) => {
@@ -156,25 +170,30 @@ impl Compiler {
                     upvalues: Vec::new(),
                     function_type: FunctionType::Script,
                 };
-                level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                level.locals.push(Local {
+                    name: "".to_string(),
+                    depth: 0,
+                    is_captured: false,
+                });
                 self.levels.push(level);
 
                 for s in body {
                     self.compile_stmt(s)?;
                 }
-                
+
                 // Epilogue: collect public members
                 self.emit_namespace_epilogue(body);
 
                 let mut finished_level = self.levels.pop().unwrap();
                 finished_level.function.chunk.upvalues = finished_level.upvalues;
-                
-                let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+
+                let constant =
+                    self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
                 self.emit_byte(OpCode::Closure as u8, name.line);
                 self.emit_byte(constant as u8, name.line);
                 self.emit_byte(OpCode::Call as u8, name.line);
                 self.emit_byte(0, name.line);
-                
+
                 let name_const = self.add_constant(Value::String(name.lexeme.clone()));
                 self.emit_byte(OpCode::Namespace as u8, name.line);
                 self.emit_byte(name_const as u8, name.line);
@@ -185,29 +204,39 @@ impl Compiler {
             Stmt::Import(path_tokens, alias) => {
                 let path = self.resolver.resolve(path_tokens, ErrorPhase::Compiler)?;
                 let module_name = path_tokens.last().unwrap().lexeme.clone();
-                let namespace_name = alias.as_ref().map(|t| t.lexeme.clone()).unwrap_or(module_name.clone());
+                let namespace_name = alias
+                    .as_ref()
+                    .map(|t| t.lexeme.clone())
+                    .unwrap_or(module_name.clone());
 
                 if !self.compiled_modules.contains_key(&path) {
                     let source = fs::read_to_string(&path).map_err(|e| {
-                        LavinaError::new(ErrorPhase::Compiler, format!("Could not read module file {:?}: {}", path, e), path_tokens[0].line, path_tokens[0].column)
+                        LavinaError::new(
+                            ErrorPhase::Compiler,
+                            format!("Could not read module file {:?}: {}", path, e),
+                            path_tokens[0].line,
+                            path_tokens[0].column,
+                        )
                     })?;
 
                     let mut scanner = Scanner::new(source.clone());
                     let (tokens, errors) = scanner.scan_tokens();
-                    if !errors.is_empty() { return Err(errors[0].clone()); }
+                    if !errors.is_empty() {
+                        return Err(errors[0].clone());
+                    }
 
                     let mut parser = Parser::new(tokens.clone(), source.clone());
                     let statements = parser.parse_program().map_err(|e| e)?;
 
                     let mut sub_compiler = Compiler::new(module_name.clone(), FunctionType::Script);
                     sub_compiler.compiled_modules = self.compiled_modules.clone();
-                    
+
                     // Manually compile with epilogue
                     for s in &statements {
                         sub_compiler.compile_stmt(s)?;
                     }
                     sub_compiler.emit_namespace_epilogue(&statements);
-                    
+
                     let module_fn = sub_compiler.levels.pop().unwrap().function;
                     self.compiled_modules.insert(path.clone(), module_fn);
                 }
@@ -218,7 +247,7 @@ impl Compiler {
                 self.emit_byte(constant as u8, path_tokens[0].line);
                 self.emit_byte(OpCode::Call as u8, path_tokens[0].line);
                 self.emit_byte(0, path_tokens[0].line);
-                
+
                 let name_const = self.add_constant(Value::String(namespace_name.clone()));
                 self.emit_byte(OpCode::Namespace as u8, path_tokens[0].line);
                 self.emit_byte(name_const as u8, path_tokens[0].line);
@@ -228,7 +257,9 @@ impl Compiler {
             }
             Stmt::Block(stmts) => {
                 self.begin_scope();
-                for s in stmts { self.compile_stmt(s)?; }
+                for s in stmts {
+                    self.compile_stmt(s)?;
+                }
                 self.end_scope();
                 Ok(())
             }
@@ -240,7 +271,9 @@ impl Compiler {
                 let else_jump = self.emit_jump(OpCode::Jump as u8);
                 self.patch_jump(then_jump);
                 self.emit_byte(OpCode::Pop as u8, 0);
-                if let Some(else_stmt) = else_branch { self.compile_stmt(else_stmt)?; }
+                if let Some(else_stmt) = else_branch {
+                    self.compile_stmt(else_stmt)?;
+                }
                 self.patch_jump(else_jump);
                 Ok(())
             }
@@ -262,14 +295,14 @@ impl Compiler {
                 let zero = self.add_constant(Value::Int(0));
                 self.emit_constant(zero as u8, item_name.line);
                 self.add_local("_i".to_string());
-                
+
                 let loop_start = self.current_level().function.chunk.code.len();
                 let coll_idx = self.resolve_local("_collection").unwrap();
                 let i_idx = self.resolve_local("_i").unwrap();
-                
+
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
-                
+
                 let len_const = self.add_constant(Value::String("len".to_string()));
                 self.emit_byte(OpCode::GetGlobal as u8, item_name.line);
                 self.emit_byte(len_const as u8, item_name.line);
@@ -277,11 +310,11 @@ impl Compiler {
                 self.emit_byte(coll_idx as u8, item_name.line);
                 self.emit_byte(OpCode::Call as u8, item_name.line);
                 self.emit_byte(1, item_name.line);
-                
+
                 self.emit_byte(OpCode::Less as u8, item_name.line);
                 let exit_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
                 self.emit_byte(OpCode::Pop as u8, 0);
-                
+
                 self.begin_scope();
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(coll_idx as u8, item_name.line);
@@ -289,10 +322,10 @@ impl Compiler {
                 self.emit_byte(i_idx as u8, item_name.line);
                 self.emit_byte(OpCode::GetIndex as u8, item_name.line);
                 self.add_local(item_name.lexeme.clone());
-                
+
                 self.compile_stmt(body)?;
                 self.end_scope();
-                
+
                 self.emit_byte(OpCode::GetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
                 let one = self.add_constant(Value::Int(1));
@@ -301,7 +334,7 @@ impl Compiler {
                 self.emit_byte(OpCode::SetLocal as u8, item_name.line);
                 self.emit_byte(i_idx as u8, item_name.line);
                 self.emit_byte(OpCode::Pop as u8, 0);
-                
+
                 self.emit_loop(loop_start);
                 self.patch_jump(exit_jump);
                 self.emit_byte(OpCode::Pop as u8, 0);
@@ -311,7 +344,11 @@ impl Compiler {
             Stmt::Return(keyword, value) => {
                 if let Some(expr) = value {
                     if self.current_level().function.name.ends_with("::__init__") {
-                        return Err(self.error("Can't return a value from an initializer.".to_string(), keyword.line, keyword.column));
+                        return Err(self.error(
+                            "Can't return a value from an initializer.".to_string(),
+                            keyword.line,
+                            keyword.column,
+                        ));
                     }
                     self.compile_expr(expr)?;
                 } else {
@@ -331,11 +368,11 @@ impl Compiler {
                 let name_const = self.add_constant(Value::String(name_str.clone()));
                 self.emit_byte(OpCode::Class as u8, name.line);
                 self.emit_byte(name_const as u8, name.line);
-                
+
                 // Define global early so we can refer to the class in its methods
                 self.emit_byte(OpCode::DefineGlobal as u8, name.line);
                 self.emit_byte(name_const as u8, name.line);
-                
+
                 // Now get it back on stack for methods
                 self.emit_byte(OpCode::GetGlobal as u8, name.line);
                 self.emit_byte(name_const as u8, name.line);
@@ -345,7 +382,7 @@ impl Compiler {
                         Stmt::Function(decl) => {
                             let method_name = decl.name.lexeme.clone();
                             let is_init = method_name == "__init__";
-                            
+
                             // Push new level for method
                             let mut level = CompilerLevel {
                                 function: crate::vm::object::ObjFunction {
@@ -358,24 +395,36 @@ impl Compiler {
                                 upvalues: Vec::new(),
                                 function_type: FunctionType::Function,
                             };
-                            
+
                             if !decl.is_static {
                                 // Slot 0 is 'this' for instance methods
-                                level.locals.push(Local { name: "this".to_string(), depth: 0, is_captured: false });
+                                level.locals.push(Local {
+                                    name: "this".to_string(),
+                                    depth: 0,
+                                    is_captured: false,
+                                });
                             } else {
                                 // Slot 0 is empty for static methods (script-like)
-                                level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                                level.locals.push(Local {
+                                    name: "".to_string(),
+                                    depth: 0,
+                                    is_captured: false,
+                                });
                             }
-                            
+
                             for (param_name, _) in &decl.params {
-                                level.locals.push(Local { name: param_name.lexeme.clone(), depth: 0, is_captured: false });
+                                level.locals.push(Local {
+                                    name: param_name.lexeme.clone(),
+                                    depth: 0,
+                                    is_captured: false,
+                                });
                             }
                             self.levels.push(level);
 
                             for body_stmt in &decl.body {
                                 self.compile_stmt(body_stmt)?;
                             }
-                            
+
                             if is_init {
                                 self.emit_byte(OpCode::GetLocal as u8, 0);
                                 self.emit_byte(0, 0); // slot 0 is 'this'
@@ -383,14 +432,16 @@ impl Compiler {
                                 self.emit_byte(OpCode::Null as u8, 0);
                             }
                             self.emit_byte(OpCode::Return as u8, 0);
-                            
+
                             let mut finished_level = self.levels.pop().unwrap();
                             finished_level.function.chunk.upvalues = finished_level.upvalues;
-                            
-                            let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
+
+                            let constant = self.add_constant(Value::TemplateFunction(Box::new(
+                                finished_level.function,
+                            )));
                             self.emit_byte(OpCode::Closure as u8, decl.name.line);
                             self.emit_byte(constant as u8, decl.name.line);
-                            
+
                             let method_const = self.add_constant(Value::String(method_name));
                             self.emit_byte(OpCode::Method as u8, decl.name.line);
                             self.emit_byte(method_const as u8, decl.name.line);
@@ -414,7 +465,7 @@ impl Compiler {
                 for variant in variants {
                     let variant_name = variant.name.lexeme.clone();
                     let arity = variant.types.len();
-                    
+
                     if arity == 0 {
                         // Constant variant: just a map { "_tag": "variant_name" }
                         let tag_key = self.add_constant(Value::String("_tag".to_string()));
@@ -423,7 +474,7 @@ impl Compiler {
                         self.emit_constant(tag_val as u8, variant.name.line);
                         self.emit_byte(OpCode::HashMap as u8, variant.name.line);
                         self.emit_byte(1, variant.name.line); // 1 pair
-                        
+
                         let name_const = self.add_constant(Value::String(variant_name.clone()));
                         self.emit_byte(OpCode::DefineGlobal as u8, variant.name.line);
                         self.emit_byte(name_const as u8, variant.name.line);
@@ -441,9 +492,17 @@ impl Compiler {
                             upvalues: Vec::new(),
                             function_type: FunctionType::Function,
                         };
-                        level.locals.push(Local { name: "".to_string(), depth: 0, is_captured: false });
+                        level.locals.push(Local {
+                            name: "".to_string(),
+                            depth: 0,
+                            is_captured: false,
+                        });
                         for i in 0..arity {
-                            level.locals.push(Local { name: format!("arg{}", i), depth: 0, is_captured: false });
+                            level.locals.push(Local {
+                                name: format!("arg{}", i),
+                                depth: 0,
+                                is_captured: false,
+                            });
                         }
                         self.levels.push(level);
 
@@ -467,18 +526,20 @@ impl Compiler {
 
                         self.emit_byte(OpCode::Return as u8, variant.name.line);
                         let finished_level = self.levels.pop().unwrap();
-                        let constant = self.add_constant(Value::TemplateFunction(Box::new(finished_level.function)));
-                        
+                        let constant = self.add_constant(Value::TemplateFunction(Box::new(
+                            finished_level.function,
+                        )));
+
                         self.emit_byte(OpCode::Closure as u8, variant.name.line);
                         self.emit_byte(constant as u8, variant.name.line);
-                        
+
                         let name_const = self.add_constant(Value::String(variant_name.clone()));
                         self.emit_byte(OpCode::DefineGlobal as u8, variant.name.line);
                         self.emit_byte(name_const as u8, variant.name.line);
                         public_members.push(variant_name);
                     }
                 }
-                
+
                 // Now create a namespace for the enum
                 for member in &public_members {
                     let m_const = self.add_constant(Value::String(member.clone()));
@@ -488,26 +549,26 @@ impl Compiler {
                 }
                 self.emit_byte(OpCode::HashMap as u8, name.line);
                 self.emit_byte(public_members.len() as u8, name.line);
-                
+
                 let ns_const = self.add_constant(Value::String(enum_name.clone()));
                 self.emit_byte(OpCode::Namespace as u8, name.line);
                 self.emit_byte(ns_const as u8, name.line);
-                
+
                 self.emit_byte(OpCode::DefineGlobal as u8, name.line);
                 self.emit_byte(ns_const as u8, name.line);
-                
+
                 Ok(())
             }
             Stmt::Try(try_body, catch_token, exception_name, catch_body) => {
                 let try_jump = self.emit_jump(OpCode::Try as u8);
-                
+
                 self.compile_stmt(try_body)?;
                 self.emit_byte(OpCode::EndTry as u8, catch_token.line);
-                
+
                 let catch_jump = self.emit_jump(OpCode::Jump as u8);
-                
+
                 self.patch_jump(try_jump);
-                
+
                 // Exception value is on stack
                 if let Some(name) = exception_name {
                     self.begin_scope();
@@ -518,7 +579,7 @@ impl Compiler {
                     self.emit_byte(OpCode::Pop as u8, catch_token.line);
                     self.compile_stmt(catch_body)?;
                 }
-                
+
                 self.patch_jump(catch_jump);
                 Ok(())
             }
@@ -535,10 +596,18 @@ impl Compiler {
                 Stmt::Let(n, _, _, v) if v == &Visibility::Public => {
                     public_members.push(n.lexeme.clone());
                 }
-                Stmt::Class(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
-                Stmt::Struct(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
-                Stmt::Enum(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
-                Stmt::Namespace(n, _, v) if v == &Visibility::Public => public_members.push(n.lexeme.clone()),
+                Stmt::Class(n, _, v) if v == &Visibility::Public => {
+                    public_members.push(n.lexeme.clone())
+                }
+                Stmt::Struct(n, _, v) if v == &Visibility::Public => {
+                    public_members.push(n.lexeme.clone())
+                }
+                Stmt::Enum(n, _, v) if v == &Visibility::Public => {
+                    public_members.push(n.lexeme.clone())
+                }
+                Stmt::Namespace(n, _, v) if v == &Visibility::Public => {
+                    public_members.push(n.lexeme.clone())
+                }
                 _ => {}
             }
         }
@@ -550,7 +619,7 @@ impl Compiler {
             self.emit_byte(OpCode::GetGlobal as u8, 0);
             self.emit_byte(name_const as u8, 0);
         }
-        
+
         let count = public_members.len();
         self.emit_byte(OpCode::HashMap as u8, 0);
         self.emit_byte(count as u8, 0);
@@ -560,9 +629,18 @@ impl Compiler {
     fn compile_expr(&mut self, expr: &Expr) -> Result<(), LavinaError> {
         match expr {
             Expr::Literal(lit) => match lit {
-                Literal::Int(i) => { let c = self.add_constant(Value::Int(*i)); self.emit_constant(c as u8, 0); }
-                Literal::Float(f) => { let c = self.add_constant(Value::Float(*f)); self.emit_constant(c as u8, 0); }
-                Literal::String(s) => { let c = self.add_constant(Value::String(s.clone())); self.emit_constant(c as u8, 0); }
+                Literal::Int(i) => {
+                    let c = self.add_constant(Value::Int(*i));
+                    self.emit_constant(c as u8, 0);
+                }
+                Literal::Float(f) => {
+                    let c = self.add_constant(Value::Float(*f));
+                    self.emit_constant(c as u8, 0);
+                }
+                Literal::String(s) => {
+                    let c = self.add_constant(Value::String(s.clone()));
+                    self.emit_constant(c as u8, 0);
+                }
                 Literal::Bool(true) => self.emit_byte(OpCode::True as u8, 0),
                 Literal::Bool(false) => self.emit_byte(OpCode::False as u8, 0),
                 Literal::Null => self.emit_byte(OpCode::Null as u8, 0),
@@ -571,7 +649,8 @@ impl Compiler {
                 if let Some(arg) = self.resolve_local(&name.lexeme) {
                     self.emit_byte(OpCode::GetLocal as u8, name.line);
                     self.emit_byte(arg as u8, name.line);
-                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, &name.lexeme) {
+                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, &name.lexeme)
+                {
                     self.emit_byte(OpCode::GetUpvalue as u8, name.line);
                     self.emit_byte(arg as u8, name.line);
                 } else {
@@ -585,7 +664,8 @@ impl Compiler {
                 if let Some(arg) = self.resolve_local(&name.lexeme) {
                     self.emit_byte(OpCode::SetLocal as u8, name.line);
                     self.emit_byte(arg as u8, name.line);
-                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, &name.lexeme) {
+                } else if let Some(arg) = self.resolve_upvalue(self.levels.len() - 1, &name.lexeme)
+                {
                     self.emit_byte(OpCode::SetUpvalue as u8, name.line);
                     self.emit_byte(arg as u8, name.line);
                 } else {
@@ -605,15 +685,26 @@ impl Compiler {
                     TokenType::EqualEqual => self.emit_byte(OpCode::Equal as u8, op.line),
                     TokenType::Greater => self.emit_byte(OpCode::Greater as u8, op.line),
                     TokenType::Less => self.emit_byte(OpCode::Less as u8, op.line),
-                    TokenType::GreaterEqual => { self.emit_byte(OpCode::Less as u8, op.line); self.emit_byte(OpCode::Not as u8, op.line); }
-                    TokenType::LessEqual => { self.emit_byte(OpCode::Greater as u8, op.line); self.emit_byte(OpCode::Not as u8, op.line); }
-                    TokenType::BangEqual => { self.emit_byte(OpCode::Equal as u8, op.line); self.emit_byte(OpCode::Not as u8, op.line); }
+                    TokenType::GreaterEqual => {
+                        self.emit_byte(OpCode::Less as u8, op.line);
+                        self.emit_byte(OpCode::Not as u8, op.line);
+                    }
+                    TokenType::LessEqual => {
+                        self.emit_byte(OpCode::Greater as u8, op.line);
+                        self.emit_byte(OpCode::Not as u8, op.line);
+                    }
+                    TokenType::BangEqual => {
+                        self.emit_byte(OpCode::Equal as u8, op.line);
+                        self.emit_byte(OpCode::Not as u8, op.line);
+                    }
                     _ => {}
                 }
             }
             Expr::Call(callee, paren, args) => {
                 self.compile_expr(callee)?;
-                for arg in args { self.compile_expr(arg)?; }
+                for arg in args {
+                    self.compile_expr(arg)?;
+                }
                 self.emit_byte(OpCode::Call as u8, paren.line);
                 self.emit_byte(args.len() as u8, paren.line);
             }
@@ -623,12 +714,17 @@ impl Compiler {
                 self.emit_byte(OpCode::GetIndex as u8, bracket.line);
             }
             Expr::Vector(elements) => {
-                for el in elements { self.compile_expr(el)?; }
+                for el in elements {
+                    self.compile_expr(el)?;
+                }
                 self.emit_byte(OpCode::Vector as u8, 0);
                 self.emit_byte(elements.len() as u8, 0);
             }
             Expr::Map(entries) => {
-                for (key, value) in entries { self.compile_expr(key)?; self.compile_expr(value)?; }
+                for (key, value) in entries {
+                    self.compile_expr(key)?;
+                    self.compile_expr(value)?;
+                }
                 self.emit_byte(OpCode::HashMap as u8, 0);
                 self.emit_byte(entries.len() as u8, 0);
             }
@@ -650,7 +746,8 @@ impl Compiler {
                     self.emit_byte(OpCode::Pop as u8, 0);
                     self.compile_expr(right)?;
                     self.patch_jump(end_jump);
-                } else { // AND
+                } else {
+                    // AND
                     let end_jump = self.emit_jump(OpCode::JumpIfFalse as u8);
                     self.emit_byte(OpCode::Pop as u8, 0);
                     self.compile_expr(right)?;
@@ -684,7 +781,11 @@ impl Compiler {
                     self.emit_byte(OpCode::GetUpvalue as u8, token.line);
                     self.emit_byte(arg as u8, token.line);
                 } else {
-                    return Err(self.error("Can't use 'this' outside of a class method.".to_string(), token.line, token.column));
+                    return Err(self.error(
+                        "Can't use 'this' outside of a class method.".to_string(),
+                        token.line,
+                        token.column,
+                    ));
                 }
             }
             Expr::Cast(expr, target_type) => {
@@ -719,45 +820,64 @@ impl Compiler {
 
     fn add_local(&mut self, name: String) {
         let depth = self.current_level().scope_depth;
-        self.current_level_mut().locals.push(Local { name, depth, is_captured: false });
+        self.current_level_mut().locals.push(Local {
+            name,
+            depth,
+            is_captured: false,
+        });
     }
 
     fn resolve_local(&self, name: &str) -> Option<usize> {
         for (i, local) in self.current_level().locals.iter().enumerate().rev() {
-            if local.name == name { return Some(i); }
+            if local.name == name {
+                return Some(i);
+            }
         }
         None
     }
 
     fn resolve_upvalue(&mut self, level_idx: usize, name: &str) -> Option<usize> {
-        if level_idx == 0 { return None; }
+        if level_idx == 0 {
+            return None;
+        }
         let parent_idx = level_idx - 1;
         let mut local_idx = None;
         for (i, local) in self.levels[parent_idx].locals.iter().enumerate().rev() {
-            if local.name == name { local_idx = Some(i); break; }
+            if local.name == name {
+                local_idx = Some(i);
+                break;
+            }
         }
         if let Some(idx) = local_idx {
             self.levels[parent_idx].locals[idx].is_captured = true;
             return Some(self.add_upvalue(level_idx, idx as u8, true));
         }
-        if let Some(upvalue) = self.resolve_upvalue(parent_idx, name) { return Some(self.add_upvalue(level_idx, upvalue as u8, false)); }
+        if let Some(upvalue) = self.resolve_upvalue(parent_idx, name) {
+            return Some(self.add_upvalue(level_idx, upvalue as u8, false));
+        }
         None
     }
 
     fn add_upvalue(&mut self, level_idx: usize, index: u8, is_local: bool) -> usize {
         let level = &mut self.levels[level_idx];
         for (i, uv) in level.upvalues.iter().enumerate() {
-            if uv.index == index && uv.is_local == is_local { return i; }
+            if uv.index == index && uv.is_local == is_local {
+                return i;
+            }
         }
         level.upvalues.push(UpvalueLoc { index, is_local });
         level.upvalues.len() - 1
     }
 
-    fn begin_scope(&mut self) { self.current_level_mut().scope_depth += 1; }
+    fn begin_scope(&mut self) {
+        self.current_level_mut().scope_depth += 1;
+    }
     fn end_scope(&mut self) {
         let depth = self.current_level().scope_depth;
         self.current_level_mut().scope_depth -= 1;
-        while !self.current_level().locals.is_empty() && self.current_level().locals.last().unwrap().depth == depth {
+        while !self.current_level().locals.is_empty()
+            && self.current_level().locals.last().unwrap().depth == depth
+        {
             if self.current_level().locals.last().unwrap().is_captured {
                 self.emit_byte(OpCode::CloseUpvalue as u8, 0);
             } else {
@@ -767,9 +887,16 @@ impl Compiler {
         }
     }
 
-    fn emit_byte(&mut self, byte: u8, line: usize) { self.current_level_mut().function.chunk.write(byte, line); }
-    fn emit_constant(&mut self, value: u8, line: usize) { self.emit_byte(OpCode::Constant as u8, line); self.emit_byte(value, line); }
-    fn add_constant(&mut self, value: Value) -> usize { self.current_level_mut().function.chunk.add_constant(value) }
+    fn emit_byte(&mut self, byte: u8, line: usize) {
+        self.current_level_mut().function.chunk.write(byte, line);
+    }
+    fn emit_constant(&mut self, value: u8, line: usize) {
+        self.emit_byte(OpCode::Constant as u8, line);
+        self.emit_byte(value, line);
+    }
+    fn add_constant(&mut self, value: Value) -> usize {
+        self.current_level_mut().function.chunk.add_constant(value)
+    }
     fn emit_jump(&mut self, instruction: u8) -> usize {
         self.emit_byte(instruction, 0);
         self.emit_byte(0xff, 0);

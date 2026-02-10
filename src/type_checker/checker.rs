@@ -92,7 +92,17 @@ impl TypeChecker {
         checker.env.define("clock".to_string(), TypeInfo::Function(Type::Float, vec![], false, false), Visibility::Public);
         checker.env.define("typeof".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic], false, false), Visibility::Public);
         checker.env.define("range".to_string(), TypeInfo::Function(Type::Array(Box::new(Type::Int)), vec![Type::Int, Type::Int], false, false), Visibility::Public);
-        
+        checker.env.define("input".to_string(), TypeInfo::Function(Type::String, vec![Type::Dynamic], false, false), Visibility::Public);
+        checker.env.define("exit".to_string(), TypeInfo::Function(Type::Void, vec![Type::Int], false, false), Visibility::Public);
+
+        // File I/O and OS functions (used by C++ backend, also available in VM via std)
+        checker.env.define("fs_read".to_string(), TypeInfo::Function(Type::String, vec![Type::String], false, false), Visibility::Public);
+        checker.env.define("fs_write".to_string(), TypeInfo::Function(Type::Void, vec![Type::String, Type::String], false, false), Visibility::Public);
+        checker.env.define("fs_exists".to_string(), TypeInfo::Function(Type::Bool, vec![Type::String], false, false), Visibility::Public);
+        checker.env.define("os_args".to_string(), TypeInfo::Function(Type::Array(Box::new(Type::String)), vec![], false, false), Visibility::Public);
+        checker.env.define("os_exec".to_string(), TypeInfo::Function(Type::Int, vec![Type::String], false, false), Visibility::Public);
+        checker.env.define("os_env".to_string(), TypeInfo::Function(Type::String, vec![Type::String], false, false), Visibility::Public);
+
         checker
     }
 
