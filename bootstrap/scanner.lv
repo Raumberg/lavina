@@ -1,0 +1,456 @@
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — Scanner / Lexer
+//  Translates source code into a flat list of tokens.
+// ═══════════════════════════════════════════════════════════════
+
+// ── Token types as string constants ─────────────────────────────
+
+const string TK_LEFT_PAREN = "LeftParen"
+const string TK_RIGHT_PAREN = "RightParen"
+const string TK_LEFT_BRACKET = "LeftBracket"
+const string TK_RIGHT_BRACKET = "RightBracket"
+const string TK_LEFT_BRACE = "LeftBrace"
+const string TK_RIGHT_BRACE = "RightBrace"
+const string TK_COMMA = "Comma"
+const string TK_DOT = "Dot"
+const string TK_MINUS = "Minus"
+const string TK_PLUS = "Plus"
+const string TK_SEMICOLON = "Semicolon"
+const string TK_SLASH = "Slash"
+const string TK_STAR = "Star"
+const string TK_COLON = "Colon"
+const string TK_HASH = "Hash"
+const string TK_QUESTION = "Question"
+const string TK_BANG = "Bang"
+const string TK_BANG_EQUAL = "BangEqual"
+const string TK_EQUAL = "Equal"
+const string TK_EQUAL_EQUAL = "EqualEqual"
+const string TK_GREATER = "Greater"
+const string TK_GREATER_EQUAL = "GreaterEqual"
+const string TK_LESS = "Less"
+const string TK_LESS_EQUAL = "LessEqual"
+const string TK_ARROW = "Arrow"
+const string TK_DOUBLE_COLON = "DoubleColon"
+const string TK_IDENTIFIER = "Identifier"
+const string TK_STRING = "String"
+const string TK_INT = "Int"
+const string TK_FLOAT = "Float"
+const string TK_AND = "And"
+const string TK_AUTO = "Auto"
+const string TK_BOOL = "Bool"
+const string TK_COMPTIME = "Comptime"
+const string TK_DYNAMIC = "Dynamic"
+const string TK_ELSE = "Else"
+const string TK_FALSE = "False"
+const string TK_FLOAT_TYPE = "FloatType"
+const string TK_FN = "Fn"
+const string TK_IF = "If"
+const string TK_INLINE = "Inline"
+const string TK_INT_TYPE = "IntType"
+const string TK_NULL = "Null"
+const string TK_OR = "Or"
+const string TK_RETURN = "Return"
+const string TK_STRING_TYPE = "StringType"
+const string TK_TRUE = "True"
+const string TK_VOID = "Void"
+const string TK_WHILE = "While"
+const string TK_FOR = "For"
+const string TK_IN = "In"
+const string TK_VECTOR = "Vector"
+const string TK_HASHMAP = "HashMap"
+const string TK_IMPORT = "Import"
+const string TK_AS = "As"
+const string TK_NAMESPACE = "Namespace"
+const string TK_PUBLIC = "Public"
+const string TK_PRIVATE = "Private"
+const string TK_STATIC = "Static"
+const string TK_CLASS = "Class"
+const string TK_STRUCT = "Struct"
+const string TK_ENUM = "Enum"
+const string TK_THIS = "This"
+const string TK_TRY = "Try"
+const string TK_CATCH = "Catch"
+const string TK_THROW = "Throw"
+const string TK_INDENT = "Indent"
+const string TK_DEDENT = "Dedent"
+const string TK_NEWLINE = "Newline"
+const string TK_EOF = "Eof"
+
+// ── Token struct ────────────────────────────────────────────────
+
+class Token:
+    void fn __init__(string token_type, string lexeme, int line, int col):
+        this.token_type = token_type
+        this.lexeme = lexeme
+        this.line = line
+        this.col = col
+
+    string fn to_string():
+        return this.token_type + "(" + this.lexeme + ") at " + this.line + ":" + this.col
+
+// ── Keyword lookup ──────────────────────────────────────────────
+
+string fn lookup_keyword(auto w):
+    if w == "and":
+        return TK_AND
+    else if w == "auto":
+        return TK_AUTO
+    else if w == "bool":
+        return TK_BOOL
+    else if w == "comptime":
+        return TK_COMPTIME
+    else if w == "dynamic":
+        return TK_DYNAMIC
+    else if w == "else":
+        return TK_ELSE
+    else if w == "false":
+        return TK_FALSE
+    else if w == "float":
+        return TK_FLOAT_TYPE
+    else if w == "fn":
+        return TK_FN
+    else if w == "if":
+        return TK_IF
+    else if w == "inline":
+        return TK_INLINE
+    else if w == "int":
+        return TK_INT_TYPE
+    else if w == "null":
+        return TK_NULL
+    else if w == "or":
+        return TK_OR
+    else if w == "return":
+        return TK_RETURN
+    else if w == "string":
+        return TK_STRING_TYPE
+    else if w == "true":
+        return TK_TRUE
+    else if w == "void":
+        return TK_VOID
+    else if w == "while":
+        return TK_WHILE
+    else if w == "for":
+        return TK_FOR
+    else if w == "in":
+        return TK_IN
+    else if w == "vector":
+        return TK_VECTOR
+    else if w == "hashmap":
+        return TK_HASHMAP
+    else if w == "import":
+        return TK_IMPORT
+    else if w == "as":
+        return TK_AS
+    else if w == "namespace":
+        return TK_NAMESPACE
+    else if w == "public":
+        return TK_PUBLIC
+    else if w == "private":
+        return TK_PRIVATE
+    else if w == "static":
+        return TK_STATIC
+    else if w == "class":
+        return TK_CLASS
+    else if w == "struct":
+        return TK_STRUCT
+    else if w == "enum":
+        return TK_ENUM
+    else if w == "this":
+        return TK_THIS
+    else if w == "try":
+        return TK_TRY
+    else if w == "catch":
+        return TK_CATCH
+    else if w == "throw":
+        return TK_THROW
+    return ""
+
+// ── Helper functions ────────────────────────────────────────────
+
+bool fn is_alpha(auto c):
+    if c >= "a" and c <= "z":
+        return true
+    else if c >= "A" and c <= "Z":
+        return true
+    else if c == "_":
+        return true
+    return false
+
+bool fn is_digit(auto c):
+    if c >= "0" and c <= "9":
+        return true
+    return false
+
+bool fn is_alnum(auto c):
+    if is_alpha(c):
+        return true
+    if is_digit(c):
+        return true
+    return false
+
+// ── Scanner class ───────────────────────────────────────────────
+
+class Scanner:
+    string source
+    vector[Token] tokens
+    vector[string] errors
+    int start
+    int current
+    int line
+    int column
+    int start_line
+    int start_column
+    vector[int] indent_stack
+    bool at_line_start
+
+    void fn __init__(string source):
+        this.source = source
+        this.tokens = []
+        this.errors = []
+        this.start = 0
+        this.current = 0
+        this.line = 1
+        this.column = 1
+        this.start_line = 1
+        this.start_column = 1
+        this.indent_stack = [0]
+        this.at_line_start = true
+
+    bool fn is_at_end():
+        return this.current >= this.source.len()
+
+    auto fn peek():
+        if this.is_at_end():
+            return ""
+        return this.source.charAt(this.current)
+
+    auto fn peek_next():
+        if this.current + 1 >= this.source.len():
+            return ""
+        return this.source.charAt(this.current + 1)
+
+    auto fn advance():
+        auto c = this.source.charAt(this.current)
+        this.current = this.current + 1
+        this.column = this.column + 1
+        return c
+
+    bool fn match_char(string expected):
+        if this.is_at_end():
+            return false
+        if this.source.charAt(this.current) != expected:
+            return false
+        this.current = this.current + 1
+        this.column = this.column + 1
+        return true
+
+    void fn add_token(string tk_type, string lexeme):
+        int sl = this.start_line
+        int sc = this.start_column
+        auto tok = Token(tk_type, lexeme, sl, sc)
+        this.tokens.push(tok)
+
+    void fn add_simple_token(string tk_type):
+        auto lexeme = this.source.substring(this.start, this.current)
+        this.add_token(tk_type, lexeme)
+
+    void fn add_error(string message):
+        auto err = "Error at line " + this.line + ":" + this.column + ": " + message
+        this.errors.push(err)
+
+    // ── Indentation handling ────────────────────────────────────
+
+    void fn handle_indentation():
+        int indent = 0
+        while this.is_at_end() == false and (this.peek() == " " or this.peek() == "\t"):
+            auto c = this.advance()
+            if c == " ":
+                indent = indent + 1
+            else:
+                indent = indent + 4
+
+        // Skip blank lines and comment-only lines
+        if this.is_at_end() or this.peek() == "\n":
+            if this.peek() == "\n":
+                this.at_line_start = true
+            return
+        if this.peek() == "/" and this.peek_next() == "/":
+            this.at_line_start = false
+            return
+
+        auto current_indent = this.indent_stack[this.indent_stack.len() - 1]
+        if indent > current_indent:
+            this.indent_stack.push(indent)
+            this.add_token(TK_INDENT, "")
+        else if indent < current_indent:
+            while indent < this.indent_stack[this.indent_stack.len() - 1]:
+                this.indent_stack.pop()
+                this.add_token(TK_DEDENT, "")
+        this.at_line_start = false
+
+    // ── Scan individual tokens ──────────────────────────────────
+
+    void fn scan_string():
+        while this.is_at_end() == false and this.peek() != "\"":
+            if this.peek() == "\n":
+                this.line = this.line + 1
+                this.column = 1
+            if this.peek() == "\\":
+                this.advance()
+            this.advance()
+
+        if this.is_at_end():
+            this.add_error("Unterminated string")
+            return
+
+        this.advance()
+        auto value = this.source.substring(this.start + 1, this.current - 1)
+        this.add_token(TK_STRING, value)
+
+    void fn scan_number():
+        while is_digit(this.peek()):
+            this.advance()
+
+        if this.peek() == "." and is_digit(this.peek_next()):
+            this.advance()
+            while is_digit(this.peek()):
+                this.advance()
+            this.add_simple_token(TK_FLOAT)
+        else:
+            this.add_simple_token(TK_INT)
+
+    void fn scan_identifier():
+        while is_alnum(this.peek()):
+            this.advance()
+
+        auto text = this.source.substring(this.start, this.current)
+        auto kw = lookup_keyword(text)
+        if kw != "":
+            this.add_token(kw, text)
+        else:
+            this.add_token(TK_IDENTIFIER, text)
+
+    void fn scan_token():
+        if this.at_line_start:
+            this.handle_indentation()
+            this.start = this.current
+            this.start_line = this.line
+            this.start_column = this.column
+
+        if this.is_at_end():
+            return
+
+        auto c = this.advance()
+
+        if c == "(":
+            this.add_simple_token(TK_LEFT_PAREN)
+        else if c == ")":
+            this.add_simple_token(TK_RIGHT_PAREN)
+        else if c == "[":
+            this.add_simple_token(TK_LEFT_BRACKET)
+        else if c == "]":
+            this.add_simple_token(TK_RIGHT_BRACKET)
+        else if c == "{":
+            this.add_simple_token(TK_LEFT_BRACE)
+        else if c == "}":
+            this.add_simple_token(TK_RIGHT_BRACE)
+        else if c == ",":
+            this.add_simple_token(TK_COMMA)
+        else if c == ".":
+            this.add_simple_token(TK_DOT)
+        else if c == "?":
+            this.add_simple_token(TK_QUESTION)
+        else if c == "+":
+            this.add_simple_token(TK_PLUS)
+        else if c == ";":
+            this.add_simple_token(TK_SEMICOLON)
+        else if c == "*":
+            this.add_simple_token(TK_STAR)
+        else if c == "-":
+            if this.match_char(">"):
+                this.add_simple_token(TK_ARROW)
+            else:
+                this.add_simple_token(TK_MINUS)
+        else if c == ":":
+            if this.match_char(":"):
+                this.add_simple_token(TK_DOUBLE_COLON)
+            else:
+                this.add_simple_token(TK_COLON)
+        else if c == "#":
+            this.add_simple_token(TK_HASH)
+        else if c == "!":
+            if this.match_char("="):
+                this.add_simple_token(TK_BANG_EQUAL)
+            else:
+                this.add_simple_token(TK_BANG)
+        else if c == "=":
+            if this.match_char("="):
+                this.add_simple_token(TK_EQUAL_EQUAL)
+            else:
+                this.add_simple_token(TK_EQUAL)
+        else if c == "<":
+            if this.match_char("="):
+                this.add_simple_token(TK_LESS_EQUAL)
+            else:
+                this.add_simple_token(TK_LESS)
+        else if c == ">":
+            if this.match_char("="):
+                this.add_simple_token(TK_GREATER_EQUAL)
+            else:
+                this.add_simple_token(TK_GREATER)
+        else if c == "/":
+            if this.match_char("/"):
+                while this.peek() != "\n" and this.is_at_end() == false:
+                    this.advance()
+            else:
+                this.add_simple_token(TK_SLASH)
+        else if c == " " or c == "\r" or c == "\t":
+            int noop = 0
+        else if c == "\n":
+            this.add_token(TK_NEWLINE, "\n")
+            this.line = this.line + 1
+            this.column = 1
+            this.at_line_start = true
+        else if c == "\"":
+            this.scan_string()
+        else if is_digit(c):
+            this.scan_number()
+        else if is_alpha(c):
+            this.scan_identifier()
+        else:
+            this.add_error("Unexpected character: " + c)
+
+    // ── Main entry point ────────────────────────────────────────
+
+    void fn scan_tokens():
+        while this.is_at_end() == false:
+            this.start = this.current
+            this.start_line = this.line
+            this.start_column = this.column
+            this.scan_token()
+
+        // Emit remaining dedents
+        while this.indent_stack.len() > 1:
+            this.indent_stack.pop()
+            this.add_token(TK_DEDENT, "")
+
+        this.add_token(TK_EOF, "")
+
+
+// ═══════════════════════════════════════════════════════════════
+//  Test: scan a simple Lavina program
+// ═══════════════════════════════════════════════════════════════
+
+auto test_source = "int fn add(int a, int b):\n    return a + b\n\nprint(add(2, 3))\n"
+
+auto scanner = Scanner(test_source)
+scanner.scan_tokens()
+
+print("Tokens: " + scanner.tokens.len())
+if scanner.errors.len() > 0:
+    print("ERRORS:")
+    for err in scanner.errors:
+        print(err)
+else:
+    for tok in scanner.tokens:
+        print(tok.to_string())

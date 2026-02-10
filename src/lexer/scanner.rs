@@ -57,6 +57,7 @@ impl Scanner {
         keywords.insert("try".to_string(), TokenType::Try);
         keywords.insert("catch".to_string(), TokenType::Catch);
         keywords.insert("throw".to_string(), TokenType::Throw);
+        keywords.insert("const".to_string(), TokenType::Const);
 
         Self {
             source: source.chars().collect(),

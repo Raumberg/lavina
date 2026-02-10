@@ -66,6 +66,10 @@ impl Parser {
             return Ok(Stmt::Directive(dir));
         }
 
+        if self.match_types(&[TokenType::Const]) {
+            return self.const_declaration(visibility);
+        }
+
         // Hybrid check: Type then Fn OR Type then Identifier
         if self.is_type_at_pos(0) {
             // It could be a type followed by a name (variable) 
@@ -386,6 +390,15 @@ impl Parser {
             is_static,
             visibility,
         }))
+    }
+
+    fn const_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
+        let const_type = self.parse_type()?;
+        let name = self.consume(TokenType::Identifier, "Expect constant name after type.")?.clone();
+        self.consume(TokenType::Equal, "Const declaration must have an initializer.")?;
+        let value = self.expression()?;
+        self.match_types(&[TokenType::Semicolon, TokenType::Newline]);
+        Ok(Stmt::Const(name, const_type, value, visibility))
     }
 
     fn var_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {

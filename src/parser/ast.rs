@@ -71,6 +71,7 @@ pub enum Stmt {
     Struct(Token, Vec<Stmt>, Visibility),
     Enum(Token, Vec<EnumVariant>, Visibility),
     Try(Box<Stmt>, Token, Option<Token>, Box<Stmt>), // try_body, catch_token, exception_name, catch_body
+    Const(Token, Type, Expr, Visibility),
 }
 
 #[derive(Debug, Clone, PartialEq)]

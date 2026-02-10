@@ -141,9 +141,9 @@ impl CppCodegen {
             Expr::Literal(Literal::Bool(_)) => "bool".to_string(),
             Expr::Variable(tok) => {
                 if let Some(t) = param_types.get(&tok.lexeme) {
-                    t.clone()
+                    if t == "auto" { "std::any".to_string() } else { t.clone() }
                 } else {
-                    "auto".to_string()
+                    "std::any".to_string()
                 }
             }
             Expr::Vector(_) => "std::vector<std::any>".to_string(),

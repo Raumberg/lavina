@@ -159,6 +159,21 @@ impl TypeChecker {
                 self.env.define(name.lexeme.clone(), TypeInfo::Variable(final_type), visibility.clone());
                 Ok(())
             }
+            Stmt::Const(name, ty, init, visibility) => {
+                let inferred = self.check_expr(init)?;
+                let final_type = if ty == &Type::Auto { inferred } else {
+                    if !self.is_assignable(ty, &inferred) {
+                        return Err(LavinaError::new(
+                            ErrorPhase::TypeChecker,
+                            format!("Type mismatch in const: expected {:?}, got {:?}", ty, inferred),
+                            name.line, name.column,
+                        ).with_context(&self.source));
+                    }
+                    ty.clone()
+                };
+                self.env.define(name.lexeme.clone(), TypeInfo::Variable(final_type), visibility.clone());
+                Ok(())
+            }
             Stmt::Function(decl) => {
                 let param_types: Vec<Type> = decl.params.iter().map(|(_, t)| t.clone()).collect();
                 self.env.define(decl.name.lexeme.clone(), TypeInfo::Function(decl.return_type.clone(), param_types, decl.is_static, false), decl.visibility.clone());
@@ -223,6 +238,9 @@ impl TypeChecker {
                         Stmt::Let(n, t, _, v) => {
                             let final_t = t.clone().unwrap_or(Type::Auto);
                             members.insert(n.lexeme.clone(), (TypeInfo::Variable(final_t), v.clone()));
+                        }
+                        Stmt::Const(n, t, _, v) => {
+                            members.insert(n.lexeme.clone(), (TypeInfo::Variable(t.clone()), v.clone()));
                         }
                         _ => {}
                     }
@@ -375,6 +393,27 @@ impl TypeChecker {
                     }
                 }
                 
+                // Discover implicit fields from __init__
+                for s in body {
+                    if let Stmt::Function(decl) = s {
+                        if decl.name.lexeme == "__init__" {
+                            let param_map: HashMap<String, Type> = decl.params.iter()
+                                .map(|(tok, ty)| (tok.lexeme.clone(), ty.clone()))
+                                .collect();
+                            for stmt in &decl.body {
+                                if let Stmt::Expression(Expr::Set(obj, field, value)) = stmt {
+                                    if matches!(obj.as_ref(), Expr::This(_)) && !members.contains_key(&field.lexeme) {
+                                        let field_type = Self::infer_init_field_type(value, &param_map);
+                                        members.insert(field.lexeme.clone(),
+                                            (TypeInfo::Variable(field_type), Visibility::Public));
+                                    }
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+
                 self.env.define(name_str.clone(), TypeInfo::Class(name_str.clone(), members), visibility.clone());
                 
                 // Second pass: check method bodies
@@ -456,7 +495,7 @@ impl TypeChecker {
                 match coll_type {
                     Type::Array(inner) => {
                         let idx_type = self.check_expr(index)?;
-                        if idx_type != Type::Int && idx_type != Type::Auto {
+                        if idx_type != Type::Int && idx_type != Type::Auto && idx_type != Type::Dynamic {
                             return Err(LavinaError::new(ErrorPhase::TypeChecker, "Array index must be an integer.".to_string(), bracket.line, bracket.column).with_context(&self.source));
                         }
                         Ok(*inner)
@@ -756,8 +795,21 @@ impl TypeChecker {
         }
     }
 
+    fn infer_init_field_type(expr: &Expr, params: &HashMap<String, Type>) -> Type {
+        match expr {
+            Expr::Variable(tok) => params.get(&tok.lexeme).cloned().unwrap_or(Type::Dynamic),
+            Expr::Literal(Literal::Int(_)) => Type::Int,
+            Expr::Literal(Literal::Float(_)) => Type::Float,
+            Expr::Literal(Literal::String(_)) => Type::String,
+            Expr::Literal(Literal::Bool(_)) => Type::Bool,
+            Expr::Vector(_) => Type::Array(Box::new(Type::Dynamic)),
+            _ => Type::Dynamic,
+        }
+    }
+
     fn is_assignable(&self, target: &Type, value: &Type) -> bool {
         if target == &Type::Auto || target == &Type::Dynamic { return true; }
+        if value == &Type::Auto || value == &Type::Dynamic { return true; }
         if target == value { return true; }
         
         match (target, value) {

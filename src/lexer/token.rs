@@ -27,7 +27,7 @@ pub enum TokenType {
     StringType, True, Void, While, For, In, Vector, HashMap,
     Import, As, Namespace, Public, Private, Static,
     Class, Struct, Enum, This,
-    Try, Catch, Throw,
+    Try, Catch, Throw, Const,
 
     // Special for directives
     HashBracket, // #[

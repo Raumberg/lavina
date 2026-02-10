@@ -92,6 +92,17 @@ impl CppCodegen {
             Stmt::Enum(name, variants, _vis) => {
                 self.emit_enum(name, variants);
             }
+            Stmt::Const(name, ty, init, _vis) => {
+                let cpp_type = self.emit_type(ty);
+                let val = self.emit_expr(init);
+                self.output.push_str(&format!(
+                    "{}const {} {} = {};\n",
+                    self.indent(),
+                    cpp_type,
+                    name.lexeme,
+                    val
+                ));
+            }
             Stmt::Directive(_) | Stmt::Namespace(_, _, _) | Stmt::Import(_, _) => {
                 self.output.push_str(&format!(
                     "{}// TODO: unsupported statement\n",

@@ -583,6 +583,19 @@ impl Compiler {
                 self.patch_jump(catch_jump);
                 Ok(())
             }
+            Stmt::Const(name, _, init, _) => {
+                self.compile_expr(init)?;
+                if self.current_level().function_type != FunctionType::Script
+                    || self.current_level().scope_depth > 0
+                {
+                    self.add_local(name.lexeme.clone());
+                } else {
+                    let constant = self.add_constant(Value::String(name.lexeme.clone()));
+                    self.emit_byte(OpCode::DefineGlobal as u8, name.line);
+                    self.emit_byte(constant as u8, name.line);
+                }
+                Ok(())
+            }
         }
     }
 

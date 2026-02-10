@@ -40,7 +40,8 @@ impl CppCodegen {
         for stmt in stmts {
             match stmt {
                 Stmt::Function(_) | Stmt::Class(_, _, _)
-                | Stmt::Struct(_, _, _) | Stmt::Enum(_, _, _) => {
+                | Stmt::Struct(_, _, _) | Stmt::Enum(_, _, _)
+                | Stmt::Const(_, _, _, _) => {
                     self.emit_stmt(stmt);
                     self.declarations.push_str(&self.output);
                     self.output.clear();

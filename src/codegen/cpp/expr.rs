@@ -67,9 +67,9 @@ impl CppCodegen {
             Expr::Vector(elements) => {
                 let elems: Vec<String> = elements.iter().map(|e| self.emit_expr(e)).collect();
                 if elems.is_empty() {
-                    "std::vector<int64_t>{}".to_string()
+                    "{}".to_string()
                 } else {
-                    format!("std::vector{{{{{}}}}}", elems.join(", "))
+                    format!("std::vector{{{}}}", elems.join(", "))
                 }
             }
             Expr::Map(pairs) => {
@@ -164,7 +164,7 @@ impl CppCodegen {
             Literal::Float(f) => format!("{}", f),
             Literal::String(s) => format!(
                 "std::string(\"{}\")",
-                s.replace('\\', "\\\\").replace('"', "\\\"")
+                s.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', "\\n").replace('\t', "\\t").replace('\r', "\\r")
             ),
             Literal::Bool(b) => if *b { "true" } else { "false" }.to_string(),
             Literal::Null => "std::nullopt".to_string(),
