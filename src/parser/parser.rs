@@ -6,6 +6,7 @@ pub struct Parser {
     tokens: Vec<Token>,
     source: String,
     current: usize,
+    in_class_body: bool,
 }
 
 impl Parser {
@@ -14,6 +15,7 @@ impl Parser {
             tokens,
             source,
             current: 0,
+            in_class_body: false,
         }
     }
 
@@ -99,6 +101,18 @@ impl Parser {
                 if self.check_function_start() {
                     return self.function_declaration(directives, visibility, is_static);
                 }
+                if !self.in_class_body {
+                    // Outside class: require initializer (type name = expr)
+                    // Bare field declarations (type name) only in class/struct
+                    let eq_pos = next_pos + 1; // position after identifier
+                    if self.peek_at(eq_pos).token_type != TokenType::Equal {
+                        let tok = self.peek_at(next_pos).clone();
+                        return Err(self.error(
+                            "Bare field declarations are only allowed inside class/struct. Use 'const' or add '= value'.".to_string(),
+                            tok.line, tok.column,
+                        ));
+                    }
+                }
                 return self.var_declaration(visibility);
             }
         }
@@ -179,14 +193,20 @@ impl Parser {
     fn class_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect class name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after class name.")?;
+        let old = self.in_class_body;
+        self.in_class_body = true;
         let body = self.block()?;
+        self.in_class_body = old;
         Ok(Stmt::Class(name, body, visibility))
     }
 
     fn struct_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect struct name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after struct name.")?;
+        let old = self.in_class_body;
+        self.in_class_body = true;
         let body = self.block()?;
+        self.in_class_body = old;
         Ok(Stmt::Struct(name, body, visibility))
     }
 
