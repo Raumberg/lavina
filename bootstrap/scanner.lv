@@ -444,19 +444,20 @@ class Scanner:
 
 
 // ═══════════════════════════════════════════════════════════════
-//  Test: scan a simple Lavina program
+//  Test: scan a simple Lavina program (used when run standalone)
 // ═══════════════════════════════════════════════════════════════
 
-auto test_source = "int fn add(int a, int b):\n    return a + b\n\nprint(add(2, 3))\n"
+void fn test_scanner():
+    auto test_source = "int fn add(int a, int b):\n    return a + b\n\nprint(add(2, 3))\n"
 
-auto scanner = Scanner(test_source)
-scanner.scan_tokens()
+    auto scanner = Scanner(test_source)
+    scanner.scan_tokens()
 
-print("Tokens: " + scanner.tokens.len())
-if scanner.errors.len() > 0:
-    print("ERRORS:")
-    for err in scanner.errors:
-        print(err)
-else:
-    for tok in scanner.tokens:
-        print(tok.to_string())
+    print("Tokens: " + scanner.tokens.len())
+    if scanner.errors.len() > 0:
+        print("ERRORS:")
+        for err in scanner.errors:
+            print(err)
+    else:
+        for tok in scanner.tokens:
+            print(tok.to_string())

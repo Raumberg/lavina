@@ -29,7 +29,21 @@ impl Parser {
             if self.match_types(&[TokenType::Newline]) {
                 continue;
             }
-            statements.push(self.declaration()?);
+            let stmt = self.declaration()?;
+            match &stmt {
+                Stmt::Function(_) | Stmt::Class(_, _, _) | Stmt::Struct(_, _, _)
+                | Stmt::Enum(_, _, _) | Stmt::Const(_, _, _, _) | Stmt::Let(_, _, _, _)
+                | Stmt::Import(_, _) | Stmt::Namespace(_, _, _) | Stmt::Directive(_) => {}
+                _ => {
+                    let token = self.previous();
+                    return Err(self.error(
+                        "Top-level statements are not allowed. Wrap code in a 'void fn main():' function.".to_string(),
+                        token.line,
+                        token.column,
+                    ));
+                }
+            }
+            statements.push(stmt);
         }
         Ok(statements)
     }

@@ -16,10 +16,10 @@ pub struct CppCodegen {
     pub(super) indent_level: usize,
     pub(super) temp_counter: usize,
     pub(super) declarations: String,
-    pub(super) main_body: String,
     pub(super) known_classes: Vec<ClassInfo>,
     /// Variable names known to hold std::any (declared as `dynamic` or from for-loops over dynamic vectors)
     pub(super) dynamic_vars: HashSet<String>,
+    pub(super) has_main: bool,
 }
 
 pub(super) struct ClassInfo {
@@ -39,9 +39,9 @@ impl CppCodegen {
             indent_level: 0,
             temp_counter: 0,
             declarations: String::new(),
-            main_body: String::new(),
             known_classes: Vec::new(),
             dynamic_vars: HashSet::new(),
+            has_main: false,
         }
     }
 
@@ -63,38 +63,45 @@ impl CppCodegen {
         }
 
         for (i, stmt) in stmts.iter().enumerate() {
-            match stmt {
-                Stmt::Function(_) | Stmt::Class(_, _, _)
-                | Stmt::Struct(_, _, _) | Stmt::Enum(_, _, _)
-                | Stmt::Const(_, _, _, _) => {
-                    self.emit_stmt(stmt);
+            if let Stmt::Function(decl) = stmt {
+                if decl.name.lexeme == "main" {
+                    self.has_main = true;
+                    // Emit main as int main(int argc, char* argv[])
+                    self.output.push_str("int main(int argc, char* argv[]) {\n");
+                    self.output.push_str("    for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);\n");
+                    self.indent_level = 1;
+                    for s in &decl.body {
+                        self.emit_stmt(s);
+                    }
+                    self.indent_level = 0;
+                    self.output.push_str("    return 0;\n}\n");
                     self.declarations.push_str(&self.output);
                     self.output.clear();
+                    continue;
+                }
+            }
 
-                    // After the last class, emit dynamic dispatchers
-                    if Some(i) == last_class_idx && !self.known_classes.is_empty() {
-                        self.emit_dynamic_dispatchers();
-                        self.declarations.push_str(&self.output);
-                        self.output.clear();
-                    }
-                }
-                _ => {
-                    self.indent_level = 1;
-                    self.emit_stmt(stmt);
-                    self.main_body.push_str(&self.output);
-                    self.output.clear();
-                    self.indent_level = 0;
-                }
+            self.emit_stmt(stmt);
+            self.declarations.push_str(&self.output);
+            self.output.clear();
+
+            // After the last class, emit dynamic dispatchers
+            if Some(i) == last_class_idx && !self.known_classes.is_empty() {
+                self.emit_dynamic_dispatchers();
+                self.declarations.push_str(&self.output);
+                self.output.clear();
             }
         }
 
-        let mut result = self.declarations;
-        result.push_str("\nint main(int argc, char* argv[]) {\n");
-        result.push_str("    for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);\n");
-        result.push_str(&self.main_body);
-        result.push_str("    return 0;\n}\n");
+        if !self.has_main {
+            return Err(LavinaError::new(
+                crate::error::ErrorPhase::Compiler,
+                "No 'main()' function defined.".to_string(),
+                0, 0,
+            ));
+        }
 
-        Ok(result)
+        Ok(self.declarations)
     }
 
     fn emit_dynamic_dispatchers(&mut self) {

@@ -962,20 +962,23 @@ class Parser:
 //  Test: parse a simple expression
 // ═══════════════════════════════════════════════════════════════
 
-auto parser_test_source = "1 + 2 * 3\n"
-auto parser_test_scanner = Scanner(parser_test_source)
-parser_test_scanner.scan_tokens()
+void fn main():
+    test_scanner()
 
-auto parser = Parser(parser_test_scanner.tokens)
-vector[dynamic] stmts = parser.parse_program()
+    auto parser_test_source = "1 + 2 * 3\n"
+    auto parser_test_scanner = Scanner(parser_test_source)
+    parser_test_scanner.scan_tokens()
 
-print("Parsed statements: " + stmts.len())
-for stmt in stmts:
-    dynamic expr = stmt.expr
-    if stmt.tag == "ExprStmt":
-        if expr.tag == "Binary":
-            dynamic right = expr.right
-            print("Binary: " + expr.op.lexeme)
-            if right.tag == "Binary":
-                print("  Right is Binary: " + right.op.lexeme)
-                print("OK: precedence correct (1 + (2 * 3))")
+    auto parser = Parser(parser_test_scanner.tokens)
+    vector[dynamic] stmts = parser.parse_program()
+
+    print("Parsed statements: " + stmts.len())
+    for stmt in stmts:
+        dynamic expr = stmt.expr
+        if stmt.tag == "ExprStmt":
+            if expr.tag == "Binary":
+                dynamic right = expr.right
+                print("Binary: " + expr.op.lexeme)
+                if right.tag == "Binary":
+                    print("  Right is Binary: " + right.op.lexeme)
+                    print("OK: precedence correct (1 + (2 * 3))")
