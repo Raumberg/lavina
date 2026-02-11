@@ -1,3 +1,5 @@
+import parser
+
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — C++ Code Generator
 //  Takes AST from the parser and produces C++ source code.
@@ -1044,32 +1046,3 @@ class CppCodegen:
         return this.declarations
 
 
-// ═══════════════════════════════════════════════════════════════
-//  Main: Bootstrap compiler entry point
-// ═══════════════════════════════════════════════════════════════
-
-void fn main():
-    auto args = os_args()
-    if args.len() < 2:
-        print("Usage: bootstrap <file.lv>")
-        print("  Compiles a Lavina source file to C++ on stdout.")
-        exit(1)
-
-    string path = args[1]
-    string source = fs_read(path)
-
-    auto scanner = Scanner(source)
-    scanner.scan_tokens()
-
-    if scanner.errors.len() > 0:
-        print("Scanner errors:")
-        for err in scanner.errors:
-            print(err)
-        exit(1)
-
-    auto parser = Parser(scanner.tokens)
-    vector[Stmt] stmts = parser.parse_program()
-
-    auto codegen = CppCodegen()
-    string cpp = codegen.generate(stmts)
-    print(cpp)

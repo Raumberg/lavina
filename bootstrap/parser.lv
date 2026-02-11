@@ -1,3 +1,5 @@
+import scanner
+
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Parser
 //  Translates a flat token list into an AST.
