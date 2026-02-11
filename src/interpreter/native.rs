@@ -1,5 +1,5 @@
-use crate::eval::value::{Value, NativeFn, ObjType, Obj};
-use crate::vm::memory::Memory;
+use crate::interpreter::value::{Value, NativeFn, ObjType, Obj};
+use crate::interpreter::vm::memory::Memory;
 
 pub fn get_native_functions() -> Vec<(String, NativeFn)> {
     vec![
@@ -252,8 +252,7 @@ fn native_type(memory: &mut Memory, args: Vec<Value>) -> Result<Value, String> {
                 "object"
             }
         },
-        Value::TemplateFunction(_) => "template function",
-        Value::Function(_) => "function",
+        Value::TemplateFunction(_) => "function",
     };
     Ok(Value::String(type_name.to_string()))
 }

@@ -3,9 +3,9 @@ use std::fs;
 use lavina::lexer::scanner::Scanner;
 use lavina::parser::parser::Parser;
 use lavina::type_checker::checker::TypeChecker;
-use lavina::compiler::compiler::{Compiler};
-use lavina::compiler::scope::FunctionType;
-use lavina::vm::vm::VM;
+use lavina::interpreter::compiler::compiler::{Compiler};
+use lavina::interpreter::compiler::scope::FunctionType;
+use lavina::interpreter::vm::vm::VM;
 use lavina::codegen::cpp::{CppCodegen, RUNTIME_HEADER};
 
 fn main() {

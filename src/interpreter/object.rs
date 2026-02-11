@@ -1,7 +1,7 @@
 use std::fmt;
 use std::collections::HashMap;
-use crate::vm::chunk::Chunk;
-use crate::eval::value::Value;
+use crate::interpreter::vm::chunk::Chunk;
+use crate::interpreter::value::Value;
 
 /// Represents the types of objects that can live on the Lavina Heap.
 #[derive(Debug, PartialEq, Clone)]

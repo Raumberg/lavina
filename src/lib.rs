@@ -1,10 +1,8 @@
 pub mod error;
 pub mod lexer;
 pub mod parser;
-pub mod eval;
 pub mod repl;
 pub mod type_checker;
-pub mod vm;
-pub mod compiler;
+pub mod interpreter;
 pub mod util;
 pub mod codegen;

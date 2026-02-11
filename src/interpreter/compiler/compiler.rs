@@ -1,20 +1,20 @@
-use crate::compiler::scope::{FunctionType, Local};
+use crate::interpreter::compiler::scope::{FunctionType, Local};
 use crate::error::ErrorPhase;
 use crate::error::LavinaError;
-use crate::eval::value::Value;
+use crate::interpreter::value::Value;
 use crate::lexer::TokenType;
 use crate::lexer::scanner::Scanner;
 use crate::parser::ast::{Expr, Literal, Stmt, Type, Visibility};
 use crate::parser::parser::Parser;
 use crate::util::module_resolver::ModuleResolver;
-use crate::vm::chunk::{Chunk, UpvalueLoc};
-use crate::vm::opcode::OpCode;
+use crate::interpreter::vm::chunk::{Chunk, UpvalueLoc};
+use crate::interpreter::vm::opcode::OpCode;
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 
 pub struct CompilerLevel {
-    pub function: crate::vm::object::ObjFunction,
+    pub function: crate::interpreter::vm::object::ObjFunction,
     pub locals: Vec<Local>,
     pub scope_depth: i32,
     pub upvalues: Vec<UpvalueLoc>,
@@ -23,14 +23,14 @@ pub struct CompilerLevel {
 
 pub struct Compiler {
     pub levels: Vec<CompilerLevel>,
-    pub compiled_modules: HashMap<PathBuf, crate::vm::object::ObjFunction>,
+    pub compiled_modules: HashMap<PathBuf, crate::interpreter::vm::object::ObjFunction>,
     pub resolver: ModuleResolver,
 }
 
 impl Compiler {
     pub fn new(name: String, f_type: FunctionType) -> Self {
         let mut level = CompilerLevel {
-            function: crate::vm::object::ObjFunction {
+            function: crate::interpreter::vm::object::ObjFunction {
                 arity: 0,
                 chunk: Chunk::new(),
                 name,
@@ -69,7 +69,7 @@ impl Compiler {
     pub fn compile(
         mut self,
         statements: &[Stmt],
-    ) -> Result<crate::vm::object::ObjFunction, LavinaError> {
+    ) -> Result<crate::interpreter::vm::object::ObjFunction, LavinaError> {
         for stmt in statements {
             self.compile_stmt(stmt)?;
         }
@@ -110,7 +110,7 @@ impl Compiler {
                 let arity = decl.params.len();
 
                 let mut level = CompilerLevel {
-                    function: crate::vm::object::ObjFunction {
+                    function: crate::interpreter::vm::object::ObjFunction {
                         arity,
                         chunk: Chunk::new(),
                         name: name.clone(),
@@ -160,7 +160,7 @@ impl Compiler {
             }
             Stmt::Namespace(name, body, _) => {
                 let mut level = CompilerLevel {
-                    function: crate::vm::object::ObjFunction {
+                    function: crate::interpreter::vm::object::ObjFunction {
                         arity: 0,
                         chunk: Chunk::new(),
                         name: name.lexeme.clone(),
@@ -385,7 +385,7 @@ impl Compiler {
 
                             // Push new level for method
                             let mut level = CompilerLevel {
-                                function: crate::vm::object::ObjFunction {
+                                function: crate::interpreter::vm::object::ObjFunction {
                                     arity: decl.params.len(),
                                     chunk: Chunk::new(),
                                     name: format!("{}::{}", name_str, method_name),
@@ -482,7 +482,7 @@ impl Compiler {
                     } else {
                         // Function variant
                         let mut level = CompilerLevel {
-                            function: crate::vm::object::ObjFunction {
+                            function: crate::interpreter::vm::object::ObjFunction {
                                 arity,
                                 chunk: Chunk::new(),
                                 name: format!("{}::{}", enum_name, variant_name),

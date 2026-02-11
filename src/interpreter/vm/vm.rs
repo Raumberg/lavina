@@ -1,9 +1,9 @@
-use crate::vm::opcode::OpCode;
-use crate::vm::object::{ObjType};
-use crate::vm::memory::Memory;
-use crate::vm::frame::CallFrame;
-use crate::eval::value::{Value};
-use crate::eval::native::get_native_functions;
+use crate::interpreter::vm::opcode::OpCode;
+use crate::interpreter::vm::object::{ObjType};
+use crate::interpreter::vm::memory::Memory;
+use crate::interpreter::vm::frame::CallFrame;
+use crate::interpreter::value::{Value};
+use crate::interpreter::native::get_native_functions;
 use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
@@ -48,7 +48,7 @@ impl VM {
         vm
     }
 
-    pub fn interpret(&mut self, function: crate::vm::object::ObjFunction) -> InterpretResult {
+    pub fn interpret(&mut self, function: crate::interpreter::vm::object::ObjFunction) -> InterpretResult {
         self.stack.clear();
         self.open_upvalues.clear();
         
@@ -56,7 +56,7 @@ impl VM {
         self.prepare_function(&mut function);
 
         let function_idx = self.memory.alloc(ObjType::Function(function));
-        let closure = crate::vm::object::ObjClosure {
+        let closure = crate::interpreter::vm::object::ObjClosure {
             function_idx,
             upvalues: Vec::new(),
         };
@@ -72,7 +72,7 @@ impl VM {
         self.run()
     }
 
-    fn prepare_function(&mut self, function: &mut crate::vm::object::ObjFunction) {
+    fn prepare_function(&mut self, function: &mut crate::interpreter::vm::object::ObjFunction) {
         for i in 0..function.chunk.constants.len() {
             match &mut function.chunk.constants[i] {
                 Value::String(s) => {
@@ -346,7 +346,7 @@ impl VM {
 
                 OpCode::Class => {
                     let name = self.read_string_constant();
-                    let class_idx = self.memory.alloc(ObjType::Class(crate::vm::object::ObjClass {
+                    let class_idx = self.memory.alloc(ObjType::Class(crate::interpreter::vm::object::ObjClass {
                         name: name.clone(),
                         methods: HashMap::new(),
                     }));
@@ -504,7 +504,7 @@ impl VM {
 
                     if let Some(method_val) = method {
                         if let Value::Object(m_idx) = method_val {
-                            let bound_idx = self.memory.alloc(ObjType::BoundMethod(crate::vm::object::ObjBoundMethod {
+                            let bound_idx = self.memory.alloc(ObjType::BoundMethod(crate::interpreter::vm::object::ObjBoundMethod {
                                 receiver,
                                 method: m_idx,
                             }));
@@ -567,7 +567,7 @@ impl VM {
                             }
                         }
 
-                        let closure = crate::vm::object::ObjClosure {
+                        let closure = crate::interpreter::vm::object::ObjClosure {
                             function_idx: f_idx,
                             upvalues,
                         };
@@ -591,8 +591,8 @@ impl VM {
                         let uv_obj = self.memory.heap[uv_idx].as_ref().unwrap();
                         if let ObjType::Upvalue(uv) = &uv_obj.obj_type {
                             match uv {
-                                crate::vm::object::Upvalue::Open(pos) => self.stack[*pos].clone(),
-                                crate::vm::object::Upvalue::Closed(val) => val.clone(),
+                                crate::interpreter::vm::object::Upvalue::Open(pos) => self.stack[*pos].clone(),
+                                crate::interpreter::vm::object::Upvalue::Closed(val) => val.clone(),
                             }
                         } else { panic!("Not an upvalue") }
                     };
@@ -612,8 +612,8 @@ impl VM {
                     let uv_obj = self.memory.heap[uv_idx].as_mut().unwrap();
                     if let ObjType::Upvalue(uv) = &mut uv_obj.obj_type {
                         match uv {
-                            crate::vm::object::Upvalue::Open(pos) => self.stack[*pos] = val,
-                            crate::vm::object::Upvalue::Closed(v) => *v = val,
+                            crate::interpreter::vm::object::Upvalue::Open(pos) => self.stack[*pos] = val,
+                            crate::interpreter::vm::object::Upvalue::Closed(v) => *v = val,
                         }
                     } else { panic!("Not an upvalue") }
                 }
@@ -720,7 +720,7 @@ impl VM {
     fn capture_upvalue(&mut self, local_idx: usize) -> usize {
         for uv_idx in &self.open_upvalues {
             if let Some(Some(obj)) = self.memory.heap.get(*uv_idx) {
-                if let ObjType::Upvalue(crate::vm::object::Upvalue::Open(pos)) = &obj.obj_type {
+                if let ObjType::Upvalue(crate::interpreter::vm::object::Upvalue::Open(pos)) = &obj.obj_type {
                     if *pos == local_idx {
                         return *uv_idx;
                     }
@@ -728,7 +728,7 @@ impl VM {
             }
         }
 
-        let uv_idx = self.memory.alloc(ObjType::Upvalue(crate::vm::object::Upvalue::Open(local_idx)));
+        let uv_idx = self.memory.alloc(ObjType::Upvalue(crate::interpreter::vm::object::Upvalue::Open(local_idx)));
         self.open_upvalues.push(uv_idx);
         uv_idx
     }
@@ -741,7 +741,7 @@ impl VM {
             let mut val_to_store = None;
 
             if let Some(Some(obj)) = self.memory.heap.get(uv_idx) {
-                if let ObjType::Upvalue(crate::vm::object::Upvalue::Open(pos)) = &obj.obj_type {
+                if let ObjType::Upvalue(crate::interpreter::vm::object::Upvalue::Open(pos)) = &obj.obj_type {
                     if *pos >= last_slot {
                         close = true;
                         val_to_store = Some(self.stack[*pos].clone());
@@ -752,7 +752,7 @@ impl VM {
             if close {
                 self.open_upvalues.remove(i);
                 let obj = self.memory.heap[uv_idx].as_mut().unwrap();
-                obj.obj_type = ObjType::Upvalue(crate::vm::object::Upvalue::Closed(val_to_store.unwrap()));
+                obj.obj_type = ObjType::Upvalue(crate::interpreter::vm::object::Upvalue::Closed(val_to_store.unwrap()));
             } else {
                 i += 1;
             }
@@ -802,7 +802,7 @@ impl VM {
                         Err("Object is not a function".to_string())
                     }
                     ObjType::Class(class) => {
-                        let instance_idx = self.memory.alloc(ObjType::Instance(crate::vm::object::ObjInstance {
+                        let instance_idx = self.memory.alloc(ObjType::Instance(crate::interpreter::vm::object::ObjInstance {
                             class_idx: idx,
                             fields: HashMap::new(),
                         }));

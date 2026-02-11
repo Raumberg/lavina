@@ -1,5 +1,5 @@
-use crate::vm::opcode::OpCode;
-use crate::eval::value::Value;
+use crate::interpreter::vm::opcode::OpCode;
+use crate::interpreter::value::Value;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct UpvalueLoc {

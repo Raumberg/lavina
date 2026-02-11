@@ -1,6 +1,6 @@
 use std::collections::HashMap;
-use crate::vm::chunk::Chunk;
-use crate::eval::value::Value;
+use crate::interpreter::vm::chunk::Chunk;
+use crate::interpreter::value::Value;
 
 /// Represents a compiled function in the Lavina VM.
 #[derive(Debug, Clone, PartialEq)]

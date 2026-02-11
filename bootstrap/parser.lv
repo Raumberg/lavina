@@ -32,9 +32,11 @@ class Param:
 class EnumVariantNode:
     Token name
     vector[TypeNode] types
-    void fn __init__(Token name, vector[TypeNode] types):
+    vector[string] field_names
+    void fn __init__(Token name, vector[TypeNode] types, vector[string] field_names):
         this.name = name
         this.types = types
+        this.field_names = field_names
 
 // ── Expression AST ───────────────────────────────────────────
 
@@ -58,6 +60,15 @@ enum Expr:
     Cast(Expr expr, TypeNode target_type)
     Throw(Expr expr)
 
+// ── Match arm (pattern only, no body — avoids circular dep) ─
+
+class MatchArm:
+    string pattern_name
+    vector[string] bindings
+    void fn __init__(string pattern_name, vector[string] bindings):
+        this.pattern_name = pattern_name
+        this.bindings = bindings
+
 // ── Statement AST ────────────────────────────────────────────
 
 enum Stmt:
@@ -75,6 +86,7 @@ enum Stmt:
     Class(Token name, vector[Stmt] body, string visibility)
     Struct(Token name, vector[Stmt] body, string visibility)
     Enum(Token name, vector[EnumVariantNode] variants, string visibility)
+    Match(Expr expr, vector[MatchArm] arm_patterns, vector[Stmt] arm_bodies)
     Namespace(Token name, vector[Stmt] body, string visibility)
     Import(vector[Token] path, string alias)
 
@@ -462,15 +474,29 @@ class Parser:
         this.match_any([TK_NEWLINE])
         this.consume(TK_INDENT, "Expect indentation to start match body.")
 
-        vector[Stmt] arms = []
+        vector[MatchArm] arm_patterns = []
+        vector[Stmt] arm_bodies = []
         while this.check(TK_DEDENT) == false and this.is_at_end() == false:
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
             else:
-                arms.push(this.declaration())
+                auto pattern_tok = this.consume(TK_IDENTIFIER, "Expect pattern name in match arm.")
+                string pattern_name = pattern_tok.lexeme
+                vector[string] bindings = []
+                if pattern_name != "_":
+                    if this.match_any([TK_LEFT_PAREN]):
+                        if this.check(TK_RIGHT_PAREN) == false:
+                            bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
+                            while this.match_any([TK_COMMA]):
+                                bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
+                        this.consume(TK_RIGHT_PAREN, "Expect ')' after bindings.")
+                this.consume(TK_COLON, "Expect ':' after match pattern.")
+                vector[Stmt] body = this.block()
+                arm_patterns.push(MatchArm(pattern_name, bindings))
+                arm_bodies.push(Stmt::Block(body))
 
         this.consume(TK_DEDENT, "Expect dedent to end match body.")
-        return Stmt::Block(arms)
+        return Stmt::Match(expr, arm_patterns, arm_bodies)
 
     vector[Stmt] fn block():
         this.match_any([TK_NEWLINE])
@@ -573,22 +599,25 @@ class Parser:
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
                 this.consume(TK_LEFT_PAREN, "Expect '(' after variant name.")
                 vector[TypeNode] fields = []
+                vector[string] fnames = []
                 if this.check(TK_RIGHT_PAREN) == false:
                     fields.push(this.parse_type())
-                    this.consume(TK_IDENTIFIER, "Expect field name.")
+                    fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                     while this.match_any([TK_COMMA]):
                         fields.push(this.parse_type())
-                        this.consume(TK_IDENTIFIER, "Expect field name.")
+                        fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after variant fields.")
-                variants.push(EnumVariantNode(vname, fields))
+                variants.push(EnumVariantNode(vname, fields, fnames))
                 this.match_any([TK_NEWLINE])
             else:
                 TypeNode vtype = this.parse_type()
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
                 vector[TypeNode] types = []
+                vector[string] old_fnames = []
                 if vtype._tag != "NullType" and vtype._tag != "Void":
                     types.push(vtype)
-                variants.push(EnumVariantNode(vname, types))
+                    old_fnames.push("value")
+                variants.push(EnumVariantNode(vname, types, old_fnames))
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end enum body.")
@@ -699,9 +728,7 @@ class Parser:
 //  Test: parse a simple expression
 // ═══════════════════════════════════════════════════════════════
 
-void fn main():
-    test_scanner()
-
+void fn test_parser():
     auto parser_test_source = "1 + 2 * 3\n"
     auto parser_test_scanner = Scanner(parser_test_source)
     parser_test_scanner.scan_tokens()

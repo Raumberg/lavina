@@ -2,9 +2,9 @@ use std::io::{self, Write};
 use crate::lexer::scanner::Scanner;
 use crate::parser::parser::Parser;
 use crate::type_checker::checker::TypeChecker;
-use crate::compiler::compiler::{Compiler};
-use crate::compiler::scope::FunctionType;
-use crate::vm::vm::{VM, InterpretResult};
+use crate::interpreter::compiler::compiler::{Compiler};
+use crate::interpreter::compiler::scope::FunctionType;
+use crate::interpreter::vm::vm::{VM, InterpretResult};
 
 pub fn run() {
     let mut line = String::new();

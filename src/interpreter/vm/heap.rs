@@ -1,5 +1,5 @@
-use crate::eval::object::{Obj, ObjType};
-use crate::eval::value::Value;
+use crate::interpreter::object::{Obj, ObjType};
+use crate::interpreter::value::Value;
 
 /// The memory manager for Lavina. 
 /// Implements a Mark-and-Sweep garbage collector over a vector-based heap.

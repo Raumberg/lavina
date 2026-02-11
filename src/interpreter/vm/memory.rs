@@ -1,5 +1,5 @@
-use crate::vm::object::{Obj, ObjType};
-use crate::eval::value::Value;
+use crate::interpreter::vm::object::{Obj, ObjType};
+use crate::interpreter::value::Value;
 use std::collections::HashMap;
 
 /// Manages heap memory and garbage collection.
@@ -118,7 +118,7 @@ impl Memory {
                 }
             }
             ObjType::Upvalue(uv) => {
-                if let crate::vm::object::Upvalue::Closed(val) = uv {
+                if let crate::interpreter::vm::object::Upvalue::Closed(val) = uv {
                     self.mark_value(val, worklist);
                 }
             }

@@ -1,8 +1,6 @@
 use std::fmt;
-use std::rc::Rc;
-use crate::eval::function::LavinaFunction;
-use crate::vm::memory::Memory;
-pub use crate::vm::object::{ObjFunction, ObjType, Obj};
+use crate::interpreter::vm::memory::Memory;
+pub use crate::interpreter::vm::object::{ObjFunction, ObjType, Obj};
 
 /// A callback for native functions.
 /// It takes a mutable reference to the memory manager and the arguments.
@@ -19,7 +17,6 @@ pub enum Value {
     String(String), // Used for constants
     Object(usize),  // Index into the GC heap
     TemplateFunction(Box<ObjFunction>), // Template for creating closures
-    Function(Rc<LavinaFunction>), // Tree-walker compatibility
 }
 
 impl PartialEq for Value {
@@ -69,7 +66,6 @@ impl fmt::Display for Value {
             Value::String(s) => write!(f, "\"{}\"", s),
             Value::Object(idx) => write!(f, "<obj {}>", idx),
             Value::TemplateFunction(func) => write!(f, "<fn template {}>", func.name),
-            Value::Function(func) => write!(f, "<fn {}>", func.declaration.name.lexeme),
         }
     }
 }
