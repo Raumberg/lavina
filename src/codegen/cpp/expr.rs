@@ -51,6 +51,12 @@ impl CppCodegen {
                 if let Expr::StaticGet(obj, method) = callee.as_ref() {
                     let o = self.emit_expr(obj);
                     let arg_strs: Vec<String> = args.iter().map(|a| self.emit_expr(a)).collect();
+                    // Enum factory: Enum::Variant(args) -> Enum::make_Variant(args)
+                    if let Expr::Variable(tok) = obj.as_ref() {
+                        if self.known_enums.contains_key(&tok.lexeme) {
+                            return format!("{}::make_{}({})", o, method.lexeme, arg_strs.join(", "));
+                        }
+                    }
                     return format!("{}::{}({})", o, method.lexeme, arg_strs.join(", "));
                 }
                 // Global function remapping
@@ -89,18 +95,12 @@ impl CppCodegen {
             }
             Expr::Get(object, property) => {
                 let obj = self.emit_expr(object);
-                // Use lv_get_field when accessing fields on dynamic/any values
-                // (result of another lv_get_field, or when object might be std::any)
-                if self.is_dynamic_expr(object) {
-                    format!("lv_get_field({}, std::string(\"{}\"))", obj, property.lexeme)
-                } else {
-                    format!("{}.{}", obj, property.lexeme)
-                }
+                format!("{}.{}", obj, property.lexeme)
             }
             Expr::Set(object, property, value) => {
                 let obj = self.emit_expr(object);
                 let val = self.emit_expr(value);
-                format!("lv_set_field({}, std::string(\"{}\"), std::any({}))", obj, property.lexeme, val)
+                format!("{}.{} = {}", obj, property.lexeme, val)
             }
             Expr::StaticGet(object, member) => {
                 let obj = self.emit_expr(object);
@@ -110,7 +110,12 @@ impl CppCodegen {
             Expr::Cast(expr, target_type) => {
                 let e = self.emit_expr(expr);
                 let t = self.emit_type(target_type);
-                format!("static_cast<{}>({})", t, e)
+                // Use std::any_cast when casting from dynamic (std::any)
+                if self.is_dynamic_expr(expr) {
+                    format!("std::any_cast<{}>({})", t, e)
+                } else {
+                    format!("static_cast<{}>({})", t, e)
+                }
             }
             Expr::Throw(expr) => {
                 let e = self.emit_expr(expr);
@@ -122,7 +127,6 @@ impl CppCodegen {
     /// Check if an expression would produce a dynamic (std::any) value.
     pub(super) fn is_dynamic_expr(&self, expr: &Expr) -> bool {
         match expr {
-            Expr::Get(_inner, _) => true,
             Expr::Variable(tok) => self.dynamic_vars.contains(&tok.lexeme),
             Expr::Index(obj, _, _) => self.is_dynamic_expr(obj),
             _ => false,
@@ -130,7 +134,6 @@ impl CppCodegen {
     }
 
     /// Try to map `obj.method(args)` to a C++ equivalent.
-    /// Returns None if the method is not a known built-in (falls through to regular obj.method(args)).
     fn try_emit_method_call(&mut self, obj: &Expr, method: &str, args: &[Expr]) -> Option<String> {
         let o = self.emit_expr(obj);
         let arg_strs: Vec<String> = args.iter().map(|a| self.emit_expr(a)).collect();
@@ -202,16 +205,12 @@ impl CppCodegen {
             }
             Expr::Get(obj, prop) => {
                 let o = self.emit_method_expr(obj);
-                if self.is_dynamic_expr(obj) {
-                    format!("lv_get_field({}, std::string(\"{}\"))", o, prop.lexeme)
-                } else {
-                    format!("{}.{}", o, prop.lexeme)
-                }
+                format!("{}.{}", o, prop.lexeme)
             }
             Expr::Set(obj, prop, value) => {
                 let o = self.emit_method_expr(obj);
                 let v = self.emit_method_expr(value);
-                format!("lv_set_field({}, std::string(\"{}\"), std::any({}))", o, prop.lexeme, v)
+                format!("{}.{} = {}", o, prop.lexeme, v)
             }
             Expr::This(_) => "(*this)".to_string(),
             Expr::Grouping(inner) => {
@@ -245,10 +244,20 @@ impl CppCodegen {
             Expr::Call(callee, _paren, args) => {
                 // Also intercept method calls inside method bodies
                 if let Expr::Get(obj, method) = callee.as_ref() {
-                    // Check for this.field.method() pattern
                     if let Some(result) = self.try_emit_method_call_in_method(obj, &method.lexeme, args) {
                         return result;
                     }
+                }
+                // Enum factory: Enum::Variant(args) -> Enum::make_Variant(args)
+                if let Expr::StaticGet(obj, method) = callee.as_ref() {
+                    let o = self.emit_method_expr(obj);
+                    let arg_strs: Vec<String> = args.iter().map(|a| self.emit_method_expr(a)).collect();
+                    if let Expr::Variable(tok) = obj.as_ref() {
+                        if self.known_enums.contains_key(&tok.lexeme) {
+                            return format!("{}::make_{}({})", o, method.lexeme, arg_strs.join(", "));
+                        }
+                    }
+                    return format!("{}::{}({})", o, method.lexeme, arg_strs.join(", "));
                 }
                 let func = self.emit_method_expr(callee);
                 let arg_strs: Vec<String> =
@@ -278,14 +287,12 @@ impl CppCodegen {
         let arg_strs: Vec<String> = args.iter().map(|a| self.emit_expr(a)).collect();
         let result = match name {
             "exit" => format!("lv_exit({})", arg_strs.join(", ")),
-            // fs_read, fs_write, fs_exists, os_args, os_exec, os_env, input
-            // are mapped 1:1 — they exist in lavina.h with the same names
             _ => return None,
         };
         Some(result)
     }
 
-    /// Method call interception within class method bodies (uses emit_method_expr for obj)
+    /// Method call interception within class method bodies
     fn try_emit_method_call_in_method(&mut self, obj: &Expr, method: &str, args: &[Expr]) -> Option<String> {
         let o = self.emit_method_expr(obj);
         let arg_strs: Vec<String> = args.iter().map(|a| self.emit_method_expr(a)).collect();

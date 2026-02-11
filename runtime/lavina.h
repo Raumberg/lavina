@@ -20,11 +20,7 @@
 #include <algorithm>
 #include <cstdlib>
 
-// ── Dynamic field access ────────────────────────────────────────
-
-// Forward declarations for dynamic dispatch
-std::any lv_get_field(const std::any& obj, const std::string& name);
-void lv_set_field(std::any& obj, const std::string& name, std::any value);
+// ── std::any support ────────────────────────────────────────────
 
 // std::any comparison operators
 inline bool operator==(const std::any& a, const std::string& b) {
@@ -88,11 +84,6 @@ inline bool lv_is_truthy(const std::any& a) {
     if (auto* v = std::any_cast<int64_t>(&a)) return *v != 0;
     if (auto* v = std::any_cast<std::string>(&a)) return !v->empty();
     return true;
-}
-
-// std::any field access (chained dot-access)
-inline std::any lv_dot(const std::any& obj, const std::string& name) {
-    return lv_get_field(obj, name);
 }
 
 // print for std::any

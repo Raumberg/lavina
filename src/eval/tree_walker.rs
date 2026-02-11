@@ -115,8 +115,8 @@ impl TreeWalker {
             Stmt::Namespace(_, _, _) => todo!("Namespace not implemented in tree-walker."),
             Stmt::Import(_, _) => todo!("Import not implemented in tree-walker."),
             Stmt::Directive(_) => Ok(ControlFlow::None),
-            Stmt::Class(_, _, _) | Stmt::Struct(_, _, _) | Stmt::Enum(_, _, _) | Stmt::Try(_, _, _, _) | Stmt::Const(_, _, _, _) => {
-                todo!("OOP and Try/Catch in tree-walker not implemented")
+            Stmt::Class(_, _, _) | Stmt::Struct(_, _, _) | Stmt::Enum(_, _, _) | Stmt::Try(_, _, _, _) | Stmt::Const(_, _, _, _) | Stmt::Match(_, _) => {
+                todo!("OOP, Try/Catch, Match in tree-walker not implemented")
             }
         }
     }

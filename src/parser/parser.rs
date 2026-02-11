@@ -1,5 +1,5 @@
 use crate::lexer::{Token, TokenType};
-use crate::parser::ast::{Expr, Literal, Stmt, Type, FunctionDecl, Directive, Visibility};
+use crate::parser::ast::{Expr, Literal, Stmt, Type, FunctionDecl, Directive, Visibility, MatchArm, Pattern};
 use crate::error::{LavinaError, ErrorPhase};
 
 pub struct Parser {
@@ -33,7 +33,8 @@ impl Parser {
             match &stmt {
                 Stmt::Function(_) | Stmt::Class(_, _, _) | Stmt::Struct(_, _, _)
                 | Stmt::Enum(_, _, _) | Stmt::Const(_, _, _, _) | Stmt::Let(_, _, _, _)
-                | Stmt::Import(_, _) | Stmt::Namespace(_, _, _) | Stmt::Directive(_) => {}
+                | Stmt::Import(_, _) | Stmt::Namespace(_, _, _) | Stmt::Directive(_)
+                | Stmt::Match(_, _) => {}
                 _ => {
                     let token = self.previous();
                     return Err(self.error(
@@ -227,26 +228,53 @@ impl Parser {
     fn enum_declaration(&mut self, visibility: Visibility) -> Result<Stmt, LavinaError> {
         let name = self.consume(TokenType::Identifier, "Expect enum name.")?.clone();
         self.consume(TokenType::Colon, "Expect ':' after enum name.")?;
-        
+
         self.match_types(&[TokenType::Newline]);
         self.consume(TokenType::Indent, "Expect indentation to start enum body.")?;
-        
+
         let mut variants = Vec::new();
         while !self.check(&TokenType::Dedent) && !self.is_at_end() {
             if self.match_types(&[TokenType::Newline]) { continue; }
-            
-            let type_ann = self.parse_type()?;
-            let variant_name = self.consume(TokenType::Identifier, "Expect variant name.")?.clone();
-            
-            let mut types = Vec::new();
-            if type_ann != Type::Null && type_ann != Type::Void {
-                types.push(type_ann);
+
+            // New syntax: VariantName(Type field, Type field, ...)
+            // Old syntax: Type VariantName  (single positional field)
+            // Void/null variant: null VariantName or void VariantName
+
+            if self.check(&TokenType::Identifier) && self.peek_at(1).token_type == TokenType::LeftParen {
+                // New named-field syntax: VariantName(type name, type name, ...)
+                let variant_name = self.consume(TokenType::Identifier, "Expect variant name.")?.clone();
+                self.consume(TokenType::LeftParen, "Expect '(' after variant name.")?;
+                let mut fields = Vec::new();
+                if !self.check(&TokenType::RightParen) {
+                    loop {
+                        let field_type = self.parse_type()?;
+                        let field_name = self.consume(TokenType::Identifier, "Expect field name.")?.clone();
+                        fields.push((field_name, field_type));
+                        if !self.match_types(&[TokenType::Comma]) { break; }
+                    }
+                }
+                self.consume(TokenType::RightParen, "Expect ')' after variant fields.")?;
+                variants.push(crate::parser::ast::EnumVariant { name: variant_name, fields });
+            } else {
+                // Old syntax: type VariantName
+                let type_ann = self.parse_type()?;
+                let variant_name = self.consume(TokenType::Identifier, "Expect variant name.")?.clone();
+
+                let fields = if type_ann != Type::Null && type_ann != Type::Void {
+                    let field_name = crate::lexer::token::Token::new(
+                        TokenType::Identifier, "_0".to_string(),
+                        variant_name.line, variant_name.column,
+                    );
+                    vec![(field_name, type_ann)]
+                } else {
+                    vec![]
+                };
+
+                variants.push(crate::parser::ast::EnumVariant { name: variant_name, fields });
             }
-            
-            variants.push(crate::parser::ast::EnumVariant { name: variant_name, types });
             self.match_types(&[TokenType::Newline]);
         }
-        
+
         self.consume(TokenType::Dedent, "Expect dedent to end enum body.")?;
         Ok(Stmt::Enum(name, variants, visibility))
     }
@@ -454,7 +482,8 @@ impl Parser {
         if self.match_types(&[TokenType::For]) { return self.for_statement(); }
         if self.match_types(&[TokenType::Return]) { return self.return_statement(); }
         if self.match_types(&[TokenType::Throw]) { return self.throw_statement(); }
-        
+        if self.match_types(&[TokenType::Match]) { return self.match_statement(); }
+
         self.expression_statement()
     }
 
@@ -462,6 +491,52 @@ impl Parser {
         let expr = self.expression()?;
         self.match_types(&[TokenType::Semicolon, TokenType::Newline]);
         Ok(Stmt::Expression(Expr::Throw(Box::new(expr))))
+    }
+
+    fn match_statement(&mut self) -> Result<Stmt, LavinaError> {
+        let expr = self.expression()?;
+        self.consume(TokenType::Colon, "Expect ':' after match expression.")?;
+        self.match_types(&[TokenType::Newline]);
+        self.consume(TokenType::Indent, "Expect indentation to start match body.")?;
+
+        let mut arms = Vec::new();
+        while !self.check(&TokenType::Dedent) && !self.is_at_end() {
+            if self.match_types(&[TokenType::Newline]) { continue; }
+
+            // Parse pattern
+            let pattern = if self.check(&TokenType::Identifier) && self.peek_at(1).token_type == TokenType::LeftParen {
+                // Variant(binding1, binding2, ...)
+                let variant_name = self.consume(TokenType::Identifier, "Expect variant name.")?.clone();
+                self.consume(TokenType::LeftParen, "Expect '(' after variant name.")?;
+                let mut bindings = Vec::new();
+                if !self.check(&TokenType::RightParen) {
+                    loop {
+                        bindings.push(self.consume(TokenType::Identifier, "Expect binding name.")?.clone());
+                        if !self.match_types(&[TokenType::Comma]) { break; }
+                    }
+                }
+                self.consume(TokenType::RightParen, "Expect ')' after pattern bindings.")?;
+                Pattern::Variant(variant_name, bindings)
+            } else if self.check(&TokenType::Identifier) && self.peek().lexeme == "_" {
+                // Wildcard: _
+                self.advance();
+                Pattern::Wildcard
+            } else if self.check(&TokenType::Identifier) {
+                // Bare variant name (no fields): VariantName
+                let variant_name = self.consume(TokenType::Identifier, "Expect variant name.")?.clone();
+                Pattern::Variant(variant_name, vec![])
+            } else {
+                let t = self.peek();
+                return Err(self.error(format!("Expect pattern in match arm. Got {}", t.token_type.to_string()), t.line, t.column));
+            };
+
+            self.consume(TokenType::Colon, "Expect ':' after match pattern.")?;
+            let body = self.block()?;
+            arms.push(MatchArm { pattern, body });
+        }
+
+        self.consume(TokenType::Dedent, "Expect dedent to end match body.")?;
+        Ok(Stmt::Match(expr, arms))
     }
 
     fn if_statement(&mut self) -> Result<Stmt, LavinaError> {

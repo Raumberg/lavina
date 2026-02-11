@@ -117,6 +117,9 @@ impl CppCodegen {
                     val
                 ));
             }
+            Stmt::Match(expr, arms) => {
+                self.emit_match(expr, arms);
+            }
             Stmt::Directive(_) | Stmt::Namespace(_, _, _) | Stmt::Import(_, _) => {
                 self.output.push_str(&format!(
                     "{}// TODO: unsupported statement\n",
@@ -270,6 +273,95 @@ impl CppCodegen {
             }
             _ => self.emit_stmt(stmt),
         }
+    }
+
+    pub(super) fn emit_match(&mut self, expr: &Expr, arms: &[MatchArm]) {
+        let match_val = self.emit_expr(expr);
+        let temp = format!("_match_{}", self.temp_counter);
+        self.temp_counter += 1;
+
+        self.output.push_str(&format!("{}{{\n", self.indent()));
+        self.indent_level += 1;
+        self.output.push_str(&format!("{}auto& {} = {};\n", self.indent(), temp, match_val));
+
+        let mut first = true;
+        for arm in arms {
+            match &arm.pattern {
+                Pattern::Variant(variant_name, bindings) => {
+                    let keyword = if first { "if" } else { "else if" };
+                    first = false;
+                    self.output.push_str(&format!(
+                        "{}{} ({}._tag == \"{}\") {{\n",
+                        self.indent(), keyword, temp, variant_name.lexeme
+                    ));
+                    self.indent_level += 1;
+
+                    // Destructure bindings by finding which enum owns this variant
+                    if !bindings.is_empty() {
+                        let ename = self.find_enum_for_variant(&variant_name.lexeme);
+                        if let Some(ref ename) = ename {
+                            self.output.push_str(&format!(
+                                "{}auto& _v = std::get<{}::{}>({}._data);\n",
+                                self.indent(), ename, variant_name.lexeme, temp
+                            ));
+                            let fields: Vec<(String, Type)> = self.known_enums.get(ename.as_str())
+                                .and_then(|variants| variants.iter().find(|v| v.name.lexeme == variant_name.lexeme))
+                                .map(|v| v.fields.iter().map(|(f, t)| (f.lexeme.clone(), t.clone())).collect())
+                                .unwrap_or_default();
+
+                            for (i, binding) in bindings.iter().enumerate() {
+                                let (field_name, field_type) = fields.get(i).cloned()
+                                    .unwrap_or_else(|| (format!("_{}", i), Type::Dynamic));
+                                let is_self_ref = matches!(&field_type, Type::Custom(n) if n == ename);
+                                if is_self_ref {
+                                    self.output.push_str(&format!(
+                                        "{}auto& {} = *_v.{};\n",
+                                        self.indent(), binding.lexeme, field_name
+                                    ));
+                                } else {
+                                    self.output.push_str(&format!(
+                                        "{}auto& {} = _v.{};\n",
+                                        self.indent(), binding.lexeme, field_name
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    for s in &arm.body {
+                        self.emit_stmt(s);
+                    }
+                    self.indent_level -= 1;
+                    self.output.push_str(&format!("{}}}\n", self.indent()));
+                }
+                Pattern::Wildcard => {
+                    if first {
+                        self.output.push_str(&format!("{}{{\n", self.indent()));
+                    } else {
+                        self.output.push_str(&format!("{}else {{\n", self.indent()));
+                    }
+                    self.indent_level += 1;
+                    for s in &arm.body {
+                        self.emit_stmt(s);
+                    }
+                    self.indent_level -= 1;
+                    self.output.push_str(&format!("{}}}\n", self.indent()));
+                }
+            }
+        }
+
+        self.indent_level -= 1;
+        self.output.push_str(&format!("{}}}\n", self.indent()));
+    }
+
+    /// Find which known enum contains a variant with the given name
+    fn find_enum_for_variant(&self, variant_name: &str) -> Option<String> {
+        for (enum_name, variants) in &self.known_enums {
+            if variants.iter().any(|v| v.name.lexeme == variant_name) {
+                return Some(enum_name.clone());
+            }
+        }
+        None
     }
 
     pub(super) fn emit_method_block_or_stmt(&mut self, stmt: &Stmt) {

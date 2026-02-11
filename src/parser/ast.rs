@@ -72,12 +72,25 @@ pub enum Stmt {
     Enum(Token, Vec<EnumVariant>, Visibility),
     Try(Box<Stmt>, Token, Option<Token>, Box<Stmt>), // try_body, catch_token, exception_name, catch_body
     Const(Token, Type, Expr, Visibility),
+    Match(Expr, Vec<MatchArm>),
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EnumVariant {
     pub name: Token,
-    pub types: Vec<Type>, // Optional data associated with variant
+    pub fields: Vec<(Token, Type)>, // Named fields: (field_name, field_type)
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MatchArm {
+    pub pattern: Pattern,
+    pub body: Vec<Stmt>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum Pattern {
+    Variant(Token, Vec<Token>),  // VariantName(binding1, binding2, ...)
+    Wildcard,                     // _
 }
 
 #[derive(Debug, Clone, PartialEq)]

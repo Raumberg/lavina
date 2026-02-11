@@ -464,7 +464,7 @@ impl Compiler {
 
                 for variant in variants {
                     let variant_name = variant.name.lexeme.clone();
-                    let arity = variant.types.len();
+                    let arity = variant.fields.len();
 
                     if arity == 0 {
                         // Constant variant: just a map { "_tag": "variant_name" }
@@ -595,6 +595,9 @@ impl Compiler {
                     self.emit_byte(constant as u8, name.line);
                 }
                 Ok(())
+            }
+            Stmt::Match(_, _) => {
+                todo!("Match not implemented in VM compiler")
             }
         }
     }

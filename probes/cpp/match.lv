@@ -1,0 +1,20 @@
+enum Shape:
+    Circle(float radius)
+    Rect(float width, float height)
+    null Point
+
+void fn describe(Shape s):
+    match s:
+        Circle(r):
+            print("Circle with radius: " + r)
+        Rect(w, h):
+            print("Rect " + w + "x" + h)
+        Point:
+            print("Just a point")
+        _:
+            print("Unknown shape")
+
+void fn main():
+    describe(Shape::Circle(5.0))
+    describe(Shape::Rect(3.0, 4.0))
+    describe(Shape::Point())

@@ -3,379 +3,80 @@
 //  Translates a flat token list into an AST.
 // ═══════════════════════════════════════════════════════════════
 
-// ── Expression AST nodes ──────────────────────────────────────
+// ── Type AST ─────────────────────────────────────────────────
 
-class LiteralExpr:
-    string tag
-    string kind
-    string value
-    void fn __init__(string kind, string value):
-        this.tag = "Literal"
-        this.kind = kind
-        this.value = value
+enum TypeNode:
+    null None
+    null Int
+    null Float
+    null Str
+    null Bool
+    null Void
+    null Auto
+    null Dynamic
+    null NullType
+    Custom(string name)
+    Array(TypeNode inner)
+    Dict(TypeNode key_type, TypeNode value_type)
+    Nullable(TypeNode inner)
 
-class UnaryExpr:
-    string tag
-    dynamic op
-    dynamic right
-    void fn __init__(dynamic op, dynamic right):
-        this.tag = "Unary"
-        this.op = op
-        this.right = right
-
-class BinaryExpr:
-    string tag
-    dynamic left
-    dynamic op
-    dynamic right
-    void fn __init__(dynamic left, dynamic op, dynamic right):
-        this.tag = "Binary"
-        this.left = left
-        this.op = op
-        this.right = right
-
-class GroupingExpr:
-    string tag
-    dynamic expr
-    void fn __init__(dynamic expr):
-        this.tag = "Grouping"
-        this.expr = expr
-
-class VariableExpr:
-    string tag
-    dynamic name
-    void fn __init__(dynamic name):
-        this.tag = "Variable"
-        this.name = name
-
-class AssignExpr:
-    string tag
-    dynamic name
-    dynamic value
-    void fn __init__(dynamic name, dynamic value):
-        this.tag = "Assign"
-        this.name = name
-        this.value = value
-
-class LogicalExpr:
-    string tag
-    dynamic left
-    dynamic op
-    dynamic right
-    void fn __init__(dynamic left, dynamic op, dynamic right):
-        this.tag = "Logical"
-        this.left = left
-        this.op = op
-        this.right = right
-
-class CallExpr:
-    string tag
-    dynamic callee
-    dynamic paren
-    vector[dynamic] args
-    void fn __init__(dynamic callee, dynamic paren, vector[dynamic] args):
-        this.tag = "Call"
-        this.callee = callee
-        this.paren = paren
-        this.args = args
-
-class IndexExpr:
-    string tag
-    dynamic object
-    dynamic bracket
-    dynamic index
-    void fn __init__(dynamic object, dynamic bracket, dynamic index):
-        this.tag = "Index"
-        this.object = object
-        this.bracket = bracket
-        this.index = index
-
-class VectorExpr:
-    string tag
-    vector[dynamic] elements
-    void fn __init__(vector[dynamic] elements):
-        this.tag = "Vector"
-        this.elements = elements
-
-class MapExpr:
-    string tag
-    vector[dynamic] keys
-    vector[dynamic] values
-    void fn __init__(vector[dynamic] keys, vector[dynamic] values):
-        this.tag = "Map"
-        this.keys = keys
-        this.values = values
-
-class GetExpr:
-    string tag
-    dynamic object
-    dynamic name
-    void fn __init__(dynamic object, dynamic name):
-        this.tag = "Get"
-        this.object = object
-        this.name = name
-
-class SetExpr:
-    string tag
-    dynamic object
-    dynamic name
-    dynamic value
-    void fn __init__(dynamic object, dynamic name, dynamic value):
-        this.tag = "Set"
-        this.object = object
-        this.name = name
-        this.value = value
-
-class StaticGetExpr:
-    string tag
-    dynamic object
-    dynamic name
-    void fn __init__(dynamic object, dynamic name):
-        this.tag = "StaticGet"
-        this.object = object
-        this.name = name
-
-class ThisExpr:
-    string tag
-    dynamic keyword
-    void fn __init__(dynamic keyword):
-        this.tag = "This"
-        this.keyword = keyword
-
-class CastExpr:
-    string tag
-    dynamic expr
-    dynamic target_type
-    void fn __init__(dynamic expr, dynamic target_type):
-        this.tag = "Cast"
-        this.expr = expr
-        this.target_type = target_type
-
-class ThrowExpr:
-    string tag
-    dynamic expr
-    void fn __init__(dynamic expr):
-        this.tag = "Throw"
-        this.expr = expr
-
-// ── Type node ─────────────────────────────────────────────────
-
-class TypeNode:
-    string tag
-    string name
-    dynamic inner
-    dynamic key_type
-    dynamic value_type
-    void fn __init__(string tag, string name, dynamic inner, dynamic key_type, dynamic value_type):
-        this.tag = tag
-        this.name = name
-        this.inner = inner
-        this.key_type = key_type
-        this.value_type = value_type
-
-dynamic fn make_simple_type(string tag):
-    return TypeNode(tag, "", null, null, null)
-
-dynamic fn make_custom_type(string name):
-    return TypeNode("Custom", name, null, null, null)
-
-dynamic fn make_array_type(dynamic inner):
-    return TypeNode("Array", "", inner, null, null)
-
-dynamic fn make_dict_type(dynamic key_type, dynamic value_type):
-    return TypeNode("Dict", "", null, key_type, value_type)
-
-dynamic fn make_nullable_type(dynamic inner):
-    return TypeNode("Nullable", "", inner, null, null)
-
-// ── Statement AST nodes ───────────────────────────────────────
-
-class ExprStmt:
-    string tag
-    dynamic expr
-    void fn __init__(dynamic expr):
-        this.tag = "ExprStmt"
-        this.expr = expr
-
-class LetStmt:
-    string tag
-    dynamic name
-    dynamic var_type
-    dynamic initializer
-    string visibility
-    void fn __init__(dynamic name, dynamic var_type, dynamic initializer, string visibility):
-        this.tag = "Let"
-        this.name = name
-        this.var_type = var_type
-        this.initializer = initializer
-        this.visibility = visibility
-
-class ConstStmt:
-    string tag
-    dynamic name
-    dynamic const_type
-    dynamic value
-    string visibility
-    void fn __init__(dynamic name, dynamic const_type, dynamic value, string visibility):
-        this.tag = "Const"
-        this.name = name
-        this.const_type = const_type
-        this.value = value
-        this.visibility = visibility
-
-class ReturnStmt:
-    string tag
-    dynamic keyword
-    dynamic value
-    void fn __init__(dynamic keyword, dynamic value):
-        this.tag = "Return"
-        this.keyword = keyword
-        this.value = value
-
-class IfStmt:
-    string tag
-    dynamic condition
-    dynamic then_branch
-    dynamic else_branch
-    void fn __init__(dynamic condition, dynamic then_branch, dynamic else_branch):
-        this.tag = "If"
-        this.condition = condition
-        this.then_branch = then_branch
-        this.else_branch = else_branch
-
-class WhileStmt:
-    string tag
-    dynamic condition
-    dynamic body
-    void fn __init__(dynamic condition, dynamic body):
-        this.tag = "While"
-        this.condition = condition
-        this.body = body
-
-class ForStmt:
-    string tag
-    dynamic item_name
-    dynamic collection
-    dynamic body
-    void fn __init__(dynamic item_name, dynamic collection, dynamic body):
-        this.tag = "For"
-        this.item_name = item_name
-        this.collection = collection
-        this.body = body
-
-class BlockStmt:
-    string tag
-    vector[dynamic] statements
-    void fn __init__(vector[dynamic] statements):
-        this.tag = "Block"
-        this.statements = statements
-
-class TryStmt:
-    string tag
-    dynamic try_body
-    dynamic catch_token
-    dynamic exception_name
-    dynamic catch_body
-    void fn __init__(dynamic try_body, dynamic catch_token, dynamic exception_name, dynamic catch_body):
-        this.tag = "Try"
-        this.try_body = try_body
-        this.catch_token = catch_token
-        this.exception_name = exception_name
-        this.catch_body = catch_body
-
-// ── Declaration AST nodes ─────────────────────────────────────
+// ── Helper structs ───────────────────────────────────────────
 
 class Param:
-    string tag
-    dynamic name
-    dynamic param_type
-    void fn __init__(dynamic name, dynamic param_type):
-        this.tag = "Param"
+    Token name
+    TypeNode param_type
+    void fn __init__(Token name, TypeNode param_type):
         this.name = name
         this.param_type = param_type
 
-class FunctionStmt:
-    string tag
-    dynamic name
-    vector[dynamic] params
-    dynamic return_type
-    vector[dynamic] body
-    bool is_inline
-    bool is_comptime
-    bool is_static
-    string visibility
-    void fn __init__(dynamic name, vector[dynamic] params, dynamic return_type, vector[dynamic] body, bool is_inline, bool is_comptime, bool is_static, string visibility):
-        this.tag = "Function"
-        this.name = name
-        this.params = params
-        this.return_type = return_type
-        this.body = body
-        this.is_inline = is_inline
-        this.is_comptime = is_comptime
-        this.is_static = is_static
-        this.visibility = visibility
-
-class ClassStmt:
-    string tag
-    dynamic name
-    vector[dynamic] body
-    string visibility
-    void fn __init__(dynamic name, vector[dynamic] body, string visibility):
-        this.tag = "Class"
-        this.name = name
-        this.body = body
-        this.visibility = visibility
-
-class StructStmt:
-    string tag
-    dynamic name
-    vector[dynamic] body
-    string visibility
-    void fn __init__(dynamic name, vector[dynamic] body, string visibility):
-        this.tag = "Struct"
-        this.name = name
-        this.body = body
-        this.visibility = visibility
-
 class EnumVariantNode:
-    string tag
-    dynamic name
-    vector[dynamic] types
-    void fn __init__(dynamic name, vector[dynamic] types):
-        this.tag = "EnumVariant"
+    Token name
+    vector[TypeNode] types
+    void fn __init__(Token name, vector[TypeNode] types):
         this.name = name
         this.types = types
 
-class EnumStmt:
-    string tag
-    dynamic name
-    vector[dynamic] variants
-    string visibility
-    void fn __init__(dynamic name, vector[dynamic] variants, string visibility):
-        this.tag = "Enum"
-        this.name = name
-        this.variants = variants
-        this.visibility = visibility
+// ── Expression AST ───────────────────────────────────────────
 
-class NamespaceStmt:
-    string tag
-    dynamic name
-    vector[dynamic] body
-    string visibility
-    void fn __init__(dynamic name, vector[dynamic] body, string visibility):
-        this.tag = "Namespace"
-        this.name = name
-        this.body = body
-        this.visibility = visibility
+enum Expr:
+    null None
+    Literal(string kind, string value)
+    Unary(Token op, Expr right)
+    Binary(Expr left, Token op, Expr right)
+    Grouping(Expr inner)
+    Variable(Token name)
+    Assign(Token name, Expr value)
+    Logical(Expr left, Token op, Expr right)
+    Call(Expr callee, Token paren, vector[Expr] args)
+    Index(Expr object, Token bracket, Expr index)
+    Vector(vector[Expr] elements)
+    Map(vector[Expr] keys, vector[Expr] values)
+    Get(Expr object, Token name)
+    Set(Expr object, Token name, Expr value)
+    StaticGet(Expr object, Token name)
+    This(Token keyword)
+    Cast(Expr expr, TypeNode target_type)
+    Throw(Expr expr)
 
-class ImportStmt:
-    string tag
-    vector[dynamic] path
-    dynamic alias
-    void fn __init__(vector[dynamic] path, dynamic alias):
-        this.tag = "Import"
-        this.path = path
-        this.alias = alias
+// ── Statement AST ────────────────────────────────────────────
+
+enum Stmt:
+    null None
+    ExprStmt(Expr expr)
+    Let(Token name, TypeNode var_type, Expr initializer, string visibility)
+    Const(Token name, TypeNode const_type, Expr value, string visibility)
+    Return(Token keyword, Expr value)
+    If(Expr condition, Stmt then_branch, Stmt else_branch)
+    While(Expr condition, Stmt body)
+    For(Token item_name, Expr collection, Stmt body)
+    Block(vector[Stmt] statements)
+    Try(Stmt try_body, Stmt catch_body, string exception_name)
+    Function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body, bool is_inline, bool is_comptime, bool is_static, string visibility)
+    Class(Token name, vector[Stmt] body, string visibility)
+    Struct(Token name, vector[Stmt] body, string visibility)
+    Enum(Token name, vector[EnumVariantNode] variants, string visibility)
+    Namespace(Token name, vector[Stmt] body, string visibility)
+    Import(vector[Token] path, string alias)
 
 // ── Parser class ──────────────────────────────────────────────
 
@@ -479,177 +180,182 @@ class Parser:
 
     // ── Type parsing ────────────────────────────────────────
 
-    dynamic fn parse_type():
-        dynamic t = null
+    TypeNode fn parse_type():
+        TypeNode t = TypeNode::None()
         if this.match_any([TK_INT_TYPE]):
-            t = make_simple_type("Int")
+            t = TypeNode::Int()
         else if this.match_any([TK_FLOAT_TYPE]):
-            t = make_simple_type("Float")
+            t = TypeNode::Float()
         else if this.match_any([TK_STRING_TYPE]):
-            t = make_simple_type("String")
+            t = TypeNode::Str()
         else if this.match_any([TK_BOOL]):
-            t = make_simple_type("Bool")
+            t = TypeNode::Bool()
         else if this.match_any([TK_VOID]):
-            t = make_simple_type("Void")
+            t = TypeNode::Void()
         else if this.match_any([TK_AUTO]):
-            t = make_simple_type("Auto")
+            t = TypeNode::Auto()
         else if this.match_any([TK_DYNAMIC]):
-            t = make_simple_type("Dynamic")
+            t = TypeNode::Dynamic()
         else if this.match_any([TK_NULL]):
-            t = make_simple_type("Null")
+            t = TypeNode::NullType()
         else if this.match_any([TK_VECTOR]):
             this.consume(TK_LEFT_BRACKET, "Expect '[' after 'vector'.")
-            dynamic inner = this.parse_type()
+            TypeNode inner = this.parse_type()
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after vector type.")
-            t = make_array_type(inner)
+            t = TypeNode::Array(inner)
         else if this.match_any([TK_HASHMAP]):
             this.consume(TK_LEFT_BRACKET, "Expect '[' after 'hashmap'.")
-            dynamic k = this.parse_type()
+            TypeNode k = this.parse_type()
             this.consume(TK_COMMA, "Expect ',' between key and value types.")
-            dynamic v = this.parse_type()
+            TypeNode v = this.parse_type()
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after hashmap types.")
-            t = make_dict_type(k, v)
+            t = TypeNode::Dict(k, v)
         else if this.match_any([TK_IDENTIFIER]):
-            t = make_custom_type(this.previous().lexeme)
+            t = TypeNode::Custom(this.previous().lexeme)
         else:
             auto tok = this.peek()
             throw "Expect type. Got " + tok.token_type + " at " + tok.line + ":" + tok.col
 
         if this.match_any([TK_QUESTION]):
-            t = make_nullable_type(t)
+            t = TypeNode::Nullable(t)
         return t
 
     // ── Expression parsing ──────────────────────────────────
 
-    dynamic fn expression():
+    Expr fn expression():
         return this.assignment()
 
-    dynamic fn assignment():
-        dynamic expr = this.logical_or()
+    Expr fn assignment():
+        Expr expr = this.logical_or()
         if this.match_any([TK_EQUAL]):
-            dynamic value = this.assignment()
-            if expr.tag == "Variable":
-                return AssignExpr(expr.name, value)
-            else if expr.tag == "Get":
-                return SetExpr(expr.object, expr.name, value)
-            else:
-                throw "Invalid assignment target."
+            Expr value = this.assignment()
+            match expr:
+                Variable(name):
+                    return Expr::Assign(name, value)
+                Get(object, name):
+                    return Expr::Set(object, name, value)
+                _:
+                    throw "Invalid assignment target."
         return expr
 
-    dynamic fn logical_or():
-        dynamic expr = this.logical_and()
+    Expr fn logical_or():
+        Expr expr = this.logical_and()
         while this.match_any([TK_OR]):
             auto op = this.previous()
-            dynamic right = this.logical_and()
-            expr = LogicalExpr(expr, op, right)
+            Expr right = this.logical_and()
+            expr = Expr::Logical(expr, op, right)
         return expr
 
-    dynamic fn logical_and():
-        dynamic expr = this.equality()
+    Expr fn logical_and():
+        Expr expr = this.equality()
         while this.match_any([TK_AND]):
             auto op = this.previous()
-            dynamic right = this.equality()
-            expr = LogicalExpr(expr, op, right)
+            Expr right = this.equality()
+            expr = Expr::Logical(expr, op, right)
         return expr
 
-    dynamic fn equality():
-        dynamic expr = this.comparison()
+    Expr fn equality():
+        Expr expr = this.comparison()
         while this.match_any([TK_BANG_EQUAL, TK_EQUAL_EQUAL]):
             auto op = this.previous()
-            dynamic right = this.comparison()
-            expr = BinaryExpr(expr, op, right)
+            Expr right = this.comparison()
+            expr = Expr::Binary(expr, op, right)
         return expr
 
-    dynamic fn comparison():
-        dynamic expr = this.term()
+    Expr fn comparison():
+        Expr expr = this.term()
         while this.match_any([TK_GREATER, TK_GREATER_EQUAL, TK_LESS, TK_LESS_EQUAL]):
             auto op = this.previous()
-            dynamic right = this.term()
-            expr = BinaryExpr(expr, op, right)
+            Expr right = this.term()
+            expr = Expr::Binary(expr, op, right)
         return expr
 
-    dynamic fn term():
-        dynamic expr = this.factor()
+    Expr fn term():
+        Expr expr = this.factor()
         while this.match_any([TK_MINUS, TK_PLUS]):
             auto op = this.previous()
-            dynamic right = this.factor()
-            expr = BinaryExpr(expr, op, right)
+            Expr right = this.factor()
+            expr = Expr::Binary(expr, op, right)
         return expr
 
-    dynamic fn factor():
-        dynamic expr = this.unary()
+    Expr fn factor():
+        Expr expr = this.unary()
         while this.match_any([TK_SLASH, TK_STAR]):
             auto op = this.previous()
-            dynamic right = this.unary()
-            expr = BinaryExpr(expr, op, right)
+            Expr right = this.unary()
+            expr = Expr::Binary(expr, op, right)
         return expr
 
-    dynamic fn unary():
+    Expr fn unary():
         if this.match_any([TK_BANG, TK_MINUS]):
             auto op = this.previous()
-            dynamic right = this.unary()
-            return UnaryExpr(op, right)
+            Expr right = this.unary()
+            return Expr::Unary(op, right)
         return this.call()
 
-    dynamic fn call():
-        dynamic expr = this.primary()
+    Expr fn call():
+        Expr expr = this.primary()
         bool more = true
         while more:
             if this.match_any([TK_LEFT_PAREN]):
                 expr = this.finish_call(expr)
             else if this.match_any([TK_LEFT_BRACKET]):
-                dynamic index = this.expression()
+                Expr index = this.expression()
                 auto bracket = this.consume(TK_RIGHT_BRACKET, "Expect ']' after index.")
-                expr = IndexExpr(expr, bracket, index)
+                expr = Expr::Index(expr, bracket, index)
             else if this.match_any([TK_DOT]):
                 auto name = this.consume(TK_IDENTIFIER, "Expect property name after '.'.")
-                expr = GetExpr(expr, name)
+                expr = Expr::Get(expr, name)
             else if this.match_any([TK_DOUBLE_COLON]):
                 auto name = this.consume(TK_IDENTIFIER, "Expect member name after '::'.")
-                expr = StaticGetExpr(expr, name)
+                expr = Expr::StaticGet(expr, name)
             else:
                 more = false
         return expr
 
-    dynamic fn finish_call(dynamic callee):
-        if callee.tag == "Variable" and callee.name.lexeme == "cast":
-            dynamic expr = this.expression()
-            this.consume(TK_COMMA, "Expect ',' after value in cast().")
-            dynamic target = this.parse_type()
-            this.consume(TK_RIGHT_PAREN, "Expect ')' after type in cast().")
-            return CastExpr(expr, target)
+    Expr fn finish_call(Expr callee):
+        match callee:
+            Variable(name):
+                if name.lexeme == "cast":
+                    Expr expr = this.expression()
+                    this.consume(TK_COMMA, "Expect ',' after value in cast().")
+                    TypeNode target = this.parse_type()
+                    this.consume(TK_RIGHT_PAREN, "Expect ')' after type in cast().")
+                    return Expr::Cast(expr, target)
+            _:
+                int noop = 0
 
-        vector[dynamic] args = []
+        vector[Expr] args = []
         if this.check(TK_RIGHT_PAREN) == false:
             args.push(this.expression())
             while this.match_any([TK_COMMA]):
                 args.push(this.expression())
         auto paren = this.consume(TK_RIGHT_PAREN, "Expect ')' after arguments.")
-        return CallExpr(callee, paren, args)
+        return Expr::Call(callee, paren, args)
 
-    dynamic fn primary():
+    Expr fn primary():
         if this.match_any([TK_FALSE]):
-            return LiteralExpr("bool", "false")
+            return Expr::Literal("bool", "false")
         if this.match_any([TK_TRUE]):
-            return LiteralExpr("bool", "true")
+            return Expr::Literal("bool", "true")
         if this.match_any([TK_NULL]):
-            return LiteralExpr("null", "null")
+            return Expr::Literal("null", "null")
         if this.match_any([TK_INT]):
-            return LiteralExpr("int", this.previous().lexeme)
+            return Expr::Literal("int", this.previous().lexeme)
         if this.match_any([TK_FLOAT]):
-            return LiteralExpr("float", this.previous().lexeme)
+            return Expr::Literal("float", this.previous().lexeme)
         if this.match_any([TK_STRING]):
-            return LiteralExpr("string", this.previous().lexeme)
+            return Expr::Literal("string", this.previous().lexeme)
         if this.match_any([TK_IDENTIFIER]):
-            return VariableExpr(this.previous())
+            return Expr::Variable(this.previous())
         if this.match_any([TK_THIS]):
-            return ThisExpr(this.previous())
+            return Expr::This(this.previous())
         if this.match_any([TK_LEFT_PAREN]):
-            dynamic expr = this.expression()
+            Expr expr = this.expression()
             this.consume(TK_RIGHT_PAREN, "Expect ')' after expression.")
-            return GroupingExpr(expr)
+            return Expr::Grouping(expr)
         if this.match_any([TK_LEFT_BRACKET]):
-            vector[dynamic] elements = []
+            vector[Expr] elements = []
             this.skip_formatting()
             if this.check(TK_RIGHT_BRACKET) == false:
                 this.skip_formatting()
@@ -661,18 +367,18 @@ class Parser:
                     this.skip_formatting()
             this.skip_formatting()
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after vector literal.")
-            return VectorExpr(elements)
+            return Expr::Vector(elements)
         if this.match_any([TK_LEFT_BRACE]):
-            vector[dynamic] keys = []
-            vector[dynamic] values = []
+            vector[Expr] keys = []
+            vector[Expr] values = []
             this.skip_formatting()
             if this.check(TK_RIGHT_BRACE) == false:
                 this.skip_formatting()
-                dynamic key = this.expression()
+                Expr key = this.expression()
                 this.skip_formatting()
                 this.consume(TK_COLON, "Expect ':' after map key.")
                 this.skip_formatting()
-                dynamic value = this.expression()
+                Expr value = this.expression()
                 this.skip_formatting()
                 keys.push(key)
                 values.push(value)
@@ -688,14 +394,14 @@ class Parser:
                     values.push(value)
             this.skip_formatting()
             this.consume(TK_RIGHT_BRACE, "Expect '}' after map literal.")
-            return MapExpr(keys, values)
+            return Expr::Map(keys, values)
 
         auto t = this.peek()
         throw "Expect expression. Got " + t.token_type + " at " + t.line + ":" + t.col
 
     // ── Statement parsing ───────────────────────────────────
 
-    dynamic fn statement():
+    Stmt fn statement():
         if this.match_any([TK_IF]):
             return this.if_statement()
         if this.match_any([TK_WHILE]):
@@ -706,53 +412,71 @@ class Parser:
             return this.return_statement()
         if this.match_any([TK_THROW]):
             return this.throw_statement()
+        if this.match_any([TK_MATCH]):
+            return this.match_statement()
         return this.expression_statement()
 
-    dynamic fn throw_statement():
-        dynamic expr = this.expression()
+    Stmt fn throw_statement():
+        Expr expr = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return ExprStmt(ThrowExpr(expr))
+        return Stmt::ExprStmt(Expr::Throw(expr))
 
-    dynamic fn if_statement():
-        dynamic condition = this.expression()
+    Stmt fn if_statement():
+        Expr condition = this.expression()
         this.consume(TK_COLON, "Expect ':' after if condition.")
-        auto then_branch = BlockStmt(this.block())
+        Stmt then_branch = Stmt::Block(this.block())
 
-        dynamic else_branch = null
+        Stmt else_branch = Stmt::None()
         if this.match_any([TK_ELSE]):
             if this.match_any([TK_COLON]):
-                else_branch = BlockStmt(this.block())
+                else_branch = Stmt::Block(this.block())
             else if this.check(TK_IF):
                 else_branch = this.declaration()
-        return IfStmt(condition, then_branch, else_branch)
+        return Stmt::If(condition, then_branch, else_branch)
 
-    dynamic fn while_statement():
-        dynamic condition = this.expression()
+    Stmt fn while_statement():
+        Expr condition = this.expression()
         this.consume(TK_COLON, "Expect ':' after while condition.")
-        auto body = BlockStmt(this.block())
-        return WhileStmt(condition, body)
+        Stmt body = Stmt::Block(this.block())
+        return Stmt::While(condition, body)
 
-    dynamic fn for_statement():
+    Stmt fn for_statement():
         auto item_name = this.consume(TK_IDENTIFIER, "Expect variable name after 'for'.")
         this.consume(TK_IN, "Expect 'in' after variable name.")
-        dynamic collection = this.expression()
+        Expr collection = this.expression()
         this.consume(TK_COLON, "Expect ':' after for loop header.")
-        auto body = BlockStmt(this.block())
-        return ForStmt(item_name, collection, body)
+        Stmt body = Stmt::Block(this.block())
+        return Stmt::For(item_name, collection, body)
 
-    dynamic fn return_statement():
+    Stmt fn return_statement():
         auto keyword = this.previous()
-        dynamic value = null
+        Expr value = Expr::None()
         if this.check(TK_NEWLINE) == false and this.check(TK_DEDENT) == false and this.is_at_end() == false:
             value = this.expression()
         this.match_any([TK_NEWLINE])
-        return ReturnStmt(keyword, value)
+        return Stmt::Return(keyword, value)
 
-    vector[dynamic] fn block():
+    Stmt fn match_statement():
+        Expr expr = this.expression()
+        this.consume(TK_COLON, "Expect ':' after match expression.")
+        this.match_any([TK_NEWLINE])
+        this.consume(TK_INDENT, "Expect indentation to start match body.")
+
+        vector[Stmt] arms = []
+        while this.check(TK_DEDENT) == false and this.is_at_end() == false:
+            if this.match_any([TK_NEWLINE]):
+                int noop = 0
+            else:
+                arms.push(this.declaration())
+
+        this.consume(TK_DEDENT, "Expect dedent to end match body.")
+        return Stmt::Block(arms)
+
+    vector[Stmt] fn block():
         this.match_any([TK_NEWLINE])
         this.consume(TK_INDENT, "Expect indentation to start a block.")
 
-        vector[dynamic] statements = []
+        vector[Stmt] statements = []
         while this.check(TK_DEDENT) == false and this.is_at_end() == false:
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
@@ -761,33 +485,33 @@ class Parser:
         this.consume(TK_DEDENT, "Expect dedent to end a block.")
         return statements
 
-    dynamic fn expression_statement():
-        dynamic expr = this.expression()
+    Stmt fn expression_statement():
+        Expr expr = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return ExprStmt(expr)
+        return Stmt::ExprStmt(expr)
 
     // ── Declaration parsing ─────────────────────────────────
 
-    dynamic fn var_declaration(string visibility):
-        dynamic var_type = this.parse_type()
+    Stmt fn var_declaration(string visibility):
+        TypeNode var_type = this.parse_type()
         auto name = this.consume(TK_IDENTIFIER, "Expect variable name after type.")
 
-        dynamic initializer = null
+        Expr initializer = Expr::None()
         if this.match_any([TK_EQUAL]):
             initializer = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return LetStmt(name, var_type, initializer, visibility)
+        return Stmt::Let(name, var_type, initializer, visibility)
 
-    dynamic fn const_declaration(string visibility):
-        dynamic const_type = this.parse_type()
+    Stmt fn const_declaration(string visibility):
+        TypeNode const_type = this.parse_type()
         auto name = this.consume(TK_IDENTIFIER, "Expect constant name after type.")
         this.consume(TK_EQUAL, "Const declaration must have an initializer.")
-        dynamic value = this.expression()
+        Expr value = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return ConstStmt(name, const_type, value, visibility)
+        return Stmt::Const(name, const_type, value, visibility)
 
-    dynamic fn function_declaration(string visibility, bool is_static):
-        dynamic return_type = this.parse_type()
+    Stmt fn function_declaration(string visibility, bool is_static):
+        TypeNode return_type = this.parse_type()
 
         bool is_inline = false
         bool is_comptime = false
@@ -801,9 +525,9 @@ class Parser:
         auto name = this.consume(TK_IDENTIFIER, "Expect function name.")
 
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
-        vector[dynamic] params = []
+        vector[Param] params = []
         if this.check(TK_RIGHT_PAREN) == false:
-            dynamic param_type = this.parse_type()
+            TypeNode param_type = this.parse_type()
             auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
             params.push(Param(param_name, param_type))
             while this.match_any([TK_COMMA]):
@@ -813,81 +537,94 @@ class Parser:
         this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
 
         this.consume(TK_COLON, "Expect ':' before function body.")
-        vector[dynamic] body = this.block()
-        return FunctionStmt(name, params, return_type, body, is_inline, is_comptime, is_static, visibility)
+        vector[Stmt] body = this.block()
+        return Stmt::Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility)
 
-    dynamic fn class_declaration(string visibility):
+    Stmt fn class_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect class name.")
         this.consume(TK_COLON, "Expect ':' after class name.")
         auto old = this.in_class_body
         this.in_class_body = true
         auto body = this.block()
         this.in_class_body = old
-        return ClassStmt(name, body, visibility)
+        return Stmt::Class(name, body, visibility)
 
-    dynamic fn struct_declaration(string visibility):
+    Stmt fn struct_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect struct name.")
         this.consume(TK_COLON, "Expect ':' after struct name.")
         auto old = this.in_class_body
         this.in_class_body = true
         auto body = this.block()
         this.in_class_body = old
-        return StructStmt(name, body, visibility)
+        return Stmt::Struct(name, body, visibility)
 
-    dynamic fn enum_declaration(string visibility):
+    Stmt fn enum_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect enum name.")
         this.consume(TK_COLON, "Expect ':' after enum name.")
 
         this.match_any([TK_NEWLINE])
         this.consume(TK_INDENT, "Expect indentation to start enum body.")
 
-        vector[dynamic] variants = []
+        vector[EnumVariantNode] variants = []
         while this.check(TK_DEDENT) == false and this.is_at_end() == false:
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
-            else:
-                dynamic vtype = this.parse_type()
+            else if this.check(TK_IDENTIFIER) and this.peek_at(1).token_type == TK_LEFT_PAREN:
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
-                vector[dynamic] types = []
-                if vtype.tag != "Null" and vtype.tag != "Void":
+                this.consume(TK_LEFT_PAREN, "Expect '(' after variant name.")
+                vector[TypeNode] fields = []
+                if this.check(TK_RIGHT_PAREN) == false:
+                    fields.push(this.parse_type())
+                    this.consume(TK_IDENTIFIER, "Expect field name.")
+                    while this.match_any([TK_COMMA]):
+                        fields.push(this.parse_type())
+                        this.consume(TK_IDENTIFIER, "Expect field name.")
+                this.consume(TK_RIGHT_PAREN, "Expect ')' after variant fields.")
+                variants.push(EnumVariantNode(vname, fields))
+                this.match_any([TK_NEWLINE])
+            else:
+                TypeNode vtype = this.parse_type()
+                auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
+                vector[TypeNode] types = []
+                if vtype._tag != "NullType" and vtype._tag != "Void":
                     types.push(vtype)
                 variants.push(EnumVariantNode(vname, types))
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end enum body.")
-        return EnumStmt(name, variants, visibility)
+        return Stmt::Enum(name, variants, visibility)
 
-    dynamic fn import_statement():
-        vector[dynamic] path = []
+    Stmt fn import_statement():
+        vector[Token] path = []
         path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
         while this.match_any([TK_DOUBLE_COLON]):
             path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
 
-        dynamic alias = null
+        string alias = ""
         if this.match_any([TK_AS]):
-            alias = this.consume(TK_IDENTIFIER, "Expect alias name after 'as'.")
+            alias = this.consume(TK_IDENTIFIER, "Expect alias name after 'as'.").lexeme
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return ImportStmt(path, alias)
+        return Stmt::Import(path, alias)
 
-    dynamic fn namespace_statement(string visibility):
+    Stmt fn namespace_statement(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect namespace name.")
         this.consume(TK_COLON, "Expect ':' after namespace name.")
         auto body = this.block()
-        return NamespaceStmt(name, body, visibility)
+        return Stmt::Namespace(name, body, visibility)
 
-    dynamic fn try_statement():
+    Stmt fn try_statement():
         this.consume(TK_COLON, "Expect ':' after 'try'.")
-        auto try_body = BlockStmt(this.block())
+        Stmt try_body = Stmt::Block(this.block())
 
-        auto catch_token = this.consume(TK_CATCH, "Expect 'catch' after 'try' block.")
-        dynamic exception_name = null
+        this.consume(TK_CATCH, "Expect 'catch' after 'try' block.")
+        string exception_name = ""
         if this.match_any([TK_IDENTIFIER]):
-            exception_name = this.previous()
+            exception_name = this.previous().lexeme
         this.consume(TK_COLON, "Expect ':' after 'catch'.")
-        auto catch_body = BlockStmt(this.block())
-        return TryStmt(try_body, catch_token, exception_name, catch_body)
+        Stmt catch_body = Stmt::Block(this.block())
+        return Stmt::Try(try_body, catch_body, exception_name)
 
-    dynamic fn declaration():
+    Stmt fn declaration():
         string visibility = "public"
         if this.match_any([TK_PRIVATE]):
             visibility = "private"
@@ -948,8 +685,8 @@ class Parser:
 
     // ── Main entry point ────────────────────────────────────
 
-    vector[dynamic] fn parse_program():
-        vector[dynamic] statements = []
+    vector[Stmt] fn parse_program():
+        vector[Stmt] statements = []
         while this.is_at_end() == false:
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
@@ -970,15 +707,22 @@ void fn main():
     parser_test_scanner.scan_tokens()
 
     auto parser = Parser(parser_test_scanner.tokens)
-    vector[dynamic] stmts = parser.parse_program()
+    vector[Stmt] stmts = parser.parse_program()
 
     print("Parsed statements: " + stmts.len())
     for stmt in stmts:
-        dynamic expr = stmt.expr
-        if stmt.tag == "ExprStmt":
-            if expr.tag == "Binary":
-                dynamic right = expr.right
-                print("Binary: " + expr.op.lexeme)
-                if right.tag == "Binary":
-                    print("  Right is Binary: " + right.op.lexeme)
-                    print("OK: precedence correct (1 + (2 * 3))")
+        match stmt:
+            ExprStmt(expr):
+                match expr:
+                    Binary(left, op, right):
+                        print("Binary: " + op.lexeme)
+                        match right:
+                            Binary(rl, rop, rr):
+                                print("  Right is Binary: " + rop.lexeme)
+                                print("OK: precedence correct (1 + (2 * 3))")
+                            _:
+                                int noop = 0
+                    _:
+                        int noop = 0
+            _:
+                int noop = 0

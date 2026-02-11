@@ -1,4 +1,4 @@
-use crate::parser::ast::{Expr, Stmt, Type, Literal, Visibility};
+use crate::parser::ast::{Expr, Stmt, Type, Literal, Visibility, Pattern};
 use crate::error::{LavinaError, ErrorPhase};
 use crate::lexer::TokenType;
 use crate::lexer::scanner::Scanner;
@@ -434,7 +434,7 @@ impl TypeChecker {
                 let mut members = HashMap::new();
                 for variant in variants {
                     let mut param_types = Vec::new();
-                    for t in &variant.types {
+                    for (_, t) in &variant.fields {
                         param_types.push(t.clone());
                     }
                     if param_types.is_empty() {
@@ -461,6 +461,21 @@ impl TypeChecker {
                 
                 let mut original_env = *self.env.enclosing.take().unwrap();
                 std::mem::swap(&mut self.env, &mut original_env);
+                Ok(())
+            }
+            Stmt::Match(expr, arms) => {
+                self.check_expr(expr)?;
+                for arm in arms {
+                    // Define pattern bindings as Dynamic for type checking
+                    if let Pattern::Variant(_, bindings) = &arm.pattern {
+                        for b in bindings {
+                            self.env.define(b.lexeme.clone(), TypeInfo::Variable(Type::Dynamic), Visibility::Public);
+                        }
+                    }
+                    for s in &arm.body {
+                        self.check_stmt(s)?;
+                    }
+                }
                 Ok(())
             }
         }

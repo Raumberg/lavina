@@ -1,18 +1,31 @@
+// Old syntax (backward compat)
 enum Result:
     int Ok
     string Error
     null Loading
 
-auto r1 = Result::Ok(42)
-auto r2 = Result::Error("Something went wrong")
-auto r3 = Result::Loading()
+// New named-field syntax
+enum Shape:
+    Circle(float radius)
+    Rect(float width, float height)
+    null Point
 
-print(r1["_tag"])
-print(r2["_tag"])
-print(r3["_tag"])
+void fn main():
+    auto r1 = Result::Ok(42)
+    auto r2 = Result::Error("Something went wrong")
+    auto r3 = Result::Loading()
 
-if r1["_tag"] == "Ok":
-    print("R1 is OK, value: " + r1["0"])
+    print(r1["_tag"])
+    print(r2["_tag"])
+    print(r3["_tag"])
 
-if r2["_tag"] == "Error":
-    print("R2 is Error, msg: " + r2["0"])
+    if r1["_tag"] == "Ok":
+        print("R1 is OK")
+
+    auto c = Shape::Circle(3.14)
+    auto r = Shape::Rect(10.0, 20.0)
+    auto p = Shape::Point()
+
+    print(c["_tag"])
+    print(r["_tag"])
+    print(p["_tag"])
