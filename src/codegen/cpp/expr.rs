@@ -42,6 +42,10 @@ impl CppCodegen {
                     if let Some(result) = self.try_emit_method_call(obj, &method.lexeme, args) {
                         return result;
                     }
+                    // Not a built-in method — emit as obj.method(args) directly
+                    let o = self.emit_expr(obj);
+                    let arg_strs: Vec<String> = args.iter().map(|a| self.emit_expr(a)).collect();
+                    return format!("{}.{}({})", o, method.lexeme, arg_strs.join(", "));
                 }
                 // Static call: Type::method(args)
                 if let Expr::StaticGet(obj, method) = callee.as_ref() {
@@ -85,12 +89,18 @@ impl CppCodegen {
             }
             Expr::Get(object, property) => {
                 let obj = self.emit_expr(object);
-                format!("{}.{}", obj, property.lexeme)
+                // Use lv_get_field when accessing fields on dynamic/any values
+                // (result of another lv_get_field, or when object might be std::any)
+                if self.is_dynamic_expr(object) {
+                    format!("lv_get_field({}, std::string(\"{}\"))", obj, property.lexeme)
+                } else {
+                    format!("{}.{}", obj, property.lexeme)
+                }
             }
             Expr::Set(object, property, value) => {
                 let obj = self.emit_expr(object);
                 let val = self.emit_expr(value);
-                format!("{}.{} = {}", obj, property.lexeme, val)
+                format!("lv_set_field({}, std::string(\"{}\"), std::any({}))", obj, property.lexeme, val)
             }
             Expr::StaticGet(object, member) => {
                 let obj = self.emit_expr(object);
@@ -106,6 +116,16 @@ impl CppCodegen {
                 let e = self.emit_expr(expr);
                 format!("throw std::runtime_error({})", e)
             }
+        }
+    }
+
+    /// Check if an expression would produce a dynamic (std::any) value.
+    pub(super) fn is_dynamic_expr(&self, expr: &Expr) -> bool {
+        match expr {
+            Expr::Get(_inner, _) => true,
+            Expr::Variable(tok) => self.dynamic_vars.contains(&tok.lexeme),
+            Expr::Index(obj, _, _) => self.is_dynamic_expr(obj),
+            _ => false,
         }
     }
 
@@ -180,7 +200,37 @@ impl CppCodegen {
             Expr::Get(obj, prop) if matches!(obj.as_ref(), Expr::This(_)) => {
                 format!("this->{}", prop.lexeme)
             }
+            Expr::Get(obj, prop) => {
+                let o = self.emit_method_expr(obj);
+                if self.is_dynamic_expr(obj) {
+                    format!("lv_get_field({}, std::string(\"{}\"))", o, prop.lexeme)
+                } else {
+                    format!("{}.{}", o, prop.lexeme)
+                }
+            }
+            Expr::Set(obj, prop, value) => {
+                let o = self.emit_method_expr(obj);
+                let v = self.emit_method_expr(value);
+                format!("lv_set_field({}, std::string(\"{}\"), std::any({}))", o, prop.lexeme, v)
+            }
             Expr::This(_) => "(*this)".to_string(),
+            Expr::Grouping(inner) => {
+                let i = self.emit_method_expr(inner);
+                format!("({})", i)
+            }
+            Expr::Index(object, _bracket, index) => {
+                let obj = self.emit_method_expr(object);
+                let idx = self.emit_method_expr(index);
+                format!("{}[{}]", obj, idx)
+            }
+            Expr::Vector(elements) => {
+                let elems: Vec<String> = elements.iter().map(|e| self.emit_method_expr(e)).collect();
+                if elems.is_empty() {
+                    "{}".to_string()
+                } else {
+                    format!("std::vector{{{}}}", elems.join(", "))
+                }
+            }
             Expr::Binary(left, op, right) => {
                 let l = self.emit_method_expr(left);
                 let r = self.emit_method_expr(right);
@@ -218,15 +268,6 @@ impl CppCodegen {
             Expr::Assign(aname, value) => {
                 let v = self.emit_method_expr(value);
                 format!("{} = {}", aname.lexeme, v)
-            }
-            Expr::Get(obj, prop) => {
-                let o = self.emit_method_expr(obj);
-                format!("{}.{}", o, prop.lexeme)
-            }
-            Expr::Set(obj, prop, value) => {
-                let o = self.emit_method_expr(obj);
-                let v = self.emit_method_expr(value);
-                format!("{}.{} = {}", o, prop.lexeme, v)
             }
             _ => self.emit_expr(expr),
         }

@@ -11,7 +11,7 @@ impl CppCodegen {
             Type::String => "std::string".to_string(),
             Type::Void => "void".to_string(),
             Type::Auto => "auto".to_string(),
-            Type::Dynamic => "auto".to_string(),
+            Type::Dynamic => "std::any".to_string(),
             Type::Null => "std::nullptr_t".to_string(),
             Type::Array(inner) => format!("std::vector<{}>", self.emit_type(inner)),
             Type::Tuple(types) => {

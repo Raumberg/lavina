@@ -13,6 +13,12 @@ impl CppCodegen {
                     Some(t) => self.emit_type(t),
                     None => "auto".to_string(),
                 };
+                // Track dynamic variables
+                let is_dynamic = Self::type_contains_dynamic(ty)
+                    || (ty.is_none() && init.as_ref().map_or(false, |e| self.is_dynamic_expr(e)));
+                if is_dynamic {
+                    self.dynamic_vars.insert(name.lexeme.clone());
+                }
                 let init_str = match init {
                     Some(expr) => format!(" = {}", self.emit_expr(expr)),
                     None => self.default_init(&cpp_type),
@@ -40,6 +46,14 @@ impl CppCodegen {
                 self.emit_block_or_stmt(body);
             }
             Stmt::For(var, iterable, body) => {
+                // If iterating over a dynamic variable, the loop var is also dynamic
+                let iter_is_dynamic = match iterable {
+                    Expr::Variable(tok) => self.dynamic_vars.contains(&tok.lexeme),
+                    _ => self.is_dynamic_expr(iterable),
+                };
+                if iter_is_dynamic {
+                    self.dynamic_vars.insert(var.lexeme.clone());
+                }
                 let iter = self.emit_expr(iterable);
                 self.output.push_str(&format!(
                     "{}for (auto& {} : {}) ",
@@ -140,6 +154,12 @@ impl CppCodegen {
             .iter()
             .map(|(name, ty)| format!("{} {}", self.emit_type(ty), name.lexeme))
             .collect();
+        // Track dynamic parameters
+        for (name, ty) in &decl.params {
+            if matches!(ty, Type::Dynamic) {
+                self.dynamic_vars.insert(name.lexeme.clone());
+            }
+        }
         self.output.push_str(&format!(
             "{}{} {}({}) {{\n",
             self.indent(),
@@ -186,11 +206,33 @@ impl CppCodegen {
                 self.output.push_str(&format!("{}while ({}) ", self.indent(), c));
                 self.emit_method_block_or_stmt(body);
             }
+            Stmt::For(var, iterable, body) => {
+                let iter_is_dynamic = match iterable {
+                    Expr::Variable(tok) => self.dynamic_vars.contains(&tok.lexeme),
+                    _ => self.is_dynamic_expr(iterable),
+                };
+                if iter_is_dynamic {
+                    self.dynamic_vars.insert(var.lexeme.clone());
+                }
+                let iter = self.emit_method_expr(iterable);
+                self.output.push_str(&format!(
+                    "{}for (auto& {} : {}) ",
+                    self.indent(),
+                    var.lexeme,
+                    iter
+                ));
+                self.emit_method_block_or_stmt(body);
+            }
             Stmt::Let(lname, ty, init, _vis) => {
                 let cpp_type = match ty {
                     Some(t) => self.emit_type(t),
                     None => "auto".to_string(),
                 };
+                let is_dynamic = Self::type_contains_dynamic(ty)
+                    || (ty.is_none() && init.as_ref().map_or(false, |e| self.is_dynamic_expr(e)));
+                if is_dynamic {
+                    self.dynamic_vars.insert(lname.lexeme.clone());
+                }
                 let init_str = match init {
                     Some(expr) => format!(" = {}", self.emit_method_expr(expr)),
                     None => self.default_init(&cpp_type),
@@ -202,6 +244,29 @@ impl CppCodegen {
                     lname.lexeme,
                     init_str
                 ));
+            }
+            Stmt::Block(stmts) => {
+                self.output.push_str(&format!("{}{{\n", self.indent()));
+                self.indent_level += 1;
+                for s in stmts {
+                    self.emit_method_stmt(s);
+                }
+                self.indent_level -= 1;
+                self.output.push_str(&format!("{}}}\n", self.indent()));
+            }
+            Stmt::Try(try_body, _catch_token, exception_name, catch_body) => {
+                self.output.push_str(&format!("{}try ", self.indent()));
+                self.emit_method_block_or_stmt(try_body);
+                let exc_name = match exception_name {
+                    Some(t) => t.lexeme.clone(),
+                    None => "e".to_string(),
+                };
+                self.output.push_str(&format!(
+                    "{} catch (const std::exception& {}) ",
+                    self.indent(),
+                    exc_name
+                ));
+                self.emit_method_block_or_stmt(catch_body);
             }
             _ => self.emit_stmt(stmt),
         }

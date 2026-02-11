@@ -1,6 +1,6 @@
 use crate::parser::ast::*;
 use std::collections::HashMap;
-use super::{CppCodegen, FieldInfo};
+use super::{CppCodegen, FieldInfo, ClassInfo};
 
 impl CppCodegen {
     pub(super) fn emit_class(&mut self, name: &crate::lexer::token::Token, body: &[Stmt]) {
@@ -73,14 +73,42 @@ impl CppCodegen {
                 .iter()
                 .map(|(pname, ty)| format!("{} {}", self.emit_type(ty), pname.lexeme))
                 .collect();
-            self.output.push_str(&format!(
-                "{}{}({}) {{\n",
-                self.indent(),
-                name.lexeme,
-                params.join(", ")
-            ));
-            self.indent_level += 1;
+
+            // Build initializer list from this.field = param assignments
+            let mut init_list: Vec<String> = Vec::new();
+            let mut body_stmts: Vec<&Stmt> = Vec::new();
             for stmt in &init.body {
+                if let Stmt::Expression(Expr::Set(obj, prop, value)) = stmt {
+                    if matches!(obj.as_ref(), Expr::This(_)) {
+                        if let Expr::Variable(tok) = value.as_ref() {
+                            // Simple this.field = param → use initializer list
+                            init_list.push(format!("{}({})", prop.lexeme, tok.lexeme));
+                            continue;
+                        }
+                    }
+                }
+                body_stmts.push(stmt);
+            }
+
+            if init_list.is_empty() {
+                self.output.push_str(&format!(
+                    "{}{}({}) {{\n",
+                    self.indent(),
+                    name.lexeme,
+                    params.join(", ")
+                ));
+            } else {
+                self.output.push_str(&format!(
+                    "{}{}({})\n{}    : {} {{\n",
+                    self.indent(),
+                    name.lexeme,
+                    params.join(", "),
+                    self.indent(),
+                    init_list.join(", ")
+                ));
+            }
+            self.indent_level += 1;
+            for stmt in &body_stmts {
                 self.emit_method_stmt(stmt);
             }
             self.indent_level -= 1;
@@ -95,6 +123,12 @@ impl CppCodegen {
                 .iter()
                 .map(|(pname, ty)| format!("{} {}", self.emit_type(ty), pname.lexeme))
                 .collect();
+            // Track dynamic parameters
+            for (pname, ty) in &method.params {
+                if matches!(ty, Type::Dynamic) {
+                    self.dynamic_vars.insert(pname.lexeme.clone());
+                }
+            }
             self.output.push_str(&format!(
                 "{}{} {}({}) {{\n",
                 self.indent(),
@@ -112,6 +146,42 @@ impl CppCodegen {
 
         self.indent_level -= 1;
         self.output.push_str(&format!("{}}};\n\n", self.indent()));
+
+        // Register class and emit lv_get_field / lv_set_field overloads
+        let class_name = name.lexeme.clone();
+        let class_fields: Vec<FieldInfo> = all_fields.iter().map(|f| FieldInfo {
+            name: f.name.clone(),
+            cpp_type: f.cpp_type.clone(),
+        }).collect();
+
+        // Emit lv_get_field overload
+        self.output.push_str(&format!("std::any lv_get_field(const {}& obj, const std::string& name) {{\n", class_name));
+        for field in &class_fields {
+            self.output.push_str(&format!("    if (name == \"{}\") return std::any(obj.{});\n", field.name, field.name));
+        }
+        self.output.push_str(&format!("    throw std::runtime_error(\"No field '\" + name + \"' on {}\");\n", class_name));
+        self.output.push_str("}\n\n");
+
+        // Emit lv_set_field overload
+        self.output.push_str(&format!("void lv_set_field({}& obj, const std::string& name, std::any value) {{\n", class_name));
+        for field in &class_fields {
+            let cast = match field.cpp_type.as_str() {
+                "std::string" => format!("obj.{} = std::any_cast<std::string>(value);", field.name),
+                "int64_t" => format!("obj.{} = std::any_cast<int64_t>(value);", field.name),
+                "double" => format!("obj.{} = std::any_cast<double>(value);", field.name),
+                "bool" => format!("obj.{} = std::any_cast<bool>(value);", field.name),
+                "std::any" => format!("obj.{} = value;", field.name),
+                _ => format!("obj.{} = std::any_cast<{}>(value);", field.name, field.cpp_type),
+            };
+            self.output.push_str(&format!("    if (name == \"{}\") {{ {} return; }}\n", field.name, cast));
+        }
+        self.output.push_str(&format!("    throw std::runtime_error(\"No field '\" + name + \"' on {}\");\n", class_name));
+        self.output.push_str("}\n\n");
+
+        self.known_classes.push(ClassInfo {
+            name: class_name,
+            fields: class_fields,
+        });
     }
 
     fn discover_fields(&self, stmts: &[Stmt], param_types: &HashMap<String, String>) -> Vec<FieldInfo> {

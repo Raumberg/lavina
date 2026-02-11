@@ -71,6 +71,8 @@ const string TK_THIS = "This"
 const string TK_TRY = "Try"
 const string TK_CATCH = "Catch"
 const string TK_THROW = "Throw"
+const string TK_CONST = "Const"
+const string TK_LET = "Let"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -163,6 +165,10 @@ string fn lookup_keyword(auto w):
         return TK_CATCH
     else if w == "throw":
         return TK_THROW
+    else if w == "const":
+        return TK_CONST
+    else if w == "let":
+        return TK_LET
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
