@@ -403,6 +403,9 @@ class Parser:
         auto item_name = this.consume(TK_IDENTIFIER, "Expect variable name after 'for'.")
         this.consume(TK_IN, "Expect 'in' after variable name.")
         Expr collection = this.expression()
+        if this.match_any([TK_DOT_DOT]):
+            Expr end_expr = this.expression()
+            collection = Expr::Range(collection, end_expr)
         this.consume(TK_COLON, "Expect ':' after for loop header.")
         Stmt body = Stmt::Block(this.block())
         return Stmt::For(item_name, collection, body)

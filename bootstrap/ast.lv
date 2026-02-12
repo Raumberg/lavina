@@ -55,6 +55,7 @@ enum Expr:
     This(Token keyword)
     Cast(Expr expr, TypeNode target_type)
     Throw(Expr expr)
+    Range(Expr start, Expr end)
 
 // ── Match arm ────────────────────────────────────────────────
 

@@ -13,6 +13,7 @@ const string TK_LEFT_BRACE = "LeftBrace"
 const string TK_RIGHT_BRACE = "RightBrace"
 const string TK_COMMA = "Comma"
 const string TK_DOT = "Dot"
+const string TK_DOT_DOT = "DotDot"
 const string TK_MINUS = "Minus"
 const string TK_PLUS = "Plus"
 const string TK_SEMICOLON = "Semicolon"
@@ -435,7 +436,10 @@ class Scanner:
         elif c == ",":
             this.add_simple_token(TK_COMMA)
         elif c == ".":
-            this.add_simple_token(TK_DOT)
+            if this.match_char("."):
+                this.add_simple_token(TK_DOT_DOT)
+            else:
+                this.add_simple_token(TK_DOT)
         elif c == "?":
             this.add_simple_token(TK_QUESTION)
         elif c == "+":
