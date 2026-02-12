@@ -32,9 +32,34 @@ snapshot: bootstrap
 		echo "Saved $(STAGES_DIR)/stage$(NEXT_NUM).cpp"; \
 	fi
 
+# ── Run test suite ───────────────────────────────────────────
+
+test:
+	@if [ ! -f /tmp/lavina_next ]; then echo "Run 'make bootstrap' first"; exit 1; fi
+	@cp runtime/lavina.h /tmp/lavina.h
+	@rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
+	@passed=0; failed=0; errors=""; \
+	for f in tests/test_*.lv; do \
+		name=$$(basename $$f .lv); \
+		/tmp/lavina_next --emit-cpp $$f > /tmp/$$name.cpp 2>/dev/null && \
+		g++ -std=c++23 -I/tmp -o /tmp/$$name /tmp/$$name.cpp 2>/dev/null && \
+		/tmp/$$name 2>/dev/null; \
+		if [ $$? -eq 0 ]; then \
+			echo "  PASS  $$name"; \
+			passed=$$((passed + 1)); \
+		else \
+			echo "  FAIL  $$name"; \
+			failed=$$((failed + 1)); \
+			errors="$$errors $$name"; \
+		fi; \
+	done; \
+	echo ""; \
+	echo "$$passed passed, $$failed failed"; \
+	if [ $$failed -ne 0 ]; then echo "Failed:$$errors"; exit 1; fi
+
 clean:
 	rm -f /tmp/lavina_prev /tmp/lavina_next /tmp/lavina_next.cpp /tmp/lavina_verify.cpp
 	rm -f /tmp/lavina.h
 	rm -rf /tmp/liblavina
 
-.PHONY: bootstrap snapshot clean
+.PHONY: bootstrap snapshot clean test

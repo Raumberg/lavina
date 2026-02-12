@@ -459,6 +459,16 @@ class Scanner:
                 this.add_simple_token(TK_STAR)
         elif c == "%":
             this.add_simple_token(TK_PERCENT)
+        elif c == "&":
+            if this.match_char("&"):
+                this.add_simple_token(TK_AND)
+            else:
+                this.add_error("Unexpected character: &")
+        elif c == "|":
+            if this.match_char("|"):
+                this.add_simple_token(TK_OR)
+            else:
+                this.add_error("Unexpected character: |")
         elif c == "-":
             if this.match_char(">"):
                 this.add_simple_token(TK_ARROW)

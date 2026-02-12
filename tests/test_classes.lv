@@ -1,0 +1,32 @@
+class Counter:
+    constructor(int start):
+        this.value = start
+
+    void fn increment():
+        this.value = this.value + 1
+
+    void fn increase(int n):
+        this.value = this.value + n
+
+    int fn get():
+        return this.value
+
+void fn main():
+    auto c = Counter(0)
+    lv_assert(c.get() == 0, "initial value")
+
+    c.increment()
+    lv_assert(c.get() == 1, "after increment")
+
+    c.increase(9)
+    lv_assert(c.get() == 10, "after increase")
+
+    // Field access
+    lv_assert(c.value == 10, "direct field access")
+
+    // Multiple instances
+    auto c2 = Counter(100)
+    lv_assert(c2.get() == 100, "second instance")
+    lv_assert(c.get() == 10, "first instance unchanged")
+
+    print("test_classes: ALL PASSED")

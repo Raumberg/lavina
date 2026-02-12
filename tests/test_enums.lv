@@ -1,0 +1,16 @@
+enum Result:
+    Ok(int code)
+    Error(string err)
+    Loading
+
+void fn main():
+    auto r1 = Result::Ok(42)
+    auto r2 = Result::Error("bad")
+    auto r3 = Result::Loading()
+
+    // Tag check
+    lv_assert(r1["_tag"] == "Ok", "Ok tag")
+    lv_assert(r2["_tag"] == "Error", "Error tag")
+    lv_assert(r3["_tag"] == "Loading", "Loading tag")
+
+    print("test_enums: ALL PASSED")

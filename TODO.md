@@ -36,7 +36,6 @@
 - [ ] Directory listing / filesystem operations
 
 ## Tooling
-- [ ] REPL
 - [ ] Package manager
 - [ ] LSP server for editor support
 - [ ] Formatter

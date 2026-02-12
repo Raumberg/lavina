@@ -1,0 +1,42 @@
+void fn thrower():
+    throw "deep error"
+
+void fn middle():
+    thrower()
+
+void fn main():
+    // Basic try/catch
+    bool caught = false
+    try:
+        throw "test error"
+    catch err:
+        caught = true
+    lv_assert(caught, "catch block executed")
+
+    // Code after try/catch runs
+    bool after = true
+    lv_assert(after, "code after try/catch")
+
+    // Stack unwinding
+    bool deep_caught = false
+    try:
+        middle()
+    catch err:
+        deep_caught = true
+    lv_assert(deep_caught, "deep catch executed")
+
+    // Nested try/catch
+    bool inner_ran = false
+    bool outer_ran = false
+    try:
+        try:
+            throw "inner"
+        catch err:
+            inner_ran = true
+            throw "outer"
+    catch err:
+        outer_ran = true
+    lv_assert(inner_ran, "inner catch ran")
+    lv_assert(outer_ran, "outer catch ran")
+
+    print("test_exceptions: ALL PASSED")

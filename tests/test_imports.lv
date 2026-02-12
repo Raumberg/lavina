@@ -1,0 +1,7 @@
+import helpers/math_helper
+
+void fn main():
+    lv_assert(add(3, 4) == 7, "imported add")
+    lv_assert(multiply(5, 6) == 30, "imported multiply")
+
+    print("test_imports: ALL PASSED")
