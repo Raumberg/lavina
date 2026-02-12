@@ -2,7 +2,7 @@ class Math:
     static int fn add(int a, int b):
         return a + b
     
-    void fn __init__():
+    constructor():
         print("Math instance created")
 
 // Correct static access

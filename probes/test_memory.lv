@@ -2,7 +2,7 @@ import std::memory as mem
 
 class Data:
     int value
-    void fn __init__(int v):
+    constructor(int v):
         this.value = v
 
 auto d = Data(42)

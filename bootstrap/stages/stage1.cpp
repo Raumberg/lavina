@@ -1,3 +1,7 @@
+// Stage 1: Initial self-hosting bootstrap compiler
+// - Scanner, parser, codegen, main with import resolver
+// - CLI: bootstrap [--emit-cpp | compile] <file.lv>
+// - void fn main() with automatic return 0
 #include "lavina.h"
 
 const std::string TK_LEFT_PAREN = std::string("LeftParen");

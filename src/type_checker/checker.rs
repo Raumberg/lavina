@@ -393,10 +393,10 @@ impl TypeChecker {
                     }
                 }
                 
-                // Discover implicit fields from __init__
+                // Discover implicit fields from constructor
                 for s in body {
                     if let Stmt::Function(decl) = s {
-                        if decl.name.lexeme == "__init__" {
+                        if decl.name.lexeme == "constructor" {
                             let param_map: HashMap<String, Type> = decl.params.iter()
                                 .map(|(tok, ty)| (tok.lexeme.clone(), ty.clone()))
                                 .collect();
@@ -532,8 +532,8 @@ impl TypeChecker {
                 
                 if let Expr::Variable(name) = &**callee {
                     if let Some(TypeInfo::Class(class_name, members)) = self.env.get(&name.lexeme) {
-                        // Check __init__ method if exists
-                        if let Some((TypeInfo::Function(_, params, _, _), _)) = members.get("__init__") {
+                        // Check constructor method if exists
+                        if let Some((TypeInfo::Function(_, params, _, _), _)) = members.get("constructor") {
                             if params.len() != arg_types.len() {
                                 return Err(LavinaError::new(ErrorPhase::TypeChecker, format!("Class '{}' constructor expected {} arguments, but got {}.", class_name, params.len(), arg_types.len()), paren.line, paren.column).with_context(&self.source));
                             }

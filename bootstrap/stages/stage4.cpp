@@ -1,6 +1,6 @@
-// Stage 2: int fn main() — user controls return type
-// - Removed automatic `return 0` from main() codegen
-// - main.lv uses int fn main() with explicit return values
+// Stage 4: Bootstrap uses new language features
+// - Replaced == false with `not` across all .lv files
+// - Uses `break` instead of si = -1 hack in main.lv
 #include "lavina.h"
 
 const std::string TK_LEFT_PAREN = std::string("LeftParen");
@@ -72,6 +72,9 @@ const std::string TK_THROW = std::string("Throw");
 const std::string TK_CONST = std::string("Const");
 const std::string TK_LET = std::string("Let");
 const std::string TK_MATCH = std::string("Match");
+const std::string TK_BREAK = std::string("Break");
+const std::string TK_CONTINUE = std::string("Continue");
+const std::string TK_NOT = std::string("Not");
 const std::string TK_INDENT = std::string("Indent");
 const std::string TK_DEDENT = std::string("Dedent");
 const std::string TK_NEWLINE = std::string("Newline");
@@ -248,6 +251,21 @@ std::string lookup_keyword(auto w) {
                                                                                                                                                             if ((w == std::string("match"))) {
                                                                                                                                                                 return TK_MATCH;
                                                                                                                                                             }
+                                                                                                                                                             else {
+                                                                                                                                                                if ((w == std::string("break"))) {
+                                                                                                                                                                    return TK_BREAK;
+                                                                                                                                                                }
+                                                                                                                                                                 else {
+                                                                                                                                                                    if ((w == std::string("continue"))) {
+                                                                                                                                                                        return TK_CONTINUE;
+                                                                                                                                                                    }
+                                                                                                                                                                     else {
+                                                                                                                                                                        if ((w == std::string("not"))) {
+                                                                                                                                                                            return TK_NOT;
+                                                                                                                                                                        }
+                                                                                                                                                                    }
+                                                                                                                                                                }
+                                                                                                                                                            }
                                                                                                                                                         }
                                                                                                                                                     }
                                                                                                                                                 }
@@ -406,7 +424,7 @@ struct Scanner {
 
     void handle_indentation() {
         int64_t indent = 0LL;
-        while ((((*this).is_at_end() == false) && ((((*this).peek() == std::string(" ")) || ((*this).peek() == std::string("\t")))))) {
+        while (((!(*this).is_at_end()) && ((((*this).peek() == std::string(" ")) || ((*this).peek() == std::string("\t")))))) {
             auto c = (*this).advance();
             if ((c == std::string(" "))) {
                 indent = (indent + 1LL);
@@ -419,10 +437,6 @@ struct Scanner {
             if (((*this).peek() == std::string("\n"))) {
                 this->at_line_start = true;
             }
-            return;
-        }
-        if ((((*this).peek() == std::string("/")) && ((*this).peek_next() == std::string("/")))) {
-            this->at_line_start = false;
             return;
         }
         auto current_indent = this->indent_stack[(static_cast<int64_t>(this->indent_stack.size()) - 1LL)];
@@ -442,7 +456,7 @@ struct Scanner {
     }
 
     void scan_string() {
-        while ((((*this).is_at_end() == false) && ((*this).peek() != std::string("\"")))) {
+        while (((!(*this).is_at_end()) && ((*this).peek() != std::string("\"")))) {
             if (((*this).peek() == std::string("\n"))) {
                 this->line = (this->line + 1LL);
                 this->column = 1LL;
@@ -610,7 +624,7 @@ struct Scanner {
                                                                                  else {
                                                                                     if ((c == std::string("/"))) {
                                                                                         if ((*this).match_char(std::string("/"))) {
-                                                                                            while ((((*this).peek() != std::string("\n")) && ((*this).is_at_end() == false))) {
+                                                                                            while ((((*this).peek() != std::string("\n")) && (!(*this).is_at_end()))) {
                                                                                                 (*this).advance();
                                                                                             }
                                                                                         }
@@ -671,7 +685,7 @@ struct Scanner {
     }
 
     void scan_tokens() {
-        while (((*this).is_at_end() == false)) {
+        while ((!(*this).is_at_end())) {
             this->start = this->current;
             this->start_line = this->line;
             this->start_column = this->column;
@@ -839,9 +853,11 @@ struct Stmt {
     struct Match { Expr expr; std::vector<MatchArm> arm_patterns; std::vector<Stmt> arm_bodies; };
     struct Namespace { Token name; std::vector<Stmt> body; std::string visibility; };
     struct Import { std::vector<Token> path; std::string alias; };
+    struct Break { Token keyword; };
+    struct Continue { Token keyword; };
 
     std::string _tag;
-    std::variant<std::monostate, Stmt::ExprStmt, Stmt::Let, Stmt::Const, Stmt::Return, Stmt::If, Stmt::While, Stmt::For, Stmt::Block, Stmt::Try, Stmt::Function, Stmt::Class, Stmt::Struct, Stmt::Enum, Stmt::Match, Stmt::Namespace, Stmt::Import> _data;
+    std::variant<std::monostate, Stmt::ExprStmt, Stmt::Let, Stmt::Const, Stmt::Return, Stmt::If, Stmt::While, Stmt::For, Stmt::Block, Stmt::Try, Stmt::Function, Stmt::Class, Stmt::Struct, Stmt::Enum, Stmt::Match, Stmt::Namespace, Stmt::Import, Stmt::Break, Stmt::Continue> _data;
 
     static Stmt make_None() { return {"None", std::monostate{}}; }
     static Stmt make_ExprStmt(Expr expr) { return {"ExprStmt", ExprStmt{expr}}; }
@@ -860,6 +876,8 @@ struct Stmt {
     static Stmt make_Match(Expr expr, std::vector<MatchArm> arm_patterns, std::vector<Stmt> arm_bodies) { return {"Match", Match{expr, arm_patterns, arm_bodies}}; }
     static Stmt make_Namespace(Token name, std::vector<Stmt> body, std::string visibility) { return {"Namespace", Namespace{name, body, visibility}}; }
     static Stmt make_Import(std::vector<Token> path, std::string alias) { return {"Import", Import{path, alias}}; }
+    static Stmt make_Break(Token keyword) { return {"Break", Break{keyword}}; }
+    static Stmt make_Continue(Token keyword) { return {"Continue", Continue{keyword}}; }
 
     std::string operator[](const std::string& key) const {
         if (key == "_tag") return _tag;
@@ -902,7 +920,7 @@ struct Parser {
     }
 
     Token advance() {
-        if (((*this).is_at_end() == false)) {
+        if ((!(*this).is_at_end())) {
             this->current = (this->current + 1LL);
         }
         return (*this).previous();
@@ -976,7 +994,7 @@ struct Parser {
 
     bool check_function_start() {
         int64_t offset = 0LL;
-        if (((*this).is_type_at_pos(offset) == false)) {
+        if ((!(*this).is_type_at_pos(offset))) {
             return false;
         }
         auto tt = (*this).peek_at(offset).token_type;
@@ -1168,7 +1186,7 @@ struct Parser {
     }
 
     Expr unary() {
-        if ((*this).match_any(std::vector{TK_BANG, TK_MINUS})) {
+        if ((*this).match_any(std::vector{TK_BANG, TK_MINUS, TK_NOT})) {
             auto op = (*this).previous();
             Expr right = (*this).unary();
             return Expr::make_Unary(op, right);
@@ -1228,7 +1246,7 @@ struct Parser {
             }
         }
         std::vector<Expr> args = {};
-        if (((*this).check(TK_RIGHT_PAREN) == false)) {
+        if ((!(*this).check(TK_RIGHT_PAREN))) {
             args.push_back((*this).expression());
             while ((*this).match_any(std::vector{TK_COMMA})) {
                 args.push_back((*this).expression());
@@ -1271,7 +1289,7 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
             std::vector<Expr> elements = {};
             (*this).skip_formatting();
-            if (((*this).check(TK_RIGHT_BRACKET) == false)) {
+            if ((!(*this).check(TK_RIGHT_BRACKET))) {
                 (*this).skip_formatting();
                 elements.push_back((*this).expression());
                 (*this).skip_formatting();
@@ -1289,7 +1307,7 @@ struct Parser {
             std::vector<Expr> keys = {};
             std::vector<Expr> values = {};
             (*this).skip_formatting();
-            if (((*this).check(TK_RIGHT_BRACE) == false)) {
+            if ((!(*this).check(TK_RIGHT_BRACE))) {
                 (*this).skip_formatting();
                 Expr key = (*this).expression();
                 (*this).skip_formatting();
@@ -1338,6 +1356,16 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_MATCH})) {
             return (*this).match_statement();
         }
+        if ((*this).match_any(std::vector{TK_BREAK})) {
+            auto kw = (*this).previous();
+            (*this).match_any(std::vector{TK_NEWLINE});
+            return Stmt::make_Break(kw);
+        }
+        if ((*this).match_any(std::vector{TK_CONTINUE})) {
+            auto kw = (*this).previous();
+            (*this).match_any(std::vector{TK_NEWLINE});
+            return Stmt::make_Continue(kw);
+        }
         return (*this).expression_statement();
     }
 
@@ -1384,7 +1412,7 @@ struct Parser {
     Stmt return_statement() {
         auto keyword = (*this).previous();
         Expr value = Expr::make_None();
-        if (((((*this).check(TK_NEWLINE) == false) && ((*this).check(TK_DEDENT) == false)) && ((*this).is_at_end() == false))) {
+        if ((((!(*this).check(TK_NEWLINE)) && (!(*this).check(TK_DEDENT))) && (!(*this).is_at_end()))) {
             value = (*this).expression();
         }
         (*this).match_any(std::vector{TK_NEWLINE});
@@ -1398,7 +1426,7 @@ struct Parser {
         (*this).consume(TK_INDENT, std::string("Expect indentation to start match body."));
         std::vector<MatchArm> arm_patterns = {};
         std::vector<Stmt> arm_bodies = {};
-        while ((((*this).check(TK_DEDENT) == false) && ((*this).is_at_end() == false))) {
+        while (((!(*this).check(TK_DEDENT)) && (!(*this).is_at_end()))) {
             if ((*this).match_any(std::vector{TK_NEWLINE})) {
                 int64_t noop = 0LL;
             }
@@ -1408,7 +1436,7 @@ struct Parser {
                 std::vector<std::string> bindings = {};
                 if ((pattern_name != std::string("_"))) {
                     if ((*this).match_any(std::vector{TK_LEFT_PAREN})) {
-                        if (((*this).check(TK_RIGHT_PAREN) == false)) {
+                        if ((!(*this).check(TK_RIGHT_PAREN))) {
                             bindings.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect binding name.")).lexeme);
                             while ((*this).match_any(std::vector{TK_COMMA})) {
                                 bindings.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect binding name.")).lexeme);
@@ -1431,7 +1459,7 @@ struct Parser {
         (*this).match_any(std::vector{TK_NEWLINE});
         (*this).consume(TK_INDENT, std::string("Expect indentation to start a block."));
         std::vector<Stmt> statements = {};
-        while ((((*this).check(TK_DEDENT) == false) && ((*this).is_at_end() == false))) {
+        while (((!(*this).check(TK_DEDENT)) && (!(*this).is_at_end()))) {
             if ((*this).match_any(std::vector{TK_NEWLINE})) {
                 int64_t noop = 0LL;
             }
@@ -1485,7 +1513,7 @@ struct Parser {
         auto name = (*this).consume(TK_IDENTIFIER, std::string("Expect function name."));
         (*this).consume(TK_LEFT_PAREN, std::string("Expect '(' after function name."));
         std::vector<Param> params = {};
-        if (((*this).check(TK_RIGHT_PAREN) == false)) {
+        if ((!(*this).check(TK_RIGHT_PAREN))) {
             TypeNode param_type = (*this).parse_type();
             auto param_name = (*this).consume(TK_IDENTIFIER, std::string("Expect parameter name."));
             params.push_back(Param(param_name, param_type));
@@ -1527,7 +1555,7 @@ struct Parser {
         (*this).match_any(std::vector{TK_NEWLINE});
         (*this).consume(TK_INDENT, std::string("Expect indentation to start enum body."));
         std::vector<EnumVariantNode> variants = {};
-        while ((((*this).check(TK_DEDENT) == false) && ((*this).is_at_end() == false))) {
+        while (((!(*this).check(TK_DEDENT)) && (!(*this).is_at_end()))) {
             if ((*this).match_any(std::vector{TK_NEWLINE})) {
                 int64_t noop = 0LL;
             }
@@ -1537,7 +1565,7 @@ struct Parser {
                     (*this).consume(TK_LEFT_PAREN, std::string("Expect '(' after variant name."));
                     std::vector<TypeNode> fields = {};
                     std::vector<std::string> fnames = {};
-                    if (((*this).check(TK_RIGHT_PAREN) == false)) {
+                    if ((!(*this).check(TK_RIGHT_PAREN))) {
                         fields.push_back((*this).parse_type());
                         fnames.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect field name.")).lexeme);
                         while ((*this).match_any(std::vector{TK_COMMA})) {
@@ -1613,7 +1641,7 @@ struct Parser {
         }
         bool is_static = (*this).match_any(std::vector{TK_STATIC});
         while ((*this).check(TK_HASH)) {
-            while ((((*this).check(TK_NEWLINE) == false) && ((*this).is_at_end() == false))) {
+            while (((!(*this).check(TK_NEWLINE)) && (!(*this).is_at_end()))) {
                 (*this).advance();
             }
             (*this).match_any(std::vector{TK_NEWLINE});
@@ -1658,7 +1686,7 @@ struct Parser {
                 if ((*this).check_function_start()) {
                     return (*this).function_declaration(visibility, is_static);
                 }
-                if ((this->in_class_body == false)) {
+                if ((!this->in_class_body)) {
                     int64_t eq_pos = (next_pos + 1LL);
                     if (((*this).peek_at(eq_pos).token_type != TK_EQUAL)) {
                         auto tok = (*this).peek_at(next_pos);
@@ -1673,7 +1701,7 @@ struct Parser {
 
     std::vector<Stmt> parse_program() {
         std::vector<Stmt> statements = {};
-        while (((*this).is_at_end() == false)) {
+        while ((!(*this).is_at_end())) {
             if ((*this).match_any(std::vector{TK_NEWLINE})) {
                 int64_t noop = 0LL;
             }
@@ -1775,7 +1803,7 @@ struct CppCodegen {
     }
 
     void add_dynamic_var(std::string name) {
-        if (((*this).is_dynamic_var(name) == false)) {
+        if ((!(*this).is_dynamic_var(name))) {
             this->dynamic_vars.push_back(name);
         }
     }
@@ -1967,7 +1995,7 @@ struct CppCodegen {
                                                 return std::string(">=");
                                             }
                                              else {
-                                                if ((t.token_type == TK_BANG)) {
+                                                if (((t.token_type == TK_BANG) || (t.token_type == TK_NOT))) {
                                                     return std::string("!");
                                                 }
                                                  else {
@@ -2736,6 +2764,16 @@ struct CppCodegen {
                 auto& alias = _v.alias;
                 this->output = ((this->output + (*this).indent()) + std::string("// TODO: unsupported import\n"));
             }
+            else if (_match_14._tag == "Break") {
+                auto& _v = std::get<Stmt::Break>(_match_14._data);
+                auto& keyword = _v.keyword;
+                this->output = ((this->output + (*this).indent()) + std::string("break;\n"));
+            }
+            else if (_match_14._tag == "Continue") {
+                auto& _v = std::get<Stmt::Continue>(_match_14._data);
+                auto& keyword = _v.keyword;
+                this->output = ((this->output + (*this).indent()) + std::string("continue;\n"));
+            }
             else {
                 int64_t noop = 0LL;
             }
@@ -3036,7 +3074,7 @@ struct CppCodegen {
                                                 already = true;
                                             }
                                         }
-                                        if ((already == false)) {
+                                        if ((!already)) {
                                             seen.push_back(prop.lexeme);
                                             std::string cpp_type = (*this).infer_expr_type(value, param_names, param_types);
                                             init_field_names.push_back(prop.lexeme);
@@ -3069,7 +3107,7 @@ struct CppCodegen {
                     is_let = true;
                 }
             }
-            if ((is_let == false)) {
+            if ((!is_let)) {
                 this->output = (((((this->output + (*this).indent()) + init_field_types[fi]) + std::string(" ")) + init_field_names[fi]) + std::string(";\n"));
             }
             fi = (fi + 1LL);
@@ -3130,7 +3168,7 @@ struct CppCodegen {
                                 int64_t noop = 0LL;
                             }
                         }
-                        if ((handled == false)) {
+                        if ((!handled)) {
                             remaining_body.push_back(st);
                         }
                     }
@@ -3413,7 +3451,7 @@ struct CppCodegen {
             }
              else {
                 std::string keyword = std::string("if");
-                if ((first == false)) {
+                if ((!first)) {
                     keyword = std::string("else if");
                 }
                 first = false;
@@ -3532,9 +3570,6 @@ struct CppCodegen {
                 }
             }
         }
-        if ((this->has_main == false)) {
-            throw std::runtime_error(std::string("No 'main()' function defined."));
-        }
         return this->declarations;
     }
 
@@ -3644,13 +3679,17 @@ int main(int argc, char* argv[]) {
         print(cpp);
         return 0LL;
     }
+    if ((!codegen.has_main)) {
+        print(std::string("Error: no main() function defined."));
+        return 1LL;
+    }
     std::string dir = resolver.get_directory(path);
     std::string base = path;
     int64_t si = (static_cast<int64_t>(path.size()) - 1LL);
     while ((si >= 0LL)) {
         if ((std::string(1, path[si]) == std::string("/"))) {
             base = path.substr((si + 1LL), (static_cast<int64_t>(path.size())) - ((si + 1LL)));
-            si = (-1LL);
+            break;
         }
         si = (si - 1LL);
     }
@@ -3662,7 +3701,7 @@ int main(int argc, char* argv[]) {
     std::string header_path = (dir + std::string("lavina.h"));
     fs_write(cpp_path, cpp);
     bool wrote_header = false;
-    if ((fs_exists(header_path) == false)) {
+    if ((!fs_exists(header_path))) {
         try {
             std::string header_content = fs_read(std::string("runtime/lavina.h"));
             fs_write(header_path, header_content);

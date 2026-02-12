@@ -1,6 +1,8 @@
-// Stage 2: int fn main() — user controls return type
-// - Removed automatic `return 0` from main() codegen
-// - main.lv uses int fn main() with explicit return values
+// Stage 3: Language fixes and new keywords
+// - Fixed scanner bug: comments at block start now emit INDENT correctly
+// - Added break, continue keywords
+// - Added `not` operator (alias for !)
+// - Removed mandatory has_main check from codegen (moved to CLI)
 #include "lavina.h"
 
 const std::string TK_LEFT_PAREN = std::string("LeftParen");
@@ -72,6 +74,9 @@ const std::string TK_THROW = std::string("Throw");
 const std::string TK_CONST = std::string("Const");
 const std::string TK_LET = std::string("Let");
 const std::string TK_MATCH = std::string("Match");
+const std::string TK_BREAK = std::string("Break");
+const std::string TK_CONTINUE = std::string("Continue");
+const std::string TK_NOT = std::string("Not");
 const std::string TK_INDENT = std::string("Indent");
 const std::string TK_DEDENT = std::string("Dedent");
 const std::string TK_NEWLINE = std::string("Newline");
@@ -248,6 +253,21 @@ std::string lookup_keyword(auto w) {
                                                                                                                                                             if ((w == std::string("match"))) {
                                                                                                                                                                 return TK_MATCH;
                                                                                                                                                             }
+                                                                                                                                                             else {
+                                                                                                                                                                if ((w == std::string("break"))) {
+                                                                                                                                                                    return TK_BREAK;
+                                                                                                                                                                }
+                                                                                                                                                                 else {
+                                                                                                                                                                    if ((w == std::string("continue"))) {
+                                                                                                                                                                        return TK_CONTINUE;
+                                                                                                                                                                    }
+                                                                                                                                                                     else {
+                                                                                                                                                                        if ((w == std::string("not"))) {
+                                                                                                                                                                            return TK_NOT;
+                                                                                                                                                                        }
+                                                                                                                                                                    }
+                                                                                                                                                                }
+                                                                                                                                                            }
                                                                                                                                                         }
                                                                                                                                                     }
                                                                                                                                                 }
@@ -419,10 +439,6 @@ struct Scanner {
             if (((*this).peek() == std::string("\n"))) {
                 this->at_line_start = true;
             }
-            return;
-        }
-        if ((((*this).peek() == std::string("/")) && ((*this).peek_next() == std::string("/")))) {
-            this->at_line_start = false;
             return;
         }
         auto current_indent = this->indent_stack[(static_cast<int64_t>(this->indent_stack.size()) - 1LL)];
@@ -839,9 +855,11 @@ struct Stmt {
     struct Match { Expr expr; std::vector<MatchArm> arm_patterns; std::vector<Stmt> arm_bodies; };
     struct Namespace { Token name; std::vector<Stmt> body; std::string visibility; };
     struct Import { std::vector<Token> path; std::string alias; };
+    struct Break { Token keyword; };
+    struct Continue { Token keyword; };
 
     std::string _tag;
-    std::variant<std::monostate, Stmt::ExprStmt, Stmt::Let, Stmt::Const, Stmt::Return, Stmt::If, Stmt::While, Stmt::For, Stmt::Block, Stmt::Try, Stmt::Function, Stmt::Class, Stmt::Struct, Stmt::Enum, Stmt::Match, Stmt::Namespace, Stmt::Import> _data;
+    std::variant<std::monostate, Stmt::ExprStmt, Stmt::Let, Stmt::Const, Stmt::Return, Stmt::If, Stmt::While, Stmt::For, Stmt::Block, Stmt::Try, Stmt::Function, Stmt::Class, Stmt::Struct, Stmt::Enum, Stmt::Match, Stmt::Namespace, Stmt::Import, Stmt::Break, Stmt::Continue> _data;
 
     static Stmt make_None() { return {"None", std::monostate{}}; }
     static Stmt make_ExprStmt(Expr expr) { return {"ExprStmt", ExprStmt{expr}}; }
@@ -860,6 +878,8 @@ struct Stmt {
     static Stmt make_Match(Expr expr, std::vector<MatchArm> arm_patterns, std::vector<Stmt> arm_bodies) { return {"Match", Match{expr, arm_patterns, arm_bodies}}; }
     static Stmt make_Namespace(Token name, std::vector<Stmt> body, std::string visibility) { return {"Namespace", Namespace{name, body, visibility}}; }
     static Stmt make_Import(std::vector<Token> path, std::string alias) { return {"Import", Import{path, alias}}; }
+    static Stmt make_Break(Token keyword) { return {"Break", Break{keyword}}; }
+    static Stmt make_Continue(Token keyword) { return {"Continue", Continue{keyword}}; }
 
     std::string operator[](const std::string& key) const {
         if (key == "_tag") return _tag;
@@ -1168,7 +1188,7 @@ struct Parser {
     }
 
     Expr unary() {
-        if ((*this).match_any(std::vector{TK_BANG, TK_MINUS})) {
+        if ((*this).match_any(std::vector{TK_BANG, TK_MINUS, TK_NOT})) {
             auto op = (*this).previous();
             Expr right = (*this).unary();
             return Expr::make_Unary(op, right);
@@ -1337,6 +1357,16 @@ struct Parser {
         }
         if ((*this).match_any(std::vector{TK_MATCH})) {
             return (*this).match_statement();
+        }
+        if ((*this).match_any(std::vector{TK_BREAK})) {
+            auto kw = (*this).previous();
+            (*this).match_any(std::vector{TK_NEWLINE});
+            return Stmt::make_Break(kw);
+        }
+        if ((*this).match_any(std::vector{TK_CONTINUE})) {
+            auto kw = (*this).previous();
+            (*this).match_any(std::vector{TK_NEWLINE});
+            return Stmt::make_Continue(kw);
         }
         return (*this).expression_statement();
     }
@@ -1967,7 +1997,7 @@ struct CppCodegen {
                                                 return std::string(">=");
                                             }
                                              else {
-                                                if ((t.token_type == TK_BANG)) {
+                                                if (((t.token_type == TK_BANG) || (t.token_type == TK_NOT))) {
                                                     return std::string("!");
                                                 }
                                                  else {
@@ -2735,6 +2765,16 @@ struct CppCodegen {
                 auto& path = _v.path;
                 auto& alias = _v.alias;
                 this->output = ((this->output + (*this).indent()) + std::string("// TODO: unsupported import\n"));
+            }
+            else if (_match_14._tag == "Break") {
+                auto& _v = std::get<Stmt::Break>(_match_14._data);
+                auto& keyword = _v.keyword;
+                this->output = ((this->output + (*this).indent()) + std::string("break;\n"));
+            }
+            else if (_match_14._tag == "Continue") {
+                auto& _v = std::get<Stmt::Continue>(_match_14._data);
+                auto& keyword = _v.keyword;
+                this->output = ((this->output + (*this).indent()) + std::string("continue;\n"));
             }
             else {
                 int64_t noop = 0LL;
@@ -3532,9 +3572,6 @@ struct CppCodegen {
                 }
             }
         }
-        if ((this->has_main == false)) {
-            throw std::runtime_error(std::string("No 'main()' function defined."));
-        }
         return this->declarations;
     }
 
@@ -3643,6 +3680,10 @@ int main(int argc, char* argv[]) {
     if ((mode == std::string("emit-cpp"))) {
         print(cpp);
         return 0LL;
+    }
+    if ((codegen.has_main == false)) {
+        print(std::string("Error: no main() function defined."));
+        return 1LL;
     }
     std::string dir = resolver.get_directory(path);
     std::string base = path;

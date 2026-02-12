@@ -149,7 +149,7 @@ fn test_std_memory() {
 import std::memory as mem
 class Obj:
     int x
-    void fn __init__(int x):
+    constructor(int x):
         this.x = x
 
 auto o = Obj(100)

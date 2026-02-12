@@ -115,7 +115,7 @@ class Player:
     string name
     int health
 
-    void fn __init__(string name):
+    constructor(string name):
         this.name = name
         this.health = 100
 

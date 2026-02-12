@@ -1,5 +1,5 @@
 class Utils:
-    void fn __init__():
+    constructor():
         print("Utils init")
 
     public static int fn add(int a, int b):

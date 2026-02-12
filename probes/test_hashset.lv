@@ -1,0 +1,24 @@
+// Test hashset[T] support
+
+void fn main():
+    hashset[string] names = []
+    names.add("alice")
+    names.add("bob")
+    names.add("alice")
+
+    print("Size: " + names.len())
+    print("Has alice: " + names.contains("alice"))
+    print("Has charlie: " + names.contains("charlie"))
+
+    hashset[int] nums = []
+    nums.add(1)
+    nums.add(2)
+    nums.add(3)
+    nums.add(2)
+    print("Num size: " + nums.len())
+    print("Has 2: " + nums.contains(2))
+    print("Is empty: " + nums.is_empty())
+
+    nums.clear()
+    print("After clear: " + nums.len())
+    print("Is empty now: " + nums.is_empty())

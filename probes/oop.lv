@@ -1,5 +1,5 @@
 class Player:
-    void fn __init__(string name):
+    constructor(string name):
         this.name = name
         this.health = 100
         print("Player " + name + " created!")

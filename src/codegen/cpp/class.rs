@@ -16,7 +16,7 @@ impl CppCodegen {
         for stmt in body {
             match stmt {
                 Stmt::Function(decl) => {
-                    if decl.name.lexeme == "__init__" {
+                    if decl.name.lexeme == "constructor" {
                         init_decl = Some(decl);
                     } else {
                         methods.push(decl);
@@ -126,13 +126,21 @@ impl CppCodegen {
                     self.dynamic_vars.insert(pname.lexeme.clone());
                 }
             }
-            self.output.push_str(&format!(
-                "{}{} {}({}) {{\n",
-                self.indent(),
-                ret_type,
-                method.name.lexeme,
-                params.join(", ")
-            ));
+            if method.name.lexeme == "destructor" {
+                self.output.push_str(&format!(
+                    "{}~{}() {{\n",
+                    self.indent(),
+                    name.lexeme
+                ));
+            } else {
+                self.output.push_str(&format!(
+                    "{}{} {}({}) {{\n",
+                    self.indent(),
+                    ret_type,
+                    method.name.lexeme,
+                    params.join(", ")
+                ));
+            }
             self.indent_level += 1;
             for stmt in &method.body {
                 self.emit_method_stmt(stmt);

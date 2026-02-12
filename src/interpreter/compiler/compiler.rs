@@ -343,7 +343,7 @@ impl Compiler {
             }
             Stmt::Return(keyword, value) => {
                 if let Some(expr) = value {
-                    if self.current_level().function.name.ends_with("::__init__") {
+                    if self.current_level().function.name.ends_with("::constructor") {
                         return Err(self.error(
                             "Can't return a value from an initializer.".to_string(),
                             keyword.line,
@@ -352,7 +352,7 @@ impl Compiler {
                     }
                     self.compile_expr(expr)?;
                 } else {
-                    if self.current_level().function.name.ends_with("::__init__") {
+                    if self.current_level().function.name.ends_with("::constructor") {
                         self.emit_byte(OpCode::GetLocal as u8, keyword.line);
                         self.emit_byte(0, keyword.line);
                     } else {
@@ -381,7 +381,7 @@ impl Compiler {
                     match s {
                         Stmt::Function(decl) => {
                             let method_name = decl.name.lexeme.clone();
-                            let is_init = method_name == "__init__";
+                            let is_init = method_name == "constructor";
 
                             // Push new level for method
                             let mut level = CompilerLevel {

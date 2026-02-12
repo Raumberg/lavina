@@ -3,7 +3,7 @@ BOOTSTRAP_SRC = bootstrap/scanner.lv bootstrap/parser.lv bootstrap/codegen.lv bo
 STAGES_DIR = bootstrap/stages
 
 # Find the latest stageN.cpp by numeric sort
-LATEST_STAGE := $(shell ls $(STAGES_DIR)/stage*.cpp 2>/dev/null | sort -t'e' -k2 -n | tail -1)
+LATEST_STAGE := $(shell ls $(STAGES_DIR)/stage*.cpp 2>/dev/null | sort -V | tail -1)
 
 # ── Rust compiler ────────────────────────────────────────────
 
@@ -36,7 +36,9 @@ snapshot: bootstrap
 	@if diff -q /tmp/lavina_next.cpp $(LATEST_STAGE) > /dev/null 2>&1; then \
 		echo "No changes — $(LATEST_STAGE) is already up to date."; \
 	else \
-		cp /tmp/lavina_next.cpp $(STAGES_DIR)/stage$(NEXT_NUM).cpp; \
+		read -p "Stage $(NEXT_NUM) description: " DESC; \
+		echo "// Stage $(NEXT_NUM): $$DESC" > $(STAGES_DIR)/stage$(NEXT_NUM).cpp; \
+		cat /tmp/lavina_next.cpp >> $(STAGES_DIR)/stage$(NEXT_NUM).cpp; \
 		echo "Saved $(STAGES_DIR)/stage$(NEXT_NUM).cpp"; \
 	fi
 

@@ -8,6 +8,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
+#include <unordered_set>
 #include <optional>
 #include <cstdint>
 #include <functional>
@@ -19,6 +20,9 @@
 #include <fstream>
 #include <algorithm>
 #include <cstdlib>
+#if defined(__unix__) || defined(__APPLE__)
+#include <sys/wait.h>
+#endif
 
 // ── std::any support ────────────────────────────────────────────
 
@@ -219,6 +223,18 @@ bool lv_contains(const std::vector<T>& v, const T& val) {
     return std::find(v.begin(), v.end(), val) != v.end();
 }
 
+// ── HashSet methods ─────────────────────────────────────────────
+
+template<typename T>
+bool lv_contains(const std::unordered_set<T>& s, const T& val) {
+    return s.count(val) > 0;
+}
+
+template<typename T>
+void lv_remove(std::unordered_set<T>& s, const T& val) {
+    s.erase(val);
+}
+
 // ── HashMap methods ─────────────────────────────────────────────
 
 template<typename K, typename V>
@@ -233,6 +249,11 @@ std::vector<V> lv_values(const std::unordered_map<K, V>& m) {
     std::vector<V> result;
     for (auto& [k, v] : m) result.push_back(v);
     return result;
+}
+
+template<typename K, typename V>
+void lv_remove(std::unordered_map<K, V>& m, const K& key) {
+    m.erase(key);
 }
 
 // ── Global utility functions ────────────────────────────────────
@@ -271,7 +292,13 @@ static std::vector<std::string> _lv_args;
 std::vector<std::string> os_args() { return _lv_args; }
 
 int64_t os_exec(const std::string& cmd) {
-    return static_cast<int64_t>(std::system(cmd.c_str()));
+    int status = std::system(cmd.c_str());
+#if defined(__unix__) || defined(__APPLE__)
+    if (WIFEXITED(status)) return static_cast<int64_t>(WEXITSTATUS(status));
+    return static_cast<int64_t>(status);
+#else
+    return static_cast<int64_t>(status);
+#endif
 }
 
 std::string os_env(const std::string& name) {

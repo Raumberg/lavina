@@ -1,4 +1,5 @@
 import codegen
+import parser
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Main CLI
@@ -10,7 +11,7 @@ import codegen
 class ImportResolver:
     vector[string] resolved_paths
 
-    void fn __init__():
+    constructor():
         this.resolved_paths = []
 
     bool fn already_resolved(string path):
@@ -62,11 +63,11 @@ int fn main():
 
     if args.len() == 2:
         path = args[1]
-    else if args.len() == 3:
+    elif args.len() == 3:
         if args[1] == "--emit-cpp":
             mode = "emit-cpp"
             path = args[2]
-        else if args[1] == "compile":
+        elif args[1] == "compile":
             mode = "compile"
             path = args[2]
         else:
@@ -84,15 +85,27 @@ int fn main():
             print(err)
         return 1
 
-    auto parser = Parser(scanner.tokens)
-    vector[Stmt] stmts = parser.parse_program()
+    vector[Stmt] stmts = []
+    string cpp = ""
+    bool has_main = false
+    try:
+        auto parser = Parser(scanner.tokens)
+        stmts = parser.parse_program()
 
-    auto codegen = CppCodegen()
-    string cpp = codegen.generate(stmts)
+        auto codegen = CppCodegen()
+        cpp = codegen.generate(stmts)
+        has_main = codegen.has_main
+    catch err:
+        print("Error: " + err.what())
+        return 1
 
     if mode == "emit-cpp":
         print(cpp)
         return 0
+
+    if not has_main:
+        print("Error: no main() function defined.")
+        return 1
 
     string dir = resolver.get_directory(path)
     string base = path
@@ -100,7 +113,7 @@ int fn main():
     while si >= 0:
         if path.charAt(si) == "/":
             base = path.substring(si + 1, path.len())
-            si = -1
+            break
         si = si - 1
     if base.ends_with(".lv"):
         base = base.substring(0, base.len() - 3)
@@ -112,7 +125,7 @@ int fn main():
     fs_write(cpp_path, cpp)
 
     bool wrote_header = false
-    if fs_exists(header_path) == false:
+    if not fs_exists(header_path):
         try:
             string header_content = fs_read("runtime/lavina.h")
 

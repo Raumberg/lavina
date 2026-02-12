@@ -811,7 +811,7 @@ impl VM {
                         let stack_pos = self.stack.len() - arg_count - 1;
                         self.stack[stack_pos] = Value::Object(instance_idx);
 
-                        if let Some(init) = class.methods.get("__init__") {
+                        if let Some(init) = class.methods.get("constructor") {
                             if let Value::Object(m_idx) = init {
                                 return self.call_value_idx(*m_idx, arg_count);
                             }

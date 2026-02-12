@@ -1,4 +1,4 @@
-import parser
+import ast
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — C++ Code Generator
@@ -15,7 +15,7 @@ class CppCodegen:
     vector[vector[EnumVariantNode]] known_enum_variants
     vector[string] dynamic_vars
 
-    void fn __init__():
+    constructor():
         this.output = ""
         this.declarations = ""
         this.indent_level = 0
@@ -42,17 +42,23 @@ class CppCodegen:
         return false
 
     void fn add_dynamic_var(string name):
-        if this.is_dynamic_var(name) == false:
+        if not this.is_dynamic_var(name):
             this.dynamic_vars.push(name)
 
     string fn find_enum_for_variant(string variant_name):
+        string found = ""
+        int count = 0
         int i = 0
         while i < this.known_enum_names.len():
             vector[EnumVariantNode] variants = this.known_enum_variants[i]
             for v in variants:
                 if v.name.lexeme == variant_name:
-                    return this.known_enum_names[i]
+                    if count == 0:
+                        found = this.known_enum_names[i]
+                    count = count + 1
             i = i + 1
+        if count == 1:
+            return found
         return ""
 
     bool fn variant_has_fields(string enum_name, string variant_name):
@@ -130,51 +136,55 @@ class CppCodegen:
             Custom(name):
                 return name
             Array(inner):
-                return "std::vector<" + this.emit_type(inner) + ">"
-            Dict(key_type, value_type):
-                return "std::unordered_map<" + this.emit_type(key_type) + ", " + this.emit_type(value_type) + ">"
+                return "std::vector<${this.emit_type(inner)}>"
+            HashSet(inner):
+                return "std::unordered_set<${this.emit_type(inner)}>"
+            HashMap(key_type, value_type):
+                return "std::unordered_map<${this.emit_type(key_type)}, ${this.emit_type(value_type)}>"
             Nullable(inner):
-                return "std::optional<" + this.emit_type(inner) + ">"
+                return "std::optional<${this.emit_type(inner)}>"
             _:
                 return "auto"
 
     string fn token_to_cpp_op(Token t):
         if t.token_type == TK_PLUS:
             return "+"
-        else if t.token_type == TK_MINUS:
+        elif t.token_type == TK_MINUS:
             return "-"
-        else if t.token_type == TK_STAR:
+        elif t.token_type == TK_STAR:
             return "*"
-        else if t.token_type == TK_SLASH:
+        elif t.token_type == TK_SLASH:
             return "/"
-        else if t.token_type == TK_EQUAL_EQUAL:
+        elif t.token_type == TK_PERCENT:
+            return "%"
+        elif t.token_type == TK_EQUAL_EQUAL:
             return "=="
-        else if t.token_type == TK_BANG_EQUAL:
+        elif t.token_type == TK_BANG_EQUAL:
             return "!="
-        else if t.token_type == TK_LESS:
+        elif t.token_type == TK_LESS:
             return "<"
-        else if t.token_type == TK_LESS_EQUAL:
+        elif t.token_type == TK_LESS_EQUAL:
             return "<="
-        else if t.token_type == TK_GREATER:
+        elif t.token_type == TK_GREATER:
             return ">"
-        else if t.token_type == TK_GREATER_EQUAL:
+        elif t.token_type == TK_GREATER_EQUAL:
             return ">="
-        else if t.token_type == TK_BANG:
+        elif t.token_type == TK_BANG or t.token_type == TK_NOT:
             return "!"
-        else if t.token_type == TK_AND:
+        elif t.token_type == TK_AND:
             return "&&"
-        else if t.token_type == TK_OR:
+        elif t.token_type == TK_OR:
             return "||"
         return "/* unknown op */"
 
     string fn default_init(string cpp_type):
         if cpp_type == "int64_t":
             return " = 0"
-        else if cpp_type == "double":
+        elif cpp_type == "double":
             return " = 0.0"
-        else if cpp_type == "bool":
+        elif cpp_type == "bool":
             return " = false"
-        else if cpp_type == "std::string":
+        elif cpp_type == "std::string":
             return " = \"\""
         return ""
 
@@ -189,83 +199,74 @@ class CppCodegen:
             Unary(op, right):
                 string r = this.emit_expr(right)
                 string op_str = this.token_to_cpp_op(op)
-                return "(" + op_str + r + ")"
+                return "(${op_str}${r})"
             Binary(left, op, right):
                 string l = this.emit_expr(left)
                 string r = this.emit_expr(right)
                 string op_str = this.token_to_cpp_op(op)
-                return "(" + l + " " + op_str + " " + r + ")"
+                return "(${l} ${op_str} ${r})"
             Grouping(inner):
-                string i = this.emit_expr(inner)
-                return "(" + i + ")"
+                return "(${this.emit_expr(inner)})"
             Variable(name):
                 return name.lexeme
             Assign(name, value):
-                string v = this.emit_expr(value)
-                return name.lexeme + " = " + v
+                return "${name.lexeme} = ${this.emit_expr(value)}"
             Logical(left, op, right):
                 string l = this.emit_expr(left)
                 string r = this.emit_expr(right)
                 string op_str = "&&"
                 if op.token_type == TK_OR:
                     op_str = "||"
-                return "(" + l + " " + op_str + " " + r + ")"
+                return "${l} ${op_str} ${r}"
             Call(callee, paren, args):
                 return this.emit_call_expr(callee, args, false)
             Index(object, bracket, index):
-                string obj = this.emit_expr(object)
-                string idx = this.emit_expr(index)
-                return obj + "[" + idx + "]"
+                return "${this.emit_expr(object)}[${this.emit_expr(index)}]"
+            IndexSet(object, bracket, index, value):
+                return "${this.emit_expr(object)}[${this.emit_expr(index)}] = ${this.emit_expr(value)}"
             Vector(elements):
                 if elements.len() == 0:
                     return "{}"
                 vector[string] elems = []
                 for el in elements:
                     elems.push(this.emit_expr(el))
-                return "std::vector{" + elems.join(", ") + "}"
+                return "std::vector{${elems.join(", ")}}"
             Map(keys, values):
                 vector[string] entries = []
                 int i = 0
                 while i < keys.len():
-                    string k = this.emit_expr(keys[i])
-                    string v = this.emit_expr(values[i])
-                    entries.push("{" + k + ", " + v + "}")
+                    entries.push("{${this.emit_expr(keys[i])}, ${this.emit_expr(values[i])}}")
                     i = i + 1
-                return "std::unordered_map{" + "{" + entries.join(", ") + "}" + "}"
+                return "{{${entries.join(", ")}}}"
             Get(object, name):
-                string obj = this.emit_expr(object)
-                return obj + "." + name.lexeme
+                return "${this.emit_expr(object)}.${name.lexeme}"
             Set(object, name, value):
-                string obj = this.emit_expr(object)
-                string val = this.emit_expr(value)
-                return obj + "." + name.lexeme + " = " + val
+                return "${this.emit_expr(object)}.${name.lexeme} = ${this.emit_expr(value)}"
             StaticGet(object, name):
-                string obj = this.emit_expr(object)
-                return obj + "::" + name.lexeme
+                return "${this.emit_expr(object)}::${name.lexeme}"
             This(keyword):
                 return "(*this)"
             Cast(expr, target_type):
                 string ex = this.emit_expr(expr)
                 string t = this.emit_type(target_type)
                 if this.is_dynamic_expression(expr):
-                    return "std::any_cast<" + t + ">(" + ex + ")"
-                return "static_cast<" + t + ">(" + ex + ")"
+                    return "std::any_cast<${t}>(${ex})"
+                return "static_cast<${t}>(${ex})"
             Throw(expr):
-                string ex = this.emit_expr(expr)
-                return "throw std::runtime_error(" + ex + ")"
+                return "throw std::runtime_error(${this.emit_expr(expr)})"
             _:
                 return ""
 
     string fn emit_literal(string kind, string value):
         if kind == "int":
-            return value + "LL"
-        else if kind == "float":
+            return "${value}LL"
+        elif kind == "float":
             return value
-        else if kind == "string":
-            return "std::string(\"" + value + "\")"
-        else if kind == "bool":
+        elif kind == "string":
+            return "std::string(\"${value}\")"
+        elif kind == "bool":
             return value
-        else if kind == "null":
+        elif kind == "null":
             return "std::nullopt"
         return value
 
@@ -295,7 +296,7 @@ class CppCodegen:
                 string remapped = this.try_remap_method(obj, name.lexeme, arg_strs)
                 if remapped != "":
                     return remapped
-                return obj + "." + name.lexeme + "(" + arg_strs.join(", ") + ")"
+                return "${obj}.${name.lexeme}(${arg_strs.join(", ")})"
             StaticGet(object, name):
                 string obj = ""
                 if in_method:
@@ -311,10 +312,10 @@ class CppCodegen:
                 match object:
                     Variable(tok):
                         if this.is_known_enum(tok.lexeme):
-                            return obj + "::make_" + name.lexeme + "(" + arg_strs.join(", ") + ")"
+                            return "${obj}::make_${name.lexeme}(${arg_strs.join(", ")})"
                     _:
                         int noop = 0
-                return obj + "::" + name.lexeme + "(" + arg_strs.join(", ") + ")"
+                return "${obj}::${name.lexeme}(${arg_strs.join(", ")})"
             Variable(tok):
                 vector[string] arg_strs = []
                 for a in args:
@@ -323,8 +324,8 @@ class CppCodegen:
                     else:
                         arg_strs.push(this.emit_expr(a))
                 if tok.lexeme == "exit":
-                    return "lv_exit(" + arg_strs.join(", ") + ")"
-                return tok.lexeme + "(" + arg_strs.join(", ") + ")"
+                    return "lv_exit(${arg_strs.join(", ")})"
+                return "${tok.lexeme}(${arg_strs.join(", ")})"
             _:
                 string func = ""
                 if in_method:
@@ -337,59 +338,61 @@ class CppCodegen:
                         arg_strs.push(this.emit_method_expr(a))
                     else:
                         arg_strs.push(this.emit_expr(a))
-                return func + "(" + arg_strs.join(", ") + ")"
+                return "${func}(${arg_strs.join(", ")})"
 
     string fn try_remap_method(string obj, string method, vector[string] args):
         if method == "len":
-            return "static_cast<int64_t>(" + obj + ".size())"
-        else if method == "is_empty":
-            return obj + ".empty()"
-        else if method == "contains":
-            return "lv_contains(" + obj + ", " + args.join(", ") + ")"
-        else if method == "upper":
-            return "lv_upper(" + obj + ")"
-        else if method == "lower":
-            return "lv_lower(" + obj + ")"
-        else if method == "trim":
-            return "lv_trim(" + obj + ")"
-        else if method == "replace":
-            return "lv_replace(" + obj + ", " + args.join(", ") + ")"
-        else if method == "split":
+            return "static_cast<int64_t>(${obj}.size())"
+        elif method == "is_empty":
+            return "${obj}.empty()"
+        elif method == "contains":
+            return "lv_contains(${obj}, ${args.join(", ")})"
+        elif method == "add":
+            return "${obj}.insert(${args.join(", ")})"
+        elif method == "upper":
+            return "lv_upper(${obj})"
+        elif method == "lower":
+            return "lv_lower(${obj})"
+        elif method == "trim":
+            return "lv_trim(${obj})"
+        elif method == "replace":
+            return "lv_replace(${obj}, ${args.join(", ")})"
+        elif method == "split":
             if args.len() > 0:
-                return "lv_split(" + obj + ", " + args[0] + ")"
-            return "lv_split(" + obj + ", std::string(\" \"))"
-        else if method == "starts_with":
-            return obj + ".starts_with(" + args.join(", ") + ")"
-        else if method == "ends_with":
-            return obj + ".ends_with(" + args.join(", ") + ")"
-        else if method == "indexOf":
-            return "lv_index_of(" + obj + ", " + args.join(", ") + ")"
-        else if method == "charAt":
-            return "std::string(1, " + obj + "[" + args.join(", ") + "])"
-        else if method == "substring":
+                return "lv_split(${obj}, ${args[0]})"
+            return "lv_split(${obj}, std::string(\" \"))"
+        elif method == "starts_with":
+            return "${obj}.starts_with(${args.join(", ")})"
+        elif method == "ends_with":
+            return "${obj}.ends_with(${args.join(", ")})"
+        elif method == "indexOf":
+            return "lv_index_of(${obj}, ${args.join(", ")})"
+        elif method == "charAt":
+            return "std::string(1, ${obj}[${args.join(", ")}])"
+        elif method == "substring":
             if args.len() >= 2:
-                return obj + ".substr(" + args[0] + ", (" + args[1] + ") - (" + args[0] + "))"
-            return obj + ".substr(" + args.join(", ") + ")"
-        else if method == "push":
-            return obj + ".push_back(" + args.join(", ") + ")"
-        else if method == "pop":
-            return "lv_pop(" + obj + ")"
-        else if method == "clear":
-            return obj + ".clear()"
-        else if method == "remove":
-            return "lv_remove(" + obj + ", " + args.join(", ") + ")"
-        else if method == "join":
+                return "${obj}.substr(${args[0]}, (${args[1]}) - (${args[0]}))"
+            return "${obj}.substr(${args.join(", ")})"
+        elif method == "push":
+            return "${obj}.push_back(${args.join(", ")})"
+        elif method == "pop":
+            return "lv_pop(${obj})"
+        elif method == "clear":
+            return "${obj}.clear()"
+        elif method == "remove":
+            return "lv_remove(${obj}, ${args.join(", ")})"
+        elif method == "join":
             if args.len() > 0:
-                return "lv_join(" + obj + ", " + args[0] + ")"
-            return "lv_join(" + obj + ", std::string(\"\"))"
-        else if method == "reverse":
-            return "lv_reverse(" + obj + ")"
-        else if method == "keys":
-            return "lv_keys(" + obj + ")"
-        else if method == "values":
-            return "lv_values(" + obj + ")"
-        else if method == "has":
-            return "(" + obj + ".count(" + args.join(", ") + ") > 0)"
+                return "lv_join(${obj}, ${args[0]})"
+            return "lv_join(${obj}, std::string(\"\"))"
+        elif method == "reverse":
+            return "lv_reverse(${obj})"
+        elif method == "keys":
+            return "lv_keys(${obj})"
+        elif method == "values":
+            return "lv_values(${obj})"
+        elif method == "has":
+            return "(${obj}.count(${args.join(", ")}) > 0)"
         return ""
 
     // ── Method expression emission (inside class methods) ─────
@@ -399,56 +402,73 @@ class CppCodegen:
             Set(object, name, value):
                 match object:
                     This(kw):
-                        string val = this.emit_method_expr(value)
-                        return "this->" + name.lexeme + " = " + val
+                        return "this->${name.lexeme} = ${this.emit_method_expr(value)}"
                     _:
-                        string obj = this.emit_method_expr(object)
-                        string val = this.emit_method_expr(value)
-                        return obj + "." + name.lexeme + " = " + val
+                        return "${this.emit_method_expr(object)}.${name.lexeme} = ${this.emit_method_expr(value)}"
             Get(object, name):
                 match object:
                     This(kw):
-                        return "this->" + name.lexeme
+                        return "this->${name.lexeme}"
                     _:
-                        string obj = this.emit_method_expr(object)
-                        return obj + "." + name.lexeme
+                        return "${this.emit_method_expr(object)}.${name.lexeme}"
             This(keyword):
                 return "(*this)"
             Grouping(inner):
-                string i = this.emit_method_expr(inner)
-                return "(" + i + ")"
+                return "(${this.emit_method_expr(inner)})"
             Index(object, bracket, index):
-                string obj = this.emit_method_expr(object)
-                string idx = this.emit_method_expr(index)
-                return obj + "[" + idx + "]"
+                return "${this.emit_method_expr(object)}[${this.emit_method_expr(index)}]"
+            IndexSet(object, bracket, index, value):
+                return "${this.emit_method_expr(object)}[${this.emit_method_expr(index)}] = ${this.emit_method_expr(value)}"
             Vector(elements):
                 if elements.len() == 0:
                     return "{}"
                 vector[string] elems = []
                 for el in elements:
                     elems.push(this.emit_method_expr(el))
-                return "std::vector{" + elems.join(", ") + "}"
+                return "std::vector{${elems.join(", ")}}"
             Binary(left, op, right):
                 string l = this.emit_method_expr(left)
                 string r = this.emit_method_expr(right)
                 string op_str = this.token_to_cpp_op(op)
-                return "(" + l + " " + op_str + " " + r + ")"
+                return "(${l} ${op_str} ${r})"
             Unary(op, right):
                 string r = this.emit_method_expr(right)
                 string op_str = this.token_to_cpp_op(op)
-                return "(" + op_str + r + ")"
+                return "(${op_str}${r})"
             Logical(left, op, right):
                 string l = this.emit_method_expr(left)
                 string r = this.emit_method_expr(right)
                 string op_str = "&&"
                 if op.token_type == TK_OR:
                     op_str = "||"
-                return "(" + l + " " + op_str + " " + r + ")"
+                return "${l} ${op_str} ${r}"
             Assign(name, value):
-                string v = this.emit_method_expr(value)
-                return name.lexeme + " = " + v
+                return "${name.lexeme} = ${this.emit_method_expr(value)}"
             Call(callee, paren, args):
                 return this.emit_call_expr(callee, args, true)
+            Map(keys, values):
+                vector[string] entries = []
+                int i = 0
+                while i < keys.len():
+                    entries.push("{${this.emit_method_expr(keys[i])}, ${this.emit_method_expr(values[i])}}")
+                    i = i + 1
+                return "{{${entries.join(", ")}}}"
+            StaticGet(object, name):
+                match object:
+                    This(kw):
+                        return "(*this)::${name.lexeme}"
+                    _:
+                        return "${this.emit_method_expr(object)}::${name.lexeme}"
+            Cast(expr, target_type):
+                string ex = this.emit_method_expr(expr)
+                string t = this.emit_type(target_type)
+                if this.is_dynamic_expression(expr):
+                    return "std::any_cast<${t}>(${ex})"
+                return "static_cast<${t}>(${ex})"
+            Throw(expr):
+                return "throw std::runtime_error(${this.emit_method_expr(expr)})"
+            Literal(kind, value):
+                return this.emit_literal(kind, value)
             _:
                 return this.emit_expr(e)
 
@@ -459,34 +479,30 @@ class CppCodegen:
             None():
                 int noop = 0
             ExprStmt(expr):
-                string e = this.emit_expr(expr)
-                this.output = this.output + this.indent() + e + ";\n"
+                this.output = this.output + "${this.indent()}${this.emit_expr(expr)};\n"
             Let(name, var_type, initializer, visibility):
                 this.emit_let(name, var_type, initializer, false)
             Const(name, const_type, value, visibility):
                 string cpp_type = this.emit_type(const_type)
                 string val = this.emit_expr(value)
-                this.output = this.output + this.indent() + "const " + cpp_type + " " + name.lexeme + " = " + val + ";\n"
+                this.output = this.output + "${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
             Return(keyword, value):
                 match value:
                     None():
-                        this.output = this.output + this.indent() + "return;\n"
+                        this.output = this.output + "${this.indent()}return;\n"
                     _:
-                        string val = this.emit_expr(value)
-                        this.output = this.output + this.indent() + "return " + val + ";\n"
+                        this.output = this.output + "${this.indent()}return ${this.emit_expr(value)};\n"
             If(condition, then_branch, else_branch):
-                string c = this.emit_expr(condition)
-                this.output = this.output + this.indent() + "if (" + c + ") "
+                this.output = this.output + "${this.indent()}if (${this.emit_expr(condition)}) "
                 this.emit_block_or_stmt(then_branch)
                 match else_branch:
                     None():
                         int noop = 0
                     _:
-                        this.output = this.output + this.indent() + " else "
+                        this.output = this.output + "${this.indent()} else "
                         this.emit_block_or_stmt(else_branch)
             While(condition, body):
-                string c = this.emit_expr(condition)
-                this.output = this.output + this.indent() + "while (" + c + ") "
+                this.output = this.output + "${this.indent()}while (${this.emit_expr(condition)}) "
                 this.emit_block_or_stmt(body)
             For(item_name, collection, body):
                 match collection:
@@ -495,23 +511,22 @@ class CppCodegen:
                             this.add_dynamic_var(item_name.lexeme)
                     _:
                         int noop = 0
-                string iter = this.emit_expr(collection)
-                this.output = this.output + this.indent() + "for (auto& " + item_name.lexeme + " : " + iter + ") "
+                this.output = this.output + "${this.indent()}for (auto& ${item_name.lexeme} : ${this.emit_expr(collection)}) "
                 this.emit_block_or_stmt(body)
             Block(statements):
-                this.output = this.output + this.indent() + "{\n"
+                this.output = this.output + "${this.indent()}{\n"
                 this.indent_level = this.indent_level + 1
                 for st in statements:
                     this.emit_stmt(st)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
             Try(try_body, catch_body, exception_name):
-                this.output = this.output + this.indent() + "try "
+                this.output = this.output + "${this.indent()}try "
                 this.emit_block_or_stmt(try_body)
                 string exc_name = "e"
                 if exception_name != "":
                     exc_name = exception_name
-                this.output = this.output + this.indent() + " catch (const std::exception& " + exc_name + ") "
+                this.output = this.output + "${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_block_or_stmt(catch_body)
             Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
                 this.emit_function(name, params, return_type, body)
@@ -524,9 +539,13 @@ class CppCodegen:
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match(expr, arm_patterns, arm_bodies)
             Namespace(name, body, visibility):
-                this.output = this.output + this.indent() + "// TODO: unsupported namespace\n"
+                this.output = this.output + "${this.indent()}// TODO: unsupported namespace\n"
             Import(path, alias):
-                this.output = this.output + this.indent() + "// TODO: unsupported import\n"
+                this.output = this.output + "${this.indent()}// TODO: unsupported import\n"
+            Break(keyword):
+                this.output = this.output + "${this.indent()}break;\n"
+            Continue(keyword):
+                this.output = this.output + "${this.indent()}continue;\n"
             _:
                 int noop = 0
 
@@ -544,8 +563,8 @@ class CppCodegen:
                     val = this.emit_method_expr(initializer)
                 else:
                     val = this.emit_expr(initializer)
-                init_str = " = " + val
-        this.output = this.output + this.indent() + cpp_type + " " + name.lexeme + init_str + ";\n"
+                init_str = " = ${val}"
+        this.output = this.output + "${this.indent()}${cpp_type} ${name.lexeme}${init_str};\n"
 
     void fn emit_block_or_stmt(Stmt s):
         match s:
@@ -555,13 +574,13 @@ class CppCodegen:
                 for st in stmts:
                     this.emit_stmt(st)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
             _:
                 this.output = this.output + "{\n"
                 this.indent_level = this.indent_level + 1
                 this.emit_stmt(s)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
 
     void fn emit_method_block_or_stmt(Stmt s):
         match s:
@@ -571,59 +590,56 @@ class CppCodegen:
                 for st in stmts:
                     this.emit_method_stmt(st)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
             _:
                 this.output = this.output + "{\n"
                 this.indent_level = this.indent_level + 1
                 this.emit_method_stmt(s)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
 
     void fn emit_function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body):
+        vector[string] saved_dynamic = this.dynamic_vars
         string ret_type = this.emit_type(return_type)
         vector[string] param_strs = []
         for p in params:
-            string pt = this.emit_type(p.param_type)
-            param_strs.push(pt + " " + p.name.lexeme)
+            param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
             match p.param_type:
                 Dynamic():
                     this.add_dynamic_var(p.name.lexeme)
                 _:
                     int noop = 0
-        this.output = this.output + this.indent() + ret_type + " " + name.lexeme + "(" + param_strs.join(", ") + ") {\n"
+        this.output = this.output + "${this.indent()}${ret_type} ${name.lexeme}(${param_strs.join(", ")}) {\n"
         this.indent_level = this.indent_level + 1
         for st in body:
             this.emit_stmt(st)
         this.indent_level = this.indent_level - 1
-        this.output = this.output + this.indent() + "}\n\n"
+        this.output = this.output + "${this.indent()}}\n\n"
+        this.dynamic_vars = saved_dynamic
 
     // ── Method statement emission (inside class methods) ──────
 
     void fn emit_method_stmt(Stmt s):
         match s:
             ExprStmt(expr):
-                string e = this.emit_method_expr(expr)
-                this.output = this.output + this.indent() + e + ";\n"
+                this.output = this.output + "${this.indent()}${this.emit_method_expr(expr)};\n"
             Return(keyword, value):
                 match value:
                     None():
-                        this.output = this.output + this.indent() + "return;\n"
+                        this.output = this.output + "${this.indent()}return;\n"
                     _:
-                        string val = this.emit_method_expr(value)
-                        this.output = this.output + this.indent() + "return " + val + ";\n"
+                        this.output = this.output + "${this.indent()}return ${this.emit_method_expr(value)};\n"
             If(condition, then_branch, else_branch):
-                string c = this.emit_method_expr(condition)
-                this.output = this.output + this.indent() + "if (" + c + ") "
+                this.output = this.output + "${this.indent()}if (${this.emit_method_expr(condition)}) "
                 this.emit_method_block_or_stmt(then_branch)
                 match else_branch:
                     None():
                         int noop = 0
                     _:
-                        this.output = this.output + this.indent() + " else "
+                        this.output = this.output + "${this.indent()} else "
                         this.emit_method_block_or_stmt(else_branch)
             While(condition, body):
-                string c = this.emit_method_expr(condition)
-                this.output = this.output + this.indent() + "while (" + c + ") "
+                this.output = this.output + "${this.indent()}while (${this.emit_method_expr(condition)}) "
                 this.emit_method_block_or_stmt(body)
             For(item_name, collection, body):
                 match collection:
@@ -632,25 +648,28 @@ class CppCodegen:
                             this.add_dynamic_var(item_name.lexeme)
                     _:
                         int noop = 0
-                string iter = this.emit_method_expr(collection)
-                this.output = this.output + this.indent() + "for (auto& " + item_name.lexeme + " : " + iter + ") "
+                this.output = this.output + "${this.indent()}for (auto& ${item_name.lexeme} : ${this.emit_method_expr(collection)}) "
                 this.emit_method_block_or_stmt(body)
             Let(name, var_type, initializer, visibility):
                 this.emit_let(name, var_type, initializer, true)
+            Const(name, const_type, value, visibility):
+                string cpp_type = this.emit_type(const_type)
+                string val = this.emit_method_expr(value)
+                this.output = this.output + "${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
             Block(stmts):
-                this.output = this.output + this.indent() + "{\n"
+                this.output = this.output + "${this.indent()}{\n"
                 this.indent_level = this.indent_level + 1
                 for st in stmts:
                     this.emit_method_stmt(st)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
             Try(try_body, catch_body, exception_name):
-                this.output = this.output + this.indent() + "try "
+                this.output = this.output + "${this.indent()}try "
                 this.emit_method_block_or_stmt(try_body)
                 string exc_name = "e"
                 if exception_name != "":
                     exc_name = exception_name
-                this.output = this.output + this.indent() + " catch (const std::exception& " + exc_name + ") "
+                this.output = this.output + "${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_method_block_or_stmt(catch_body)
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match_in_method(expr, arm_patterns, arm_bodies)
@@ -670,7 +689,7 @@ class CppCodegen:
         for st in body:
             match st:
                 Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility):
-                    if fname.lexeme == "__init__":
+                    if fname.lexeme == "constructor":
                         has_init = true
                         init_body = fbody
                         init_params = params
@@ -702,7 +721,7 @@ class CppCodegen:
                                         for s in seen:
                                             if s == prop.lexeme:
                                                 already = true
-                                        if already == false:
+                                        if not already:
                                             seen.push(prop.lexeme)
                                             string cpp_type = this.infer_expr_type(value, param_names, param_types)
                                             init_field_names.push(prop.lexeme)
@@ -714,7 +733,7 @@ class CppCodegen:
                     _:
                         int noop = 0
 
-        this.output = this.output + this.indent() + "struct " + name.lexeme + " {\n"
+        this.output = this.output + "${this.indent()}struct ${name.lexeme} {\n"
         this.indent_level = this.indent_level + 1
 
         int fi = 0
@@ -723,13 +742,13 @@ class CppCodegen:
             for lfn in let_field_names:
                 if lfn == init_field_names[fi]:
                     is_let = true
-            if is_let == false:
-                this.output = this.output + this.indent() + init_field_types[fi] + " " + init_field_names[fi] + ";\n"
+            if not is_let:
+                this.output = this.output + "${this.indent()}${init_field_types[fi]} ${init_field_names[fi]};\n"
             fi = fi + 1
 
         int li = 0
         while li < let_field_names.len():
-            this.output = this.output + this.indent() + let_field_types[li] + " " + let_field_names[li] + ";\n"
+            this.output = this.output + "${this.indent()}${let_field_types[li]} ${let_field_names[li]};\n"
             li = li + 1
 
         if init_field_names.len() > 0 or let_field_names.len() > 0:
@@ -738,7 +757,7 @@ class CppCodegen:
         if has_init:
             vector[string] param_strs = []
             for p in init_params:
-                param_strs.push(this.emit_type(p.param_type) + " " + p.name.lexeme)
+                param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
 
             vector[string] init_list = []
             vector[Stmt] remaining_body = []
@@ -752,7 +771,7 @@ class CppCodegen:
                                     This(kw):
                                         match value:
                                             Variable(tok):
-                                                init_list.push(prop.lexeme + "(" + tok.lexeme + ")")
+                                                init_list.push("${prop.lexeme}(${tok.lexeme})")
                                                 handled = true
                                             _:
                                                 int noop = 0
@@ -760,56 +779,61 @@ class CppCodegen:
                                         int noop = 0
                             _:
                                 int noop = 0
-                        if handled == false:
+                        if not handled:
                             remaining_body.push(st)
                     _:
                         remaining_body.push(st)
 
             if init_list.len() == 0:
-                this.output = this.output + this.indent() + name.lexeme + "(" + param_strs.join(", ") + ") {\n"
+                this.output = this.output + "${this.indent()}${name.lexeme}(${param_strs.join(", ")}) {\n"
             else:
-                this.output = this.output + this.indent() + name.lexeme + "(" + param_strs.join(", ") + ")\n"
-                this.output = this.output + this.indent() + "    : " + init_list.join(", ") + " {\n"
+                this.output = this.output + "${this.indent()}${name.lexeme}(${param_strs.join(", ")})\n"
+                this.output = this.output + "${this.indent()}    : ${init_list.join(", ")} {\n"
             this.indent_level = this.indent_level + 1
             for st in remaining_body:
                 this.emit_method_stmt(st)
             this.indent_level = this.indent_level - 1
-            this.output = this.output + this.indent() + "}\n\n"
+            this.output = this.output + "${this.indent()}}\n\n"
 
         for m in methods:
             match m:
                 Function(mname, mparams, mret, mbody, is_inline, is_comptime, is_static, visibility):
+                    vector[string] saved_dyn = this.dynamic_vars
                     string ret_type = this.emit_type(mret)
                     vector[string] mparam_strs = []
                     for p in mparams:
-                        mparam_strs.push(this.emit_type(p.param_type) + " " + p.name.lexeme)
+                        mparam_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
                         match p.param_type:
                             Dynamic():
                                 this.add_dynamic_var(p.name.lexeme)
                             _:
                                 int noop = 0
-                    this.output = this.output + this.indent() + ret_type + " " + mname.lexeme + "(" + mparam_strs.join(", ") + ") {\n"
+                    if mname.lexeme == "destructor":
+                        this.output = this.output + "${this.indent()}~${name.lexeme}() {\n"
+                    else:
+                        this.output = this.output + "${this.indent()}${ret_type} ${mname.lexeme}(${mparam_strs.join(", ")}) {\n"
                     this.indent_level = this.indent_level + 1
                     for st in mbody:
                         this.emit_method_stmt(st)
                     this.indent_level = this.indent_level - 1
-                    this.output = this.output + this.indent() + "}\n\n"
+                    this.output = this.output + "${this.indent()}}\n\n"
+                    this.dynamic_vars = saved_dyn
                 _:
                     int noop = 0
 
         this.indent_level = this.indent_level - 1
-        this.output = this.output + this.indent() + "};\n\n"
+        this.output = this.output + "${this.indent()}};\n\n"
 
     string fn infer_expr_type(Expr e, vector[string] param_names, vector[string] param_types):
         match e:
             Literal(kind, value):
                 if kind == "int":
                     return "int64_t"
-                else if kind == "float":
+                elif kind == "float":
                     return "double"
-                else if kind == "string":
+                elif kind == "string":
                     return "std::string"
-                else if kind == "bool":
+                elif kind == "bool":
                     return "bool"
                 return "std::any"
             Variable(tok):
@@ -821,6 +845,25 @@ class CppCodegen:
                         return param_types[i]
                     i = i + 1
                 return "std::any"
+            Binary(left, op, right):
+                string lt = this.infer_expr_type(left, param_names, param_types)
+                string rt = this.infer_expr_type(right, param_names, param_types)
+                if lt == rt and lt != "std::any":
+                    return lt
+                return "std::any"
+            Call(callee, paren, args):
+                match callee:
+                    Variable(tok):
+                        if this.is_known_enum(tok.lexeme):
+                            return tok.lexeme
+                        int ci = 0
+                        while ci < param_names.len():
+                            if param_names[ci] == tok.lexeme:
+                                return param_types[ci]
+                            ci = ci + 1
+                        return tok.lexeme
+                    _:
+                        return "std::any"
             Vector(elements):
                 return "std::vector<std::any>"
             _:
@@ -844,14 +887,14 @@ class CppCodegen:
                         int noop = 0
 
         if has_self_ref:
-            this.output = this.output + this.indent() + "struct " + enum_name + ";\n"
+            this.output = this.output + "${this.indent()}struct ${enum_name};\n"
 
-        this.output = this.output + this.indent() + "struct " + enum_name + " {\n"
+        this.output = this.output + "${this.indent()}struct ${enum_name} {\n"
         this.indent_level = this.indent_level + 1
 
         for v in variants:
             if v.types.len() > 0:
-                this.output = this.output + this.indent() + "struct " + v.name.lexeme + " { "
+                this.output = this.output + "${this.indent()}struct ${v.name.lexeme} { "
                 int fi = 0
                 while fi < v.types.len():
                     string cpp_type = this.emit_type(v.types[fi])
@@ -859,33 +902,29 @@ class CppCodegen:
                     match v.types[fi]:
                         Custom(n):
                             if n == enum_name:
-                                cpp_type = "std::shared_ptr<" + enum_name + ">"
+                                cpp_type = "std::shared_ptr<${enum_name}>"
                         _:
                             int noop = 0
-                    this.output = this.output + cpp_type + " " + fname + "; "
+                    this.output = this.output + "${cpp_type} ${fname}; "
                     fi = fi + 1
                 this.output = this.output + "};\n"
+            else:
+                this.output = this.output + "${this.indent()}struct ${v.name.lexeme} {};\n"
         this.output = this.output + "\n"
 
-        this.output = this.output + this.indent() + "std::string _tag;\n"
+        this.output = this.output + "${this.indent()}std::string _tag;\n"
 
         vector[string] variant_inner_types = []
         for v in variants:
-            if v.types.len() > 0:
-                variant_inner_types.push(enum_name + "::" + v.name.lexeme)
+            variant_inner_types.push("${enum_name}::${v.name.lexeme}")
 
-        if variant_inner_types.len() > 0:
-            string all_types = "std::monostate, " + variant_inner_types.join(", ")
-            this.output = this.output + this.indent() + "std::variant<" + all_types + "> _data;\n"
+        this.output = this.output + "${this.indent()}std::variant<${variant_inner_types.join(", ")}> _data;\n"
         this.output = this.output + "\n"
 
         for v in variants:
             string vname = v.name.lexeme
             if v.types.len() == 0:
-                string mono = ""
-                if variant_inner_types.len() > 0:
-                    mono = ", std::monostate{}"
-                this.output = this.output + this.indent() + "static " + enum_name + " make_" + vname + "() { return {\"" + vname + "\"" + mono + "}; }\n"
+                this.output = this.output + "${this.indent()}static ${enum_name} make_${vname}() { return {\"${vname}\", ${vname}{}}; }\n"
             else:
                 vector[string] params = []
                 vector[string] field_inits = []
@@ -901,28 +940,28 @@ class CppCodegen:
                         _:
                             int noop = 0
                     if is_self_ref:
-                        params.push(enum_name + " " + fname)
-                        field_inits.push("std::make_shared<" + enum_name + ">(std::move(" + fname + "))")
+                        params.push("${enum_name} ${fname}")
+                        field_inits.push("std::make_shared<${enum_name}>(std::move(${fname}))")
                     else:
-                        params.push(cpp_type + " " + fname)
+                        params.push("${cpp_type} ${fname}")
                         field_inits.push(fname)
                     fi = fi + 1
-                this.output = this.output + this.indent() + "static " + enum_name + " make_" + vname + "(" + params.join(", ") + ") { return {\"" + vname + "\", " + vname + "{" + field_inits.join(", ") + "}}; }\n"
+                this.output = this.output + "${this.indent()}static ${enum_name} make_${vname}(${params.join(", ")}) { return {\"${vname}\", ${vname}{${field_inits.join(", ")}}}; }\n"
         this.output = this.output + "\n"
 
-        this.output = this.output + this.indent() + "std::string operator[](const std::string& key) const {\n"
+        this.output = this.output + "${this.indent()}std::string operator[](const std::string& key) const {\n"
         this.indent_level = this.indent_level + 1
-        this.output = this.output + this.indent() + "if (key == \"_tag\") return _tag;\n"
-        this.output = this.output + this.indent() + "return \"\";\n"
+        this.output = this.output + "${this.indent()}if (key == \"_tag\") return _tag;\n"
+        this.output = this.output + "${this.indent()}return \"\";\n"
         this.indent_level = this.indent_level - 1
-        this.output = this.output + this.indent() + "}\n"
+        this.output = this.output + "${this.indent()}}\n"
 
         this.indent_level = this.indent_level - 1
-        this.output = this.output + this.indent() + "};\n\n"
+        this.output = this.output + "${this.indent()}};\n\n"
 
-        this.output = this.output + "void print(const " + enum_name + "& e) { std::cout << \"" + enum_name + "(\" << e._tag << \")\" << std::endl; }\n"
-        this.output = this.output + "std::string operator+(const std::string& s, const " + enum_name + "& e) { return s + e._tag; }\n"
-        this.output = this.output + "std::string operator+(const " + enum_name + "& e, const std::string& s) { return e._tag + s; }\n\n"
+        this.output = this.output + "void print(const ${enum_name}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
+        this.output = this.output + "std::string operator+(const std::string& s, const ${enum_name}& e) { return s + e._tag; }\n"
+        this.output = this.output + "std::string operator+(const ${enum_name}& e, const std::string& s) { return e._tag + s; }\n\n"
 
     // ── Match emission ────────────────────────────────────────
 
@@ -938,12 +977,12 @@ class CppCodegen:
             match_val = this.emit_method_expr(expr)
         else:
             match_val = this.emit_expr(expr)
-        string temp = "_match_" + this.temp_counter
+        string temp = "_match_${this.temp_counter}"
         this.temp_counter = this.temp_counter + 1
 
-        this.output = this.output + this.indent() + "{\n"
+        this.output = this.output + "${this.indent()}{\n"
         this.indent_level = this.indent_level + 1
-        this.output = this.output + this.indent() + "auto& " + temp + " = " + match_val + ";\n"
+        this.output = this.output + "${this.indent()}auto& ${temp} = ${match_val};\n"
 
         bool first = true
         int ai = 0
@@ -952,25 +991,28 @@ class CppCodegen:
             Stmt arm_body = arm_bodies[ai]
             if arm.pattern_name == "_":
                 if first:
-                    this.output = this.output + this.indent() + "{\n"
+                    this.output = this.output + "${this.indent()}{\n"
                 else:
-                    this.output = this.output + this.indent() + "else {\n"
+                    this.output = this.output + "${this.indent()}else {\n"
                 this.indent_level = this.indent_level + 1
                 this.emit_arm_body(arm_body, in_method)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
             else:
                 string keyword = "if"
-                if first == false:
+                if not first:
                     keyword = "else if"
                 first = false
-                this.output = this.output + this.indent() + keyword + " (" + temp + "._tag == \"" + arm.pattern_name + "\") {\n"
+                string ename = this.find_enum_for_variant(arm.pattern_name)
+                if ename != "":
+                    this.output = this.output + "${this.indent()}${keyword} (std::holds_alternative<${ename}::${arm.pattern_name}>(${temp}._data)) {\n"
+                else:
+                    this.output = this.output + "${this.indent()}${keyword} (${temp}._tag == \"${arm.pattern_name}\") {\n"
                 this.indent_level = this.indent_level + 1
 
                 if arm.bindings.len() > 0:
-                    string ename = this.find_enum_for_variant(arm.pattern_name)
                     if ename != "":
-                        this.output = this.output + this.indent() + "auto& _v = std::get<" + ename + "::" + arm.pattern_name + ">(" + temp + "._data);\n"
+                        this.output = this.output + "${this.indent()}auto& _v = std::get<${ename}::${arm.pattern_name}>(${temp}._data);\n"
                         auto vinfo = this.get_variant_info(ename, arm.pattern_name)
                         int bi = 0
                         while bi < arm.bindings.len():
@@ -985,18 +1027,18 @@ class CppCodegen:
                                         _:
                                             int noop = 0
                                 if is_self_ref:
-                                    this.output = this.output + this.indent() + "auto& " + arm.bindings[bi] + " = *_v." + field_name + ";\n"
+                                    this.output = this.output + "${this.indent()}auto& ${arm.bindings[bi]} = *_v.${field_name};\n"
                                 else:
-                                    this.output = this.output + this.indent() + "auto& " + arm.bindings[bi] + " = _v." + field_name + ";\n"
+                                    this.output = this.output + "${this.indent()}auto& ${arm.bindings[bi]} = _v.${field_name};\n"
                             bi = bi + 1
 
                 this.emit_arm_body(arm_body, in_method)
                 this.indent_level = this.indent_level - 1
-                this.output = this.output + this.indent() + "}\n"
+                this.output = this.output + "${this.indent()}}\n"
             ai = ai + 1
 
         this.indent_level = this.indent_level - 1
-        this.output = this.output + this.indent() + "}\n"
+        this.output = this.output + "${this.indent()}}\n"
 
     void fn emit_arm_body(Stmt arm_body, bool in_method):
         match arm_body:
@@ -1040,9 +1082,4 @@ class CppCodegen:
                     this.declarations = this.declarations + this.output
                     this.output = ""
 
-        if this.has_main == false:
-            throw "No 'main()' function defined."
-
         return this.declarations
-
-

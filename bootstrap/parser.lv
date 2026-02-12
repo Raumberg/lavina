@@ -1,96 +1,9 @@
-import scanner
+import ast
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Parser
 //  Translates a flat token list into an AST.
 // ═══════════════════════════════════════════════════════════════
-
-// ── Type AST ─────────────────────────────────────────────────
-
-enum TypeNode:
-    null None
-    null Int
-    null Float
-    null Str
-    null Bool
-    null Void
-    null Auto
-    null Dynamic
-    null NullType
-    Custom(string name)
-    Array(TypeNode inner)
-    Dict(TypeNode key_type, TypeNode value_type)
-    Nullable(TypeNode inner)
-
-// ── Helper structs ───────────────────────────────────────────
-
-class Param:
-    Token name
-    TypeNode param_type
-    void fn __init__(Token name, TypeNode param_type):
-        this.name = name
-        this.param_type = param_type
-
-class EnumVariantNode:
-    Token name
-    vector[TypeNode] types
-    vector[string] field_names
-    void fn __init__(Token name, vector[TypeNode] types, vector[string] field_names):
-        this.name = name
-        this.types = types
-        this.field_names = field_names
-
-// ── Expression AST ───────────────────────────────────────────
-
-enum Expr:
-    null None
-    Literal(string kind, string value)
-    Unary(Token op, Expr right)
-    Binary(Expr left, Token op, Expr right)
-    Grouping(Expr inner)
-    Variable(Token name)
-    Assign(Token name, Expr value)
-    Logical(Expr left, Token op, Expr right)
-    Call(Expr callee, Token paren, vector[Expr] args)
-    Index(Expr object, Token bracket, Expr index)
-    Vector(vector[Expr] elements)
-    Map(vector[Expr] keys, vector[Expr] values)
-    Get(Expr object, Token name)
-    Set(Expr object, Token name, Expr value)
-    StaticGet(Expr object, Token name)
-    This(Token keyword)
-    Cast(Expr expr, TypeNode target_type)
-    Throw(Expr expr)
-
-// ── Match arm (pattern only, no body — avoids circular dep) ─
-
-class MatchArm:
-    string pattern_name
-    vector[string] bindings
-    void fn __init__(string pattern_name, vector[string] bindings):
-        this.pattern_name = pattern_name
-        this.bindings = bindings
-
-// ── Statement AST ────────────────────────────────────────────
-
-enum Stmt:
-    null None
-    ExprStmt(Expr expr)
-    Let(Token name, TypeNode var_type, Expr initializer, string visibility)
-    Const(Token name, TypeNode const_type, Expr value, string visibility)
-    Return(Token keyword, Expr value)
-    If(Expr condition, Stmt then_branch, Stmt else_branch)
-    While(Expr condition, Stmt body)
-    For(Token item_name, Expr collection, Stmt body)
-    Block(vector[Stmt] statements)
-    Try(Stmt try_body, Stmt catch_body, string exception_name)
-    Function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body, bool is_inline, bool is_comptime, bool is_static, string visibility)
-    Class(Token name, vector[Stmt] body, string visibility)
-    Struct(Token name, vector[Stmt] body, string visibility)
-    Enum(Token name, vector[EnumVariantNode] variants, string visibility)
-    Match(Expr expr, vector[MatchArm] arm_patterns, vector[Stmt] arm_bodies)
-    Namespace(Token name, vector[Stmt] body, string visibility)
-    Import(vector[Token] path, string alias)
 
 // ── Parser class ──────────────────────────────────────────────
 
@@ -99,7 +12,7 @@ class Parser:
     int current
     bool in_class_body
 
-    void fn __init__(vector[Token] tokens):
+    constructor(vector[Token] tokens):
         this.tokens = tokens
         this.current = 0
         this.in_class_body = false
@@ -121,7 +34,7 @@ class Parser:
         return this.tokens[this.current - 1]
 
     Token fn advance():
-        if this.is_at_end() == false:
+        if not this.is_at_end():
             this.current = this.current + 1
         return this.previous()
 
@@ -167,20 +80,35 @@ class Parser:
             return true
         if t == TK_HASHMAP:
             return true
+        if t == TK_HASHSET:
+            return true
         if t == TK_IDENTIFIER:
             return true
         return false
 
+    int fn skip_type_tokens(int pos):
+        auto tt = this.peek_at(pos).token_type
+        if tt == TK_VECTOR or tt == TK_HASHSET:
+            pos = pos + 1
+            pos = pos + 1
+            pos = this.skip_type_tokens(pos)
+            pos = pos + 1
+            return pos
+        elif tt == TK_HASHMAP:
+            pos = pos + 1
+            pos = pos + 1
+            pos = this.skip_type_tokens(pos)
+            pos = pos + 1
+            pos = this.skip_type_tokens(pos)
+            pos = pos + 1
+            return pos
+        return pos + 1
+
     bool fn check_function_start():
         int offset = 0
-        if this.is_type_at_pos(offset) == false:
+        if not this.is_type_at_pos(offset):
             return false
-        auto tt = this.peek_at(offset).token_type
-        offset = offset + 1
-        if tt == TK_VECTOR:
-            offset = offset + 3
-        else if tt == TK_HASHMAP:
-            offset = offset + 5
+        offset = this.skip_type_tokens(offset)
         if this.peek_at(offset).token_type == TK_QUESTION:
             offset = offset + 1
         bool still_modifiers = true
@@ -198,33 +126,38 @@ class Parser:
         TypeNode t = TypeNode::None()
         if this.match_any([TK_INT_TYPE]):
             t = TypeNode::Int()
-        else if this.match_any([TK_FLOAT_TYPE]):
+        elif this.match_any([TK_FLOAT_TYPE]):
             t = TypeNode::Float()
-        else if this.match_any([TK_STRING_TYPE]):
+        elif this.match_any([TK_STRING_TYPE]):
             t = TypeNode::Str()
-        else if this.match_any([TK_BOOL]):
+        elif this.match_any([TK_BOOL]):
             t = TypeNode::Bool()
-        else if this.match_any([TK_VOID]):
+        elif this.match_any([TK_VOID]):
             t = TypeNode::Void()
-        else if this.match_any([TK_AUTO]):
+        elif this.match_any([TK_AUTO]):
             t = TypeNode::Auto()
-        else if this.match_any([TK_DYNAMIC]):
+        elif this.match_any([TK_DYNAMIC]):
             t = TypeNode::Dynamic()
-        else if this.match_any([TK_NULL]):
+        elif this.match_any([TK_NULL]):
             t = TypeNode::NullType()
-        else if this.match_any([TK_VECTOR]):
+        elif this.match_any([TK_VECTOR]):
             this.consume(TK_LEFT_BRACKET, "Expect '[' after 'vector'.")
             TypeNode inner = this.parse_type()
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after vector type.")
             t = TypeNode::Array(inner)
-        else if this.match_any([TK_HASHMAP]):
+        elif this.match_any([TK_HASHSET]):
+            this.consume(TK_LEFT_BRACKET, "Expect '[' after 'hashset'.")
+            TypeNode inner = this.parse_type()
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after hashset type.")
+            t = TypeNode::HashSet(inner)
+        elif this.match_any([TK_HASHMAP]):
             this.consume(TK_LEFT_BRACKET, "Expect '[' after 'hashmap'.")
             TypeNode k = this.parse_type()
             this.consume(TK_COMMA, "Expect ',' between key and value types.")
             TypeNode v = this.parse_type()
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after hashmap types.")
-            t = TypeNode::Dict(k, v)
-        else if this.match_any([TK_IDENTIFIER]):
+            t = TypeNode::HashMap(k, v)
+        elif this.match_any([TK_IDENTIFIER]):
             t = TypeNode::Custom(this.previous().lexeme)
         else:
             auto tok = this.peek()
@@ -248,6 +181,8 @@ class Parser:
                     return Expr::Assign(name, value)
                 Get(object, name):
                     return Expr::Set(object, name, value)
+                Index(object, bracket, index):
+                    return Expr::IndexSet(object, bracket, index, value)
                 _:
                     throw "Invalid assignment target."
         return expr
@@ -294,14 +229,14 @@ class Parser:
 
     Expr fn factor():
         Expr expr = this.unary()
-        while this.match_any([TK_SLASH, TK_STAR]):
+        while this.match_any([TK_SLASH, TK_STAR, TK_PERCENT]):
             auto op = this.previous()
             Expr right = this.unary()
             expr = Expr::Binary(expr, op, right)
         return expr
 
     Expr fn unary():
-        if this.match_any([TK_BANG, TK_MINUS]):
+        if this.match_any([TK_BANG, TK_MINUS, TK_NOT]):
             auto op = this.previous()
             Expr right = this.unary()
             return Expr::Unary(op, right)
@@ -313,14 +248,14 @@ class Parser:
         while more:
             if this.match_any([TK_LEFT_PAREN]):
                 expr = this.finish_call(expr)
-            else if this.match_any([TK_LEFT_BRACKET]):
+            elif this.match_any([TK_LEFT_BRACKET]):
                 Expr index = this.expression()
                 auto bracket = this.consume(TK_RIGHT_BRACKET, "Expect ']' after index.")
                 expr = Expr::Index(expr, bracket, index)
-            else if this.match_any([TK_DOT]):
+            elif this.match_any([TK_DOT]):
                 auto name = this.consume(TK_IDENTIFIER, "Expect property name after '.'.")
                 expr = Expr::Get(expr, name)
-            else if this.match_any([TK_DOUBLE_COLON]):
+            elif this.match_any([TK_DOUBLE_COLON]):
                 auto name = this.consume(TK_IDENTIFIER, "Expect member name after '::'.")
                 expr = Expr::StaticGet(expr, name)
             else:
@@ -340,7 +275,7 @@ class Parser:
                 int noop = 0
 
         vector[Expr] args = []
-        if this.check(TK_RIGHT_PAREN) == false:
+        if not this.check(TK_RIGHT_PAREN):
             args.push(this.expression())
             while this.match_any([TK_COMMA]):
                 args.push(this.expression())
@@ -371,7 +306,7 @@ class Parser:
         if this.match_any([TK_LEFT_BRACKET]):
             vector[Expr] elements = []
             this.skip_formatting()
-            if this.check(TK_RIGHT_BRACKET) == false:
+            if not this.check(TK_RIGHT_BRACKET):
                 this.skip_formatting()
                 elements.push(this.expression())
                 this.skip_formatting()
@@ -386,7 +321,7 @@ class Parser:
             vector[Expr] keys = []
             vector[Expr] values = []
             this.skip_formatting()
-            if this.check(TK_RIGHT_BRACE) == false:
+            if not this.check(TK_RIGHT_BRACE):
                 this.skip_formatting()
                 Expr key = this.expression()
                 this.skip_formatting()
@@ -428,6 +363,14 @@ class Parser:
             return this.throw_statement()
         if this.match_any([TK_MATCH]):
             return this.match_statement()
+        if this.match_any([TK_BREAK]):
+            auto kw = this.previous()
+            this.match_any([TK_NEWLINE])
+            return Stmt::Break(kw)
+        if this.match_any([TK_CONTINUE]):
+            auto kw = this.previous()
+            this.match_any([TK_NEWLINE])
+            return Stmt::Continue(kw)
         return this.expression_statement()
 
     Stmt fn throw_statement():
@@ -441,10 +384,12 @@ class Parser:
         Stmt then_branch = Stmt::Block(this.block())
 
         Stmt else_branch = Stmt::None()
-        if this.match_any([TK_ELSE]):
+        if this.match_any([TK_ELIF]):
+            else_branch = this.if_statement()
+        elif this.match_any([TK_ELSE]):
             if this.match_any([TK_COLON]):
                 else_branch = Stmt::Block(this.block())
-            else if this.check(TK_IF):
+            elif this.check(TK_IF):
                 else_branch = this.declaration()
         return Stmt::If(condition, then_branch, else_branch)
 
@@ -465,7 +410,7 @@ class Parser:
     Stmt fn return_statement():
         auto keyword = this.previous()
         Expr value = Expr::None()
-        if this.check(TK_NEWLINE) == false and this.check(TK_DEDENT) == false and this.is_at_end() == false:
+        if not this.check(TK_NEWLINE) and not this.check(TK_DEDENT) and not this.is_at_end():
             value = this.expression()
         this.match_any([TK_NEWLINE])
         return Stmt::Return(keyword, value)
@@ -478,7 +423,7 @@ class Parser:
 
         vector[MatchArm] arm_patterns = []
         vector[Stmt] arm_bodies = []
-        while this.check(TK_DEDENT) == false and this.is_at_end() == false:
+        while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
             else:
@@ -487,7 +432,7 @@ class Parser:
                 vector[string] bindings = []
                 if pattern_name != "_":
                     if this.match_any([TK_LEFT_PAREN]):
-                        if this.check(TK_RIGHT_PAREN) == false:
+                        if not this.check(TK_RIGHT_PAREN):
                             bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
                             while this.match_any([TK_COMMA]):
                                 bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
@@ -505,7 +450,7 @@ class Parser:
         this.consume(TK_INDENT, "Expect indentation to start a block.")
 
         vector[Stmt] statements = []
-        while this.check(TK_DEDENT) == false and this.is_at_end() == false:
+        while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
             else:
@@ -554,7 +499,7 @@ class Parser:
 
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
         vector[Param] params = []
-        if this.check(TK_RIGHT_PAREN) == false:
+        if not this.check(TK_RIGHT_PAREN):
             TypeNode param_type = this.parse_type()
             auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
             params.push(Param(param_name, param_type))
@@ -594,15 +539,15 @@ class Parser:
         this.consume(TK_INDENT, "Expect indentation to start enum body.")
 
         vector[EnumVariantNode] variants = []
-        while this.check(TK_DEDENT) == false and this.is_at_end() == false:
+        while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
-            else if this.check(TK_IDENTIFIER) and this.peek_at(1).token_type == TK_LEFT_PAREN:
+            elif this.check(TK_IDENTIFIER) and this.peek_at(1).token_type == TK_LEFT_PAREN:
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
                 this.consume(TK_LEFT_PAREN, "Expect '(' after variant name.")
                 vector[TypeNode] fields = []
                 vector[string] fnames = []
-                if this.check(TK_RIGHT_PAREN) == false:
+                if not this.check(TK_RIGHT_PAREN):
                     fields.push(this.parse_type())
                     fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                     while this.match_any([TK_COMMA]):
@@ -611,12 +556,26 @@ class Parser:
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after variant fields.")
                 variants.push(EnumVariantNode(vname, fields, fnames))
                 this.match_any([TK_NEWLINE])
+            elif this.check(TK_IDENTIFIER) and (this.peek_at(1).token_type == TK_NEWLINE or this.peek_at(1).token_type == TK_DEDENT):
+                auto vname = this.advance()
+                vector[TypeNode] empty_types = []
+                vector[string] empty_fnames = []
+                variants.push(EnumVariantNode(vname, empty_types, empty_fnames))
+                this.match_any([TK_NEWLINE])
             else:
                 TypeNode vtype = this.parse_type()
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
                 vector[TypeNode] types = []
                 vector[string] old_fnames = []
-                if vtype._tag != "NullType" and vtype._tag != "Void":
+                bool is_unit_type = false
+                match vtype:
+                    NullType():
+                        is_unit_type = true
+                    Void():
+                        is_unit_type = true
+                    _:
+                        int noop = 0
+                if not is_unit_type:
                     types.push(vtype)
                     old_fnames.push("value")
                 variants.push(EnumVariantNode(vname, types, old_fnames))
@@ -659,13 +618,13 @@ class Parser:
         string visibility = "public"
         if this.match_any([TK_PRIVATE]):
             visibility = "private"
-        else if this.match_any([TK_PUBLIC]):
+        elif this.match_any([TK_PUBLIC]):
             visibility = "public"
 
         bool is_static = this.match_any([TK_STATIC])
 
         while this.check(TK_HASH):
-            while this.check(TK_NEWLINE) == false and this.is_at_end() == false:
+            while not this.check(TK_NEWLINE) and not this.is_at_end():
                 this.advance()
             this.match_any([TK_NEWLINE])
 
@@ -690,13 +649,27 @@ class Parser:
         if this.match_any([TK_CONST]):
             return this.const_declaration(visibility)
 
+        if this.in_class_body and this.check(TK_IDENTIFIER):
+            auto ctor_name = this.peek().lexeme
+            if (ctor_name == "constructor" or ctor_name == "destructor") and this.peek_at(1).token_type == TK_LEFT_PAREN:
+                auto name_tok = this.advance()
+                this.consume(TK_LEFT_PAREN, "Expect '(' after " + ctor_name + ".")
+                vector[Param] params = []
+                if not this.check(TK_RIGHT_PAREN):
+                    TypeNode param_type = this.parse_type()
+                    auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+                    params.push(Param(param_name, param_type))
+                    while this.match_any([TK_COMMA]):
+                        param_type = this.parse_type()
+                        param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+                        params.push(Param(param_name, param_type))
+                this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
+                this.consume(TK_COLON, "Expect ':' before body.")
+                vector[Stmt] body = this.block()
+                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, false, is_static, visibility)
+
         if this.is_type_at_pos(0):
-            int next_pos = 1
-            auto current_type = this.peek().token_type
-            if current_type == TK_VECTOR:
-                next_pos = 4
-            else if current_type == TK_HASHMAP:
-                next_pos = 6
+            int next_pos = this.skip_type_tokens(0)
 
             if this.peek_at(next_pos).token_type == TK_QUESTION:
                 next_pos = next_pos + 1
@@ -705,11 +678,6 @@ class Parser:
             if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME:
                 if this.check_function_start():
                     return this.function_declaration(visibility, is_static)
-                if this.in_class_body == false:
-                    int eq_pos = next_pos + 1
-                    if this.peek_at(eq_pos).token_type != TK_EQUAL:
-                        auto tok = this.peek_at(next_pos)
-                        throw "Bare field declarations are only allowed inside class/struct at " + tok.line + ":" + tok.col
                 return this.var_declaration(visibility)
 
         return this.statement()
@@ -718,7 +686,7 @@ class Parser:
 
     vector[Stmt] fn parse_program():
         vector[Stmt] statements = []
-        while this.is_at_end() == false:
+        while not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
                 int noop = 0
             else:

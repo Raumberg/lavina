@@ -21,6 +21,7 @@ const string TK_STAR = "Star"
 const string TK_COLON = "Colon"
 const string TK_HASH = "Hash"
 const string TK_QUESTION = "Question"
+const string TK_PERCENT = "Percent"
 const string TK_BANG = "Bang"
 const string TK_BANG_EQUAL = "BangEqual"
 const string TK_EQUAL = "Equal"
@@ -41,6 +42,7 @@ const string TK_BOOL = "Bool"
 const string TK_COMPTIME = "Comptime"
 const string TK_DYNAMIC = "Dynamic"
 const string TK_ELSE = "Else"
+const string TK_ELIF = "Elif"
 const string TK_FALSE = "False"
 const string TK_FLOAT_TYPE = "FloatType"
 const string TK_FN = "Fn"
@@ -58,6 +60,7 @@ const string TK_FOR = "For"
 const string TK_IN = "In"
 const string TK_VECTOR = "Vector"
 const string TK_HASHMAP = "HashMap"
+const string TK_HASHSET = "HashSet"
 const string TK_IMPORT = "Import"
 const string TK_AS = "As"
 const string TK_NAMESPACE = "Namespace"
@@ -74,6 +77,9 @@ const string TK_THROW = "Throw"
 const string TK_CONST = "Const"
 const string TK_LET = "Let"
 const string TK_MATCH = "Match"
+const string TK_BREAK = "Break"
+const string TK_CONTINUE = "Continue"
+const string TK_NOT = "Not"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -82,7 +88,7 @@ const string TK_EOF = "Eof"
 // ── Token struct ────────────────────────────────────────────────
 
 class Token:
-    void fn __init__(string token_type, string lexeme, int line, int col):
+    constructor(string token_type, string lexeme, int line, int col):
         this.token_type = token_type
         this.lexeme = lexeme
         this.line = line
@@ -96,82 +102,92 @@ class Token:
 string fn lookup_keyword(auto w):
     if w == "and":
         return TK_AND
-    else if w == "auto":
+    elif w == "auto":
         return TK_AUTO
-    else if w == "bool":
+    elif w == "bool":
         return TK_BOOL
-    else if w == "comptime":
+    elif w == "comptime":
         return TK_COMPTIME
-    else if w == "dynamic":
+    elif w == "dynamic":
         return TK_DYNAMIC
-    else if w == "else":
+    elif w == "else":
         return TK_ELSE
-    else if w == "false":
+    elif w == "elif":
+        return TK_ELIF
+    elif w == "false":
         return TK_FALSE
-    else if w == "float":
+    elif w == "float":
         return TK_FLOAT_TYPE
-    else if w == "fn":
+    elif w == "fn":
         return TK_FN
-    else if w == "if":
+    elif w == "if":
         return TK_IF
-    else if w == "inline":
+    elif w == "inline":
         return TK_INLINE
-    else if w == "int":
+    elif w == "int":
         return TK_INT_TYPE
-    else if w == "null":
+    elif w == "null":
         return TK_NULL
-    else if w == "or":
+    elif w == "or":
         return TK_OR
-    else if w == "return":
+    elif w == "return":
         return TK_RETURN
-    else if w == "string":
+    elif w == "string":
         return TK_STRING_TYPE
-    else if w == "true":
+    elif w == "true":
         return TK_TRUE
-    else if w == "void":
+    elif w == "void":
         return TK_VOID
-    else if w == "while":
+    elif w == "while":
         return TK_WHILE
-    else if w == "for":
+    elif w == "for":
         return TK_FOR
-    else if w == "in":
+    elif w == "in":
         return TK_IN
-    else if w == "vector":
+    elif w == "vector":
         return TK_VECTOR
-    else if w == "hashmap":
+    elif w == "hashmap":
         return TK_HASHMAP
-    else if w == "import":
+    elif w == "hashset":
+        return TK_HASHSET
+    elif w == "import":
         return TK_IMPORT
-    else if w == "as":
+    elif w == "as":
         return TK_AS
-    else if w == "namespace":
+    elif w == "namespace":
         return TK_NAMESPACE
-    else if w == "public":
+    elif w == "public":
         return TK_PUBLIC
-    else if w == "private":
+    elif w == "private":
         return TK_PRIVATE
-    else if w == "static":
+    elif w == "static":
         return TK_STATIC
-    else if w == "class":
+    elif w == "class":
         return TK_CLASS
-    else if w == "struct":
+    elif w == "struct":
         return TK_STRUCT
-    else if w == "enum":
+    elif w == "enum":
         return TK_ENUM
-    else if w == "this":
+    elif w == "this":
         return TK_THIS
-    else if w == "try":
+    elif w == "try":
         return TK_TRY
-    else if w == "catch":
+    elif w == "catch":
         return TK_CATCH
-    else if w == "throw":
+    elif w == "throw":
         return TK_THROW
-    else if w == "const":
+    elif w == "const":
         return TK_CONST
-    else if w == "let":
+    elif w == "let":
         return TK_LET
-    else if w == "match":
+    elif w == "match":
         return TK_MATCH
+    elif w == "break":
+        return TK_BREAK
+    elif w == "continue":
+        return TK_CONTINUE
+    elif w == "not":
+        return TK_NOT
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
@@ -179,9 +195,9 @@ string fn lookup_keyword(auto w):
 bool fn is_alpha(auto c):
     if c >= "a" and c <= "z":
         return true
-    else if c >= "A" and c <= "Z":
+    elif c >= "A" and c <= "Z":
         return true
-    else if c == "_":
+    elif c == "_":
         return true
     return false
 
@@ -211,8 +227,10 @@ class Scanner:
     int start_column
     vector[int] indent_stack
     bool at_line_start
+    bool in_string_interp
+    int interp_brace_depth
 
-    void fn __init__(string source):
+    constructor(string source):
         this.source = source
         this.tokens = []
         this.errors = []
@@ -224,6 +242,8 @@ class Scanner:
         this.start_column = 1
         this.indent_stack = [0]
         this.at_line_start = true
+        this.in_string_interp = false
+        this.interp_brace_depth = 0
 
     bool fn is_at_end():
         return this.current >= this.source.len()
@@ -271,27 +291,23 @@ class Scanner:
 
     void fn handle_indentation():
         int indent = 0
-        while this.is_at_end() == false and (this.peek() == " " or this.peek() == "\t"):
+        while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
             auto c = this.advance()
             if c == " ":
                 indent = indent + 1
             else:
                 indent = indent + 4
 
-        // Skip blank lines and comment-only lines
         if this.is_at_end() or this.peek() == "\n":
             if this.peek() == "\n":
                 this.at_line_start = true
-            return
-        if this.peek() == "/" and this.peek_next() == "/":
-            this.at_line_start = false
             return
 
         auto current_indent = this.indent_stack[this.indent_stack.len() - 1]
         if indent > current_indent:
             this.indent_stack.push(indent)
             this.add_token(TK_INDENT, "")
-        else if indent < current_indent:
+        elif indent < current_indent:
             while indent < this.indent_stack[this.indent_stack.len() - 1]:
                 this.indent_stack.pop()
                 this.add_token(TK_DEDENT, "")
@@ -300,20 +316,63 @@ class Scanner:
     // ── Scan individual tokens ──────────────────────────────────
 
     void fn scan_string():
-        while this.is_at_end() == false and this.peek() != "\"":
-            if this.peek() == "\n":
-                this.line = this.line + 1
-                this.column = 1
+        int str_start = this.current
+        while not this.is_at_end() and this.peek() != "\"":
             if this.peek() == "\\":
                 this.advance()
-            this.advance()
+                this.advance()
+            elif this.peek() == "$" and this.peek_next() == "{":
+                auto value = this.source.substring(str_start, this.current)
+                this.add_token(TK_STRING, value)
+                this.add_token(TK_PLUS, "+")
+                this.add_token(TK_LEFT_PAREN, "(")
+                this.advance()
+                this.advance()
+                this.in_string_interp = true
+                this.interp_brace_depth = 1
+                return
+            else:
+                if this.peek() == "\n":
+                    this.line = this.line + 1
+                    this.column = 1
+                this.advance()
 
         if this.is_at_end():
             this.add_error("Unterminated string")
             return
 
+        auto value = this.source.substring(str_start, this.current)
         this.advance()
-        auto value = this.source.substring(this.start + 1, this.current - 1)
+        this.add_token(TK_STRING, value)
+
+    void fn scan_string_rest():
+        int str_start = this.current
+        while not this.is_at_end() and this.peek() != "\"":
+            if this.peek() == "\\":
+                this.advance()
+                this.advance()
+            elif this.peek() == "$" and this.peek_next() == "{":
+                auto value = this.source.substring(str_start, this.current)
+                this.add_token(TK_STRING, value)
+                this.add_token(TK_PLUS, "+")
+                this.add_token(TK_LEFT_PAREN, "(")
+                this.advance()
+                this.advance()
+                this.in_string_interp = true
+                this.interp_brace_depth = 1
+                return
+            else:
+                if this.peek() == "\n":
+                    this.line = this.line + 1
+                    this.column = 1
+                this.advance()
+
+        if this.is_at_end():
+            this.add_error("Unterminated string")
+            return
+
+        auto value = this.source.substring(str_start, this.current)
+        this.advance()
         this.add_token(TK_STRING, value)
 
     void fn scan_number():
@@ -353,78 +412,90 @@ class Scanner:
 
         if c == "(":
             this.add_simple_token(TK_LEFT_PAREN)
-        else if c == ")":
+        elif c == ")":
             this.add_simple_token(TK_RIGHT_PAREN)
-        else if c == "[":
+        elif c == "[":
             this.add_simple_token(TK_LEFT_BRACKET)
-        else if c == "]":
+        elif c == "]":
             this.add_simple_token(TK_RIGHT_BRACKET)
-        else if c == "{":
+        elif c == "{":
+            if this.in_string_interp:
+                this.interp_brace_depth = this.interp_brace_depth + 1
             this.add_simple_token(TK_LEFT_BRACE)
-        else if c == "}":
+        elif c == "}":
+            if this.in_string_interp:
+                this.interp_brace_depth = this.interp_brace_depth - 1
+                if this.interp_brace_depth == 0:
+                    this.in_string_interp = false
+                    this.add_token(TK_RIGHT_PAREN, ")")
+                    this.add_token(TK_PLUS, "+")
+                    this.scan_string_rest()
+                    return
             this.add_simple_token(TK_RIGHT_BRACE)
-        else if c == ",":
+        elif c == ",":
             this.add_simple_token(TK_COMMA)
-        else if c == ".":
+        elif c == ".":
             this.add_simple_token(TK_DOT)
-        else if c == "?":
+        elif c == "?":
             this.add_simple_token(TK_QUESTION)
-        else if c == "+":
+        elif c == "+":
             this.add_simple_token(TK_PLUS)
-        else if c == ";":
+        elif c == ";":
             this.add_simple_token(TK_SEMICOLON)
-        else if c == "*":
+        elif c == "*":
             this.add_simple_token(TK_STAR)
-        else if c == "-":
+        elif c == "%":
+            this.add_simple_token(TK_PERCENT)
+        elif c == "-":
             if this.match_char(">"):
                 this.add_simple_token(TK_ARROW)
             else:
                 this.add_simple_token(TK_MINUS)
-        else if c == ":":
+        elif c == ":":
             if this.match_char(":"):
                 this.add_simple_token(TK_DOUBLE_COLON)
             else:
                 this.add_simple_token(TK_COLON)
-        else if c == "#":
+        elif c == "#":
             this.add_simple_token(TK_HASH)
-        else if c == "!":
+        elif c == "!":
             if this.match_char("="):
                 this.add_simple_token(TK_BANG_EQUAL)
             else:
                 this.add_simple_token(TK_BANG)
-        else if c == "=":
+        elif c == "=":
             if this.match_char("="):
                 this.add_simple_token(TK_EQUAL_EQUAL)
             else:
                 this.add_simple_token(TK_EQUAL)
-        else if c == "<":
+        elif c == "<":
             if this.match_char("="):
                 this.add_simple_token(TK_LESS_EQUAL)
             else:
                 this.add_simple_token(TK_LESS)
-        else if c == ">":
+        elif c == ">":
             if this.match_char("="):
                 this.add_simple_token(TK_GREATER_EQUAL)
             else:
                 this.add_simple_token(TK_GREATER)
-        else if c == "/":
+        elif c == "/":
             if this.match_char("/"):
-                while this.peek() != "\n" and this.is_at_end() == false:
+                while this.peek() != "\n" and not this.is_at_end():
                     this.advance()
             else:
                 this.add_simple_token(TK_SLASH)
-        else if c == " " or c == "\r" or c == "\t":
+        elif c == " " or c == "\r" or c == "\t":
             int noop = 0
-        else if c == "\n":
+        elif c == "\n":
             this.add_token(TK_NEWLINE, "\n")
             this.line = this.line + 1
             this.column = 1
             this.at_line_start = true
-        else if c == "\"":
+        elif c == "\"":
             this.scan_string()
-        else if is_digit(c):
+        elif is_digit(c):
             this.scan_number()
-        else if is_alpha(c):
+        elif is_alpha(c):
             this.scan_identifier()
         else:
             this.add_error("Unexpected character: " + c)
@@ -432,7 +503,7 @@ class Scanner:
     // ── Main entry point ────────────────────────────────────────
 
     void fn scan_tokens():
-        while this.is_at_end() == false:
+        while not this.is_at_end():
             this.start = this.current
             this.start_line = this.line
             this.start_column = this.column

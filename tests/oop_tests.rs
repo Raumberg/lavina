@@ -35,7 +35,7 @@ class Point:
     int x
     int y
 
-    void fn __init__(int x, int y):
+    constructor(int x, int y):
         this.x = x
         this.y = y
 
@@ -71,7 +71,7 @@ if res != 25:
 fn test_class_type_error_constructor() {
     let code = r#"
 class Test:
-    void fn __init__(string s):
+    constructor(string s):
         print(s)
 
 auto t = Test(123) // Error: expected string
@@ -154,7 +154,7 @@ struct Vec2:
     int x
     int y
     
-    void fn __init__(int x, int y):
+    constructor(int x, int y):
         this.x = x
         this.y = y
 

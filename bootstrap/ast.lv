@@ -1,0 +1,86 @@
+import scanner
+
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — AST Type Definitions
+// ═══════════════════════════════════════════════════════════════
+
+// ── Type AST ─────────────────────────────────────────────────
+
+enum TypeNode:
+    None
+    Int
+    Float
+    Str
+    Bool
+    Void
+    Auto
+    Dynamic
+    NullType
+    Custom(string name)
+    Array(TypeNode inner)
+    HashSet(TypeNode inner)
+    HashMap(TypeNode key_type, TypeNode value_type)
+    Nullable(TypeNode inner)
+
+// ── Helper structs ───────────────────────────────────────────
+
+struct Param:
+    Token name
+    TypeNode param_type
+
+struct EnumVariantNode:
+    Token name
+    vector[TypeNode] types
+    vector[string] field_names
+
+// ── Expression AST ───────────────────────────────────────────
+
+enum Expr:
+    None
+    Literal(string kind, string value)
+    Unary(Token op, Expr right)
+    Binary(Expr left, Token op, Expr right)
+    Grouping(Expr inner)
+    Variable(Token name)
+    Assign(Token name, Expr value)
+    Logical(Expr left, Token op, Expr right)
+    Call(Expr callee, Token paren, vector[Expr] args)
+    Index(Expr object, Token bracket, Expr index)
+    IndexSet(Expr object, Token bracket, Expr index, Expr value)
+    Vector(vector[Expr] elements)
+    Map(vector[Expr] keys, vector[Expr] values)
+    Get(Expr object, Token name)
+    Set(Expr object, Token name, Expr value)
+    StaticGet(Expr object, Token name)
+    This(Token keyword)
+    Cast(Expr expr, TypeNode target_type)
+    Throw(Expr expr)
+
+// ── Match arm ────────────────────────────────────────────────
+
+struct MatchArm:
+    string pattern_name
+    vector[string] bindings
+
+// ── Statement AST ────────────────────────────────────────────
+
+enum Stmt:
+    None
+    ExprStmt(Expr expr)
+    Let(Token name, TypeNode var_type, Expr initializer, string visibility)
+    Const(Token name, TypeNode const_type, Expr value, string visibility)
+    Return(Token keyword, Expr value)
+    If(Expr condition, Stmt then_branch, Stmt else_branch)
+    While(Expr condition, Stmt body)
+    For(Token item_name, Expr collection, Stmt body)
+    Block(vector[Stmt] statements)
+    Try(Stmt try_body, Stmt catch_body, string exception_name)
+    Function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body, bool is_inline, bool is_comptime, bool is_static, string visibility)
+    Class(Token name, vector[Stmt] body, string visibility)
+    Struct(Token name, vector[Stmt] body, string visibility)
+    Enum(Token name, vector[EnumVariantNode] variants, string visibility)
+    Match(Expr expr, vector[MatchArm] arm_patterns, vector[Stmt] arm_bodies)
+    Namespace(Token name, vector[Stmt] body, string visibility)
+    Import(vector[Token] path, string alias)
+    Break(Token keyword)
+    Continue(Token keyword)
