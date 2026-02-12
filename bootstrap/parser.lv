@@ -35,7 +35,7 @@ class Parser:
 
     Token fn advance():
         if not this.is_at_end():
-            this.current = this.current + 1
+            this.current += 1
         return this.previous()
 
     Token fn consume(string tk_type, string message):
@@ -89,18 +89,18 @@ class Parser:
     int fn skip_type_tokens(int pos):
         auto tt = this.peek_at(pos).token_type
         if tt == TK_VECTOR or tt == TK_HASHSET:
-            pos = pos + 1
-            pos = pos + 1
+            pos += 1
+            pos += 1
             pos = this.skip_type_tokens(pos)
-            pos = pos + 1
+            pos += 1
             return pos
         elif tt == TK_HASHMAP:
-            pos = pos + 1
-            pos = pos + 1
+            pos += 1
+            pos += 1
             pos = this.skip_type_tokens(pos)
-            pos = pos + 1
+            pos += 1
             pos = this.skip_type_tokens(pos)
-            pos = pos + 1
+            pos += 1
             return pos
         return pos + 1
 
@@ -110,12 +110,12 @@ class Parser:
             return false
         offset = this.skip_type_tokens(offset)
         if this.peek_at(offset).token_type == TK_QUESTION:
-            offset = offset + 1
+            offset += 1
         bool still_modifiers = true
         while offset < this.tokens.len() and still_modifiers:
             auto mt = this.peek_at(offset).token_type
             if mt == TK_INLINE or mt == TK_COMPTIME:
-                offset = offset + 1
+                offset += 1
             else:
                 still_modifiers = false
         return this.peek_at(offset).token_type == TK_FN
@@ -185,6 +185,30 @@ class Parser:
                     return Expr::IndexSet(object, bracket, index, value)
                 _:
                     throw "Invalid assignment target."
+        elif this.match_any([TK_PLUS_EQUAL, TK_MINUS_EQUAL, TK_STAR_EQUAL]):
+            auto compound_op = this.previous()
+            Expr rhs = this.assignment()
+            string base_type = TK_PLUS
+            string base_lexeme = "+"
+            if compound_op.token_type == TK_MINUS_EQUAL:
+                base_type = TK_MINUS
+                base_lexeme = "-"
+            elif compound_op.token_type == TK_STAR_EQUAL:
+                base_type = TK_STAR
+                base_lexeme = "*"
+            auto op_token = Token(base_type, base_lexeme, compound_op.line, compound_op.col)
+            match expr:
+                Variable(name):
+                    Expr bin = Expr::Binary(Expr::Variable(name), op_token, rhs)
+                    return Expr::Assign(name, bin)
+                Get(object, name):
+                    Expr bin = Expr::Binary(Expr::Get(object, name), op_token, rhs)
+                    return Expr::Set(object, name, bin)
+                Index(object, bracket, index):
+                    Expr bin = Expr::Binary(Expr::Index(object, bracket, index), op_token, rhs)
+                    return Expr::IndexSet(object, bracket, index, bin)
+                _:
+                    throw "Invalid compound assignment target."
         return expr
 
     Expr fn logical_or():
@@ -675,7 +699,7 @@ class Parser:
             int next_pos = this.skip_type_tokens(0)
 
             if this.peek_at(next_pos).token_type == TK_QUESTION:
-                next_pos = next_pos + 1
+                next_pos += 1
 
             auto next_token = this.peek_at(next_pos).token_type
             if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME:

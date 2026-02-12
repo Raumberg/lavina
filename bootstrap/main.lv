@@ -25,7 +25,7 @@ class ImportResolver:
         while i >= 0:
             if path.charAt(i) == "/":
                 return path.substring(0, i + 1)
-            i = i - 1
+            i -= 1
         return "./"
 
     string fn resolve(string file_path):
@@ -114,7 +114,7 @@ int fn main():
         if path.charAt(si) == "/":
             base = path.substring(si + 1, path.len())
             break
-        si = si - 1
+        si -= 1
     if base.ends_with(".lv"):
         base = base.substring(0, base.len() - 3)
 
@@ -125,11 +125,12 @@ int fn main():
     fs_write(cpp_path, cpp)
 
     bool wrote_header = false
+    string liblavina_path = dir + "liblavina"
     if not fs_exists(header_path):
         try:
             string header_content = fs_read("runtime/lavina.h")
-
             fs_write(header_path, header_content)
+            os_exec("cp -r runtime/liblavina " + liblavina_path)
             wrote_header = true
         catch:
             print("Warning: could not find runtime/lavina.h")
@@ -141,12 +142,14 @@ int fn main():
         os_exec("rm -f " + cpp_path)
         if wrote_header:
             os_exec("rm -f " + header_path)
+            os_exec("rm -rf " + liblavina_path)
         return 1
 
     if mode == "compile":
         os_exec("rm -f " + cpp_path)
         if wrote_header:
             os_exec("rm -f " + header_path)
+            os_exec("rm -rf " + liblavina_path)
         print("Compiled: " + bin_path)
         return 0
 
@@ -156,6 +159,7 @@ int fn main():
     os_exec("rm -f " + bin_path)
     if wrote_header:
         os_exec("rm -f " + header_path)
+        os_exec("rm -rf " + liblavina_path)
 
     if run_result != 0:
         return 1

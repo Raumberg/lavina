@@ -52,7 +52,7 @@ class CppCodegen:
                 if v.name.lexeme == variant_name:
                     if count == 0:
                         found = this.known_enum_names[i]
-                    count = count + 1
+                    count += 1
         if count == 1:
             return found
         return ""
@@ -506,10 +506,10 @@ class CppCodegen:
                         this.emit_block_or_stmt(body)
             Block(statements):
                 this.output = this.output + "${this.indent()}{\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 for st in statements:
                     this.emit_stmt(st)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
             Try(try_body, catch_body, exception_name):
                 this.output = this.output + "${this.indent()}try "
@@ -561,32 +561,32 @@ class CppCodegen:
         match s:
             Block(stmts):
                 this.output = this.output + "{\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 for st in stmts:
                     this.emit_stmt(st)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
             _:
                 this.output = this.output + "{\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 this.emit_stmt(s)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
 
     void fn emit_method_block_or_stmt(Stmt s):
         match s:
             Block(stmts):
                 this.output = this.output + "{\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 for st in stmts:
                     this.emit_method_stmt(st)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
             _:
                 this.output = this.output + "{\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 this.emit_method_stmt(s)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
 
     void fn emit_function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body):
@@ -601,10 +601,10 @@ class CppCodegen:
                 _:
                     int noop = 0
         this.output = this.output + "${this.indent()}${ret_type} ${name.lexeme}(${param_strs.join(", ")}) {\n"
-        this.indent_level = this.indent_level + 1
+        this.indent_level += 1
         for st in body:
             this.emit_stmt(st)
-        this.indent_level = this.indent_level - 1
+        this.indent_level -= 1
         this.output = this.output + "${this.indent()}}\n\n"
         this.dynamic_vars = saved_dynamic
 
@@ -654,10 +654,10 @@ class CppCodegen:
                 this.output = this.output + "${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
             Block(stmts):
                 this.output = this.output + "${this.indent()}{\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 for st in stmts:
                     this.emit_method_stmt(st)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
             Try(try_body, catch_body, exception_name):
                 this.output = this.output + "${this.indent()}try "
@@ -730,7 +730,7 @@ class CppCodegen:
                         int noop = 0
 
         this.output = this.output + "${this.indent()}struct ${name.lexeme} {\n"
-        this.indent_level = this.indent_level + 1
+        this.indent_level += 1
 
         for fi in 0..init_field_names.len():
             bool is_let = false
@@ -781,10 +781,10 @@ class CppCodegen:
             else:
                 this.output = this.output + "${this.indent()}${name.lexeme}(${param_strs.join(", ")})\n"
                 this.output = this.output + "${this.indent()}    : ${init_list.join(", ")} {\n"
-            this.indent_level = this.indent_level + 1
+            this.indent_level += 1
             for st in remaining_body:
                 this.emit_method_stmt(st)
-            this.indent_level = this.indent_level - 1
+            this.indent_level -= 1
             this.output = this.output + "${this.indent()}}\n\n"
 
         for m in methods:
@@ -804,16 +804,16 @@ class CppCodegen:
                         this.output = this.output + "${this.indent()}~${name.lexeme}() {\n"
                     else:
                         this.output = this.output + "${this.indent()}${ret_type} ${mname.lexeme}(${mparam_strs.join(", ")}) {\n"
-                    this.indent_level = this.indent_level + 1
+                    this.indent_level += 1
                     for st in mbody:
                         this.emit_method_stmt(st)
-                    this.indent_level = this.indent_level - 1
+                    this.indent_level -= 1
                     this.output = this.output + "${this.indent()}}\n\n"
                     this.dynamic_vars = saved_dyn
                 _:
                     int noop = 0
 
-        this.indent_level = this.indent_level - 1
+        this.indent_level -= 1
         this.output = this.output + "${this.indent()}};\n\n"
 
     string fn infer_expr_type(Expr e, vector[string] param_names, vector[string] param_types):
@@ -878,7 +878,7 @@ class CppCodegen:
             this.output = this.output + "${this.indent()}struct ${enum_name};\n"
 
         this.output = this.output + "${this.indent()}struct ${enum_name} {\n"
-        this.indent_level = this.indent_level + 1
+        this.indent_level += 1
 
         for v in variants:
             if v.types.len() > 0:
@@ -934,13 +934,13 @@ class CppCodegen:
         this.output = this.output + "\n"
 
         this.output = this.output + "${this.indent()}std::string operator[](const std::string& key) const {\n"
-        this.indent_level = this.indent_level + 1
+        this.indent_level += 1
         this.output = this.output + "${this.indent()}if (key == \"_tag\") return _tag;\n"
         this.output = this.output + "${this.indent()}return \"\";\n"
-        this.indent_level = this.indent_level - 1
+        this.indent_level -= 1
         this.output = this.output + "${this.indent()}}\n"
 
-        this.indent_level = this.indent_level - 1
+        this.indent_level -= 1
         this.output = this.output + "${this.indent()}};\n\n"
 
         this.output = this.output + "void print(const ${enum_name}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
@@ -962,10 +962,10 @@ class CppCodegen:
         else:
             match_val = this.emit_expr(expr)
         string temp = "_match_${this.temp_counter}"
-        this.temp_counter = this.temp_counter + 1
+        this.temp_counter += 1
 
         this.output = this.output + "${this.indent()}{\n"
-        this.indent_level = this.indent_level + 1
+        this.indent_level += 1
         this.output = this.output + "${this.indent()}auto& ${temp} = ${match_val};\n"
 
         bool first = true
@@ -977,9 +977,9 @@ class CppCodegen:
                     this.output = this.output + "${this.indent()}{\n"
                 else:
                     this.output = this.output + "${this.indent()}else {\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
                 this.emit_arm_body(arm_body, in_method)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
             else:
                 string keyword = "if"
@@ -991,7 +991,7 @@ class CppCodegen:
                     this.output = this.output + "${this.indent()}${keyword} (std::holds_alternative<${ename}::${arm.pattern_name}>(${temp}._data)) {\n"
                 else:
                     this.output = this.output + "${this.indent()}${keyword} (${temp}._tag == \"${arm.pattern_name}\") {\n"
-                this.indent_level = this.indent_level + 1
+                this.indent_level += 1
 
                 if arm.bindings.len() > 0:
                     if ename != "":
@@ -1014,10 +1014,10 @@ class CppCodegen:
                                     this.output = this.output + "${this.indent()}auto& ${arm.bindings[bi]} = _v.${field_name};\n"
 
                 this.emit_arm_body(arm_body, in_method)
-                this.indent_level = this.indent_level - 1
+                this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
 
-        this.indent_level = this.indent_level - 1
+        this.indent_level -= 1
         this.output = this.output + "${this.indent()}}\n"
 
     void fn emit_arm_body(Stmt arm_body, bool in_method):

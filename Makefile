@@ -22,6 +22,7 @@ bootstrap: $(BOOTSTRAP_SRC)
 	@if [ -z "$(LATEST_STAGE)" ]; then echo "No stages found in $(STAGES_DIR)/"; exit 1; fi
 	@echo "Bootstrapping from $(LATEST_STAGE)"
 	cp runtime/lavina.h /tmp/lavina.h
+	cp -r runtime/liblavina /tmp/liblavina
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_prev $(LATEST_STAGE)
 	/tmp/lavina_prev --emit-cpp bootstrap/main.lv > /tmp/lavina_next.cpp
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
@@ -55,6 +56,7 @@ stage0: $(BOOTSTRAP_SRC)
 	$(combine)
 	cargo run -- --emit-cpp /tmp/lavina_combined.lv 2>/dev/null > /tmp/lavina_stage0.cpp
 	cp runtime/lavina.h /tmp/lavina.h
+	cp -r runtime/liblavina /tmp/liblavina
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_stage0 /tmp/lavina_stage0.cpp
 	/tmp/lavina_stage0 --emit-cpp bootstrap/main.lv > /tmp/lavina_next.cpp
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
@@ -65,5 +67,6 @@ stage0: $(BOOTSTRAP_SRC)
 clean:
 	rm -f /tmp/lavina_prev /tmp/lavina_next /tmp/lavina_next.cpp /tmp/lavina_verify.cpp
 	rm -f /tmp/lavina_stage0 /tmp/lavina_stage0.cpp /tmp/lavina_combined.lv /tmp/lavina.h
+	rm -rf /tmp/liblavina
 
 .PHONY: build test probe bootstrap snapshot stage0 clean

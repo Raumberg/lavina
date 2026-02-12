@@ -23,6 +23,9 @@ const string TK_COLON = "Colon"
 const string TK_HASH = "Hash"
 const string TK_QUESTION = "Question"
 const string TK_PERCENT = "Percent"
+const string TK_PLUS_EQUAL = "PlusEqual"
+const string TK_MINUS_EQUAL = "MinusEqual"
+const string TK_STAR_EQUAL = "StarEqual"
 const string TK_BANG = "Bang"
 const string TK_BANG_EQUAL = "BangEqual"
 const string TK_EQUAL = "Equal"
@@ -261,8 +264,8 @@ class Scanner:
 
     auto fn advance():
         auto c = this.source.charAt(this.current)
-        this.current = this.current + 1
-        this.column = this.column + 1
+        this.current += 1
+        this.column += 1
         return c
 
     bool fn match_char(string expected):
@@ -270,8 +273,8 @@ class Scanner:
             return false
         if this.source.charAt(this.current) != expected:
             return false
-        this.current = this.current + 1
-        this.column = this.column + 1
+        this.current += 1
+        this.column += 1
         return true
 
     void fn add_token(string tk_type, string lexeme):
@@ -295,9 +298,9 @@ class Scanner:
         while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
             auto c = this.advance()
             if c == " ":
-                indent = indent + 1
+                indent += 1
             else:
-                indent = indent + 4
+                indent += 4
 
         if this.is_at_end() or this.peek() == "\n":
             if this.peek() == "\n":
@@ -334,7 +337,7 @@ class Scanner:
                 return
             else:
                 if this.peek() == "\n":
-                    this.line = this.line + 1
+                    this.line += 1
                     this.column = 1
                 this.advance()
 
@@ -364,7 +367,7 @@ class Scanner:
                 return
             else:
                 if this.peek() == "\n":
-                    this.line = this.line + 1
+                    this.line += 1
                     this.column = 1
                 this.advance()
 
@@ -421,11 +424,11 @@ class Scanner:
             this.add_simple_token(TK_RIGHT_BRACKET)
         elif c == "{":
             if this.in_string_interp:
-                this.interp_brace_depth = this.interp_brace_depth + 1
+                this.interp_brace_depth += 1
             this.add_simple_token(TK_LEFT_BRACE)
         elif c == "}":
             if this.in_string_interp:
-                this.interp_brace_depth = this.interp_brace_depth - 1
+                this.interp_brace_depth -= 1
                 if this.interp_brace_depth == 0:
                     this.in_string_interp = false
                     this.add_token(TK_RIGHT_PAREN, ")")
@@ -443,16 +446,24 @@ class Scanner:
         elif c == "?":
             this.add_simple_token(TK_QUESTION)
         elif c == "+":
-            this.add_simple_token(TK_PLUS)
+            if this.match_char("="):
+                this.add_simple_token(TK_PLUS_EQUAL)
+            else:
+                this.add_simple_token(TK_PLUS)
         elif c == ";":
             this.add_simple_token(TK_SEMICOLON)
         elif c == "*":
-            this.add_simple_token(TK_STAR)
+            if this.match_char("="):
+                this.add_simple_token(TK_STAR_EQUAL)
+            else:
+                this.add_simple_token(TK_STAR)
         elif c == "%":
             this.add_simple_token(TK_PERCENT)
         elif c == "-":
             if this.match_char(">"):
                 this.add_simple_token(TK_ARROW)
+            elif this.match_char("="):
+                this.add_simple_token(TK_MINUS_EQUAL)
             else:
                 this.add_simple_token(TK_MINUS)
         elif c == ":":
@@ -492,7 +503,7 @@ class Scanner:
             int noop = 0
         elif c == "\n":
             this.add_token(TK_NEWLINE, "\n")
-            this.line = this.line + 1
+            this.line += 1
             this.column = 1
             this.at_line_start = true
         elif c == "\"":
