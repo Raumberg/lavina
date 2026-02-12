@@ -43,6 +43,5 @@
 - [ ] Test framework
 
 ## Bootstrap Compiler
-- [ ] Complete VM backend
-- [ ] Self-hosting test suite
+- [x] Self-hosting test suite
 - [ ] Benchmark suite
