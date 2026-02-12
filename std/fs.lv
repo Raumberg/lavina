@@ -1,9 +1,0 @@
-// File system operations
-public string fn read(string path):
-    return __native_fs_read(path)
-
-public void fn write(string path, string content):
-    __native_fs_write(path, content)
-
-public bool fn exists(string path):
-    return __native_fs_exists(path)

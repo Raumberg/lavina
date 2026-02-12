@@ -1,20 +1,9 @@
 SHELL := /bin/bash
-BOOTSTRAP_SRC = bootstrap/scanner.lv bootstrap/parser.lv bootstrap/codegen.lv bootstrap/main.lv
-STAGES_DIR = bootstrap/stages
+BOOTSTRAP_SRC = src/scanner.lv src/parser.lv src/codegen.lv src/main.lv
+STAGES_DIR = stages
 
 # Find the latest stageN.cpp by numeric sort
 LATEST_STAGE := $(shell ls $(STAGES_DIR)/stage*.cpp 2>/dev/null | sort -V | tail -1)
-
-# ── Rust compiler ────────────────────────────────────────────
-
-build:
-	cargo build
-
-test:
-	cargo test -- --test-threads=1
-
-probe:
-	@for f in probes/cpp/*.lv; do echo -n "$$f: "; cargo run -- "$$f" 2>&1 | grep -c "error" || true; done
 
 # ── Bootstrap from saved stage ───────────────────────────────
 
@@ -24,9 +13,9 @@ bootstrap: $(BOOTSTRAP_SRC)
 	cp runtime/lavina.h /tmp/lavina.h
 	cp -r runtime/liblavina /tmp/liblavina
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_prev $(LATEST_STAGE)
-	/tmp/lavina_prev --emit-cpp bootstrap/main.lv > /tmp/lavina_next.cpp
+	/tmp/lavina_prev --emit-cpp src/main.lv > /tmp/lavina_next.cpp
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
-	/tmp/lavina_next --emit-cpp bootstrap/main.lv > /tmp/lavina_verify.cpp
+	/tmp/lavina_next --emit-cpp src/main.lv > /tmp/lavina_verify.cpp
 	@diff -q /tmp/lavina_next.cpp /tmp/lavina_verify.cpp && echo "Fixed point OK" || (echo "MISMATCH" && exit 1)
 	@echo "Bootstrap successful."
 
@@ -43,30 +32,9 @@ snapshot: bootstrap
 		echo "Saved $(STAGES_DIR)/stage$(NEXT_NUM).cpp"; \
 	fi
 
-# ── Fallback: bootstrap from Rust compiler (stage0) ─────────
-
-define combine
-	cat bootstrap/scanner.lv \
-		<(grep -v '^import ' bootstrap/parser.lv) \
-		<(grep -v '^import ' bootstrap/codegen.lv) \
-		<(grep -v '^import ' bootstrap/main.lv) > /tmp/lavina_combined.lv
-endef
-
-stage0: $(BOOTSTRAP_SRC)
-	$(combine)
-	cargo run -- --emit-cpp /tmp/lavina_combined.lv 2>/dev/null > /tmp/lavina_stage0.cpp
-	cp runtime/lavina.h /tmp/lavina.h
-	cp -r runtime/liblavina /tmp/liblavina
-	g++ -std=c++23 -I/tmp -o /tmp/lavina_stage0 /tmp/lavina_stage0.cpp
-	/tmp/lavina_stage0 --emit-cpp bootstrap/main.lv > /tmp/lavina_next.cpp
-	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
-	/tmp/lavina_next --emit-cpp bootstrap/main.lv > /tmp/lavina_verify.cpp
-	@diff -q /tmp/lavina_next.cpp /tmp/lavina_verify.cpp && echo "Fixed point OK" || (echo "MISMATCH" && exit 1)
-	@echo "stage0 bootstrap successful (via Rust compiler)."
-
 clean:
 	rm -f /tmp/lavina_prev /tmp/lavina_next /tmp/lavina_next.cpp /tmp/lavina_verify.cpp
-	rm -f /tmp/lavina_stage0 /tmp/lavina_stage0.cpp /tmp/lavina_combined.lv /tmp/lavina.h
+	rm -f /tmp/lavina.h
 	rm -rf /tmp/liblavina
 
-.PHONY: build test probe bootstrap snapshot stage0 clean
+.PHONY: bootstrap snapshot clean

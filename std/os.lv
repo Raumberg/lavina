@@ -1,6 +1,0 @@
-// OS and System operations
-public vector[string] fn args():
-    return __native_os_args()
-
-public string? fn env(string name):
-    return __native_os_env(name)

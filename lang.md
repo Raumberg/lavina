@@ -1,144 +1,58 @@
-# Язык программирования «Lavina»
+# Lavina
 
-## Философия
-**Lavina** — строго типизированный, интерпретируемый язык с постепенной компиляцией. Сочетает безопасность статических типов с гибкостью интерпретируемого выполнения. Дизайн ориентирован на метапрограммирование через директивы и постепенные оптимизации.
-**Расширения файлов - .lv**
+**Lavina** is a statically typed, indentation-based programming language that compiles to C++. The compiler is self-hosting — written in Lavina itself.
 
-## Ключевые принципы
-1. **Строгая статическая типизация** — все типы известны до выполнения
-2. **Интерпретируемая природа** — быстрая обратная связь, REPL, динамическое метапрограммирование
-3. **Директивы как first-class фича** — не препроцессор, а часть языка (помощь с оптимизациями / invoke специального поведения)
-4. **Поэтапная компиляция** — от интерпретации к оптимизированному байткоду
+File extension: `.lv`
 
-## Пример кода
+## Key Principles
+1. **Static typing** with type inference (`auto`)
+2. **Indentation-based syntax** — no braces or semicolons
+3. **Compiled to C++** via source-to-source translation
+4. **Self-hosting** — the compiler bootstraps from saved C++ snapshots
+
+## Example
+
 ```lavina
-
-// Строгая типизация с выводом типов
-int fn factorial(int n): 
+int fn factorial(int n):
     if n <= 1:
         return 1
-    else: 
-        return n * factorial(n - 1)    
+    return n * factorial(n - 1)
 
-
-// Директивы условной компиляции
-#inline
-int fn inline_factorial(int n): 
-    if n <= 1:
-        return 1
-    else: 
-        return n * factorial(n - 1)    
-
-// Использование
 void fn main():
-    auto x = 10  // Тип выведен как int
-    int result = factorial(x)
-    
-    int result_2 = inline_factorial(x)
-    
-    print("Factorial of " + x + " is " + result);
-}
+    int result = factorial(10)
+    print("Result: ${result}")
 ```
 
-## Спецификация типов
-```
-Базовые типы:
-  int, float, bool, string, void
-
-Составные типы:
-  [T]                       # массив
-  (T1, T2)                  # кортеж
-  {T1 key: T2 value}        # словарь
-  R fn(T)                   # функция
-
-Типовые аннотации (опциональны при выводе):
-  int x = 10
-  auto x = 10                   // derived as int
-  fn add(int a, int b) -> int   // вариант функции 1
-  int fn add(int a, int b)      // вариант функции 2
-```
-
-## Система директив
-```
-Оптимизационные:
-  #pure        # отсутствие side-effects
-  #force       # заставить интерпретатор что-то сделать (например, #force[stack] - заставить интерпретатор выделить переменные на стеке)
-  и другие, которые мы придумаем, когда дойдем до фазы VM
-
-Метаданные:
-  #doc "text"  # документация
-  #test        # помечает тестовую функцию
-  #deprecated  # устаревшая функция
-
-Управление компиляцией:
-  #target[tree] # tree-walking интерпретация
-  #target[bytecode]  # компиляция в байткод
-  #optimize[2] # уровень оптимизации
-```
-
-## Важные keywords:
-- inline: встраивание функции/выражения
-- comptime: вычисление на этапе компиляции
-
-## Уникальные возможности Lavina
-
-### 1. Гибридная модель выполнения
-```lavina
-// Разные секции кода могут выполняться по-разному
-#target[tree]
-Type fn debug_logic():
-    /* Интерпретация для отладки */ 
-
-
-#target[bytecode]
-Type fn production_logic():
-    /* Быстрый байткод */ 
-
-
-#target[jit]
-Type fn critical_path():
-    /* JIT-компиляция */ 
+## Types
 
 ```
-
-### 2. Директивы времени выполнения (TODO)
-```lavina
-#profile start("section1")
-// Код для профилирования
-#profile end("section1")
-
-#trace[2]  // Включить трассировку
-#gc[...]  // Настроить сборщик мусора
+Primitive:  int, float, bool, string, void
+Composite:  [T] (array), {K: V} (map)
 ```
 
-### 3. Постепенная типизация
-```lavina
-// Можно начать без типов, потом добавить. Но плата - overhead
-dynamic fn dynamic(x):  // Тип 'any'
-    x + 1
+## Features
 
-fn typed(x: int) -> int {  // Явная типизация
-    x + 1
-}
+- **Functions**: `ReturnType fn name(params):`
+- **Classes**: fields, methods, constructors
+- **Enums / Sum types**: `enum Name:` with variant destructuring
+- **Pattern matching**: `match expr:` with variant arms
+- **Control flow**: `if/else`, `while`, `for x in collection:`
+- **Imports**: `import module` (resolves `module.lv`)
+- **String interpolation**: `"value is {expr}"`
+- **Compound assignment**: `+=`, `-=`, `*=`, `/=`
+
+## Project Structure
 
 ```
+src/          — compiler source (.lv)
+stages/       — saved C++ snapshots for bootstrapping
+runtime/      — C++ runtime header and support libraries
+examples/     — example .lv programs
+```
 
-### 4. Группировка директив:
-```lavina
-#[
-    pure,
-    optimize[3]
-]
-inline int fn fast_math(int x):
-    return x*x
+## Building
 
-// или блоком для целых модулей:
-#set[
-    target[bytecode],
-    profile[true]
-]:
-    int fn some_math():
-        ...
-    void fn log():
-        ...
+```sh
+make bootstrap   # compile from latest stage, verify fixed point
+make snapshot    # save new stage if codegen changed
 ```

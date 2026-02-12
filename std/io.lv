@@ -1,7 +1,0 @@
-// Lavina IO Library
-
-public auto fn input(string prompt):
-    return __native_input(prompt)
-
-public auto fn print(dynamic x):
-    return __native_print(x)
