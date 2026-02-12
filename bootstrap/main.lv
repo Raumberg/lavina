@@ -51,11 +51,11 @@ class ImportResolver:
 
 // ── Main entry point ─────────────────────────────────────────
 
-void fn main():
+int fn main():
     auto args = os_args()
     if args.len() < 2:
         print("Usage: bootstrap [--emit-cpp | compile] <file.lv>")
-        exit(1)
+        return 1
 
     string mode = "run"
     string path = ""
@@ -71,44 +71,37 @@ void fn main():
             path = args[2]
         else:
             print("Unknown option: " + args[1])
-            exit(1)
+            return 1
 
-    // Resolve imports
     auto resolver = ImportResolver()
     string source = resolver.resolve(path)
 
-    // Scan
     auto scanner = Scanner(source)
     scanner.scan_tokens()
     if scanner.errors.len() > 0:
         print("Scanner errors:")
         for err in scanner.errors:
             print(err)
-        exit(1)
+        return 1
 
-    // Parse
     auto parser = Parser(scanner.tokens)
     vector[Stmt] stmts = parser.parse_program()
 
-    // Codegen
     auto codegen = CppCodegen()
     string cpp = codegen.generate(stmts)
 
     if mode == "emit-cpp":
         print(cpp)
-        exit(0)
+        return 0
 
-    // Write .cpp and lavina.h, compile, optionally run
     string dir = resolver.get_directory(path)
     string base = path
-    // Strip directory
     int si = path.len() - 1
     while si >= 0:
         if path.charAt(si) == "/":
             base = path.substring(si + 1, path.len())
             si = -1
         si = si - 1
-    // Strip .lv extension
     if base.ends_with(".lv"):
         base = base.substring(0, base.len() - 3)
 
@@ -118,7 +111,6 @@ void fn main():
 
     fs_write(cpp_path, cpp)
 
-    // Write lavina.h next to the .cpp
     bool wrote_header = false
     if fs_exists(header_path) == false:
         try:
@@ -136,14 +128,14 @@ void fn main():
         os_exec("rm -f " + cpp_path)
         if wrote_header:
             os_exec("rm -f " + header_path)
-        exit(1)
+        return 1
 
     if mode == "compile":
         os_exec("rm -f " + cpp_path)
         if wrote_header:
             os_exec("rm -f " + header_path)
         print("Compiled: " + bin_path)
-        exit(0)
+        return 0
 
     int run_result = os_exec(bin_path)
 
@@ -153,4 +145,5 @@ void fn main():
         os_exec("rm -f " + header_path)
 
     if run_result != 0:
-        exit(1)
+        return 1
+    return 0

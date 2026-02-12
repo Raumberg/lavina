@@ -1028,7 +1028,7 @@ class CppCodegen:
                         for s in body:
                             this.emit_stmt(s)
                         this.indent_level = 0
-                        this.output = this.output + "    return 0;\n}\n"
+                        this.output = this.output + "}\n"
                         this.declarations = this.declarations + this.output
                         this.output = ""
                     else:

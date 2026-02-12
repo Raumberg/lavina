@@ -1,14 +1,9 @@
 SHELL := /bin/bash
 BOOTSTRAP_SRC = bootstrap/scanner.lv bootstrap/parser.lv bootstrap/codegen.lv bootstrap/main.lv
-COMBINED = /tmp/lavina_combined.lv
+STAGES_DIR = bootstrap/stages
 
-# Concatenate bootstrap sources, stripping import lines (Rust compiler can't handle them)
-define combine
-	cat bootstrap/scanner.lv \
-		<(grep -v '^import ' bootstrap/parser.lv) \
-		<(grep -v '^import ' bootstrap/codegen.lv) \
-		<(grep -v '^import ' bootstrap/main.lv) > $(COMBINED)
-endef
+# Find the latest stageN.cpp by numeric sort
+LATEST_STAGE := $(shell ls $(STAGES_DIR)/stage*.cpp 2>/dev/null | sort -t'e' -k2 -n | tail -1)
 
 # ── Rust compiler ────────────────────────────────────────────
 
@@ -21,42 +16,52 @@ test:
 probe:
 	@for f in probes/cpp/*.lv; do echo -n "$$f: "; cargo run -- "$$f" 2>&1 | grep -c "error" || true; done
 
-# ── Bootstrap: stage 0 (Rust compiler → bootstrap binary) ────
+# ── Bootstrap from saved stage ───────────────────────────────
+
+bootstrap: $(BOOTSTRAP_SRC)
+	@if [ -z "$(LATEST_STAGE)" ]; then echo "No stages found in $(STAGES_DIR)/"; exit 1; fi
+	@echo "Bootstrapping from $(LATEST_STAGE)"
+	cp runtime/lavina.h /tmp/lavina.h
+	g++ -std=c++23 -I/tmp -o /tmp/lavina_prev $(LATEST_STAGE)
+	/tmp/lavina_prev --emit-cpp bootstrap/main.lv > /tmp/lavina_next.cpp
+	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
+	/tmp/lavina_next --emit-cpp bootstrap/main.lv > /tmp/lavina_verify.cpp
+	@diff -q /tmp/lavina_next.cpp /tmp/lavina_verify.cpp && echo "Fixed point OK" || (echo "MISMATCH" && exit 1)
+	@echo "Bootstrap successful."
+
+# ── Save a new stage snapshot ────────────────────────────────
+
+snapshot: bootstrap
+	$(eval NEXT_NUM := $(shell echo $(LATEST_STAGE) | grep -o '[0-9]*' | tail -1 | awk '{print $$1+1}'))
+	@if diff -q /tmp/lavina_next.cpp $(LATEST_STAGE) > /dev/null 2>&1; then \
+		echo "No changes — $(LATEST_STAGE) is already up to date."; \
+	else \
+		cp /tmp/lavina_next.cpp $(STAGES_DIR)/stage$(NEXT_NUM).cpp; \
+		echo "Saved $(STAGES_DIR)/stage$(NEXT_NUM).cpp"; \
+	fi
+
+# ── Fallback: bootstrap from Rust compiler (stage0) ─────────
+
+define combine
+	cat bootstrap/scanner.lv \
+		<(grep -v '^import ' bootstrap/parser.lv) \
+		<(grep -v '^import ' bootstrap/codegen.lv) \
+		<(grep -v '^import ' bootstrap/main.lv) > /tmp/lavina_combined.lv
+endef
 
 stage0: $(BOOTSTRAP_SRC)
 	$(combine)
-	cargo run -- --emit-cpp $(COMBINED) 2>/dev/null > /tmp/lavina_stage0.cpp
+	cargo run -- --emit-cpp /tmp/lavina_combined.lv 2>/dev/null > /tmp/lavina_stage0.cpp
 	cp runtime/lavina.h /tmp/lavina.h
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_stage0 /tmp/lavina_stage0.cpp
-	@echo "Built /tmp/lavina_stage0"
-
-# ── Bootstrap: stage 1 (stage0 compiles itself via imports) ──
-
-stage1: stage0
-	/tmp/lavina_stage0 --emit-cpp bootstrap/main.lv > /tmp/lavina_stage1.cpp
-	g++ -std=c++23 -I/tmp -o /tmp/lavina_stage1 /tmp/lavina_stage1.cpp
-	@echo "Built /tmp/lavina_stage1"
-
-# ── Bootstrap: stage 2 (stage1 compiles itself, must match) ──
-
-stage2: stage1
-	/tmp/lavina_stage1 --emit-cpp bootstrap/main.lv > /tmp/lavina_stage2.cpp
-	@diff -q /tmp/lavina_stage1.cpp /tmp/lavina_stage2.cpp && echo "Fixed point OK" || (echo "MISMATCH: stage1 != stage2" && exit 1)
-
-# ── Full bootstrap verification ──────────────────────────────
-
-bootstrap: stage2
-	@echo "Bootstrap successful — all stages verified."
-
-# ── Convenience: build the bootstrap compiler ────────────────
-
-bootstrap-bin: stage1
-	cp /tmp/lavina_stage1 ./bootstrap/lavina
-	@echo "Installed bootstrap/lavina"
+	/tmp/lavina_stage0 --emit-cpp bootstrap/main.lv > /tmp/lavina_next.cpp
+	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
+	/tmp/lavina_next --emit-cpp bootstrap/main.lv > /tmp/lavina_verify.cpp
+	@diff -q /tmp/lavina_next.cpp /tmp/lavina_verify.cpp && echo "Fixed point OK" || (echo "MISMATCH" && exit 1)
+	@echo "stage0 bootstrap successful (via Rust compiler)."
 
 clean:
-	cargo clean
-	rm -f /tmp/lavina_stage*.cpp /tmp/lavina_stage* /tmp/lavina_combined.lv /tmp/lavina.h
-	rm -f bootstrap/lavina
+	rm -f /tmp/lavina_prev /tmp/lavina_next /tmp/lavina_next.cpp /tmp/lavina_verify.cpp
+	rm -f /tmp/lavina_stage0 /tmp/lavina_stage0.cpp /tmp/lavina_combined.lv /tmp/lavina.h
 
-.PHONY: build test probe stage0 stage1 stage2 bootstrap bootstrap-bin clean
+.PHONY: build test probe bootstrap snapshot stage0 clean
