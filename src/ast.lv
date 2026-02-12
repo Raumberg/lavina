@@ -27,6 +27,7 @@ enum TypeNode:
 struct Param:
     Token name
     TypeNode param_type
+    bool is_ref
 
 struct EnumVariantNode:
     Token name
@@ -56,6 +57,8 @@ enum Expr:
     Cast(Expr expr, TypeNode target_type)
     Throw(Expr expr)
     Range(Expr start, Expr end)
+    Lambda(vector[Param] params, Expr body)
+    Own(Expr expr)
 
 // ── Match arm ────────────────────────────────────────────────
 
@@ -68,7 +71,7 @@ struct MatchArm:
 enum Stmt:
     None
     ExprStmt(Expr expr)
-    Let(Token name, TypeNode var_type, Expr initializer, string visibility)
+    Let(Token name, TypeNode var_type, Expr initializer, string visibility, bool is_ref)
     Const(Token name, TypeNode const_type, Expr value, string visibility)
     Return(Token keyword, Expr value)
     If(Expr condition, Stmt then_branch, Stmt else_branch)

@@ -242,6 +242,10 @@ class CppCodegen:
                 return "static_cast<${t}>(${ex})"
             Throw(expr):
                 return "throw std::runtime_error(${this.emit_expr(expr)})"
+            Lambda(params, body):
+                return this.emit_lambda(params, body, false)
+            Own(expr):
+                return "std::move(${this.emit_expr(expr)})"
             _:
                 return ""
 
@@ -455,8 +459,26 @@ class CppCodegen:
                 return "throw std::runtime_error(${this.emit_method_expr(expr)})"
             Literal(kind, value):
                 return this.emit_literal(kind, value)
+            Lambda(params, body):
+                return this.emit_lambda(params, body, true)
+            Own(expr):
+                return "std::move(${this.emit_method_expr(expr)})"
             _:
                 return this.emit_expr(e)
+
+    string fn emit_lambda(vector[Param] params, Expr body, bool in_method):
+        vector[string] param_strs = []
+        for p in params:
+            if p.is_ref:
+                param_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+            else:
+                param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+        string body_str = ""
+        if in_method:
+            body_str = this.emit_method_expr(body)
+        else:
+            body_str = this.emit_expr(body)
+        return "[&](${param_strs.join(", ")}) { return ${body_str}; }"
 
     // ── Statement emission ────────────────────────────────────
 
@@ -466,8 +488,8 @@ class CppCodegen:
                 int noop = 0
             ExprStmt(expr):
                 this.output = this.output + "${this.indent()}${this.emit_expr(expr)};\n"
-            Let(name, var_type, initializer, visibility):
-                this.emit_let(name, var_type, initializer, false)
+            Let(name, var_type, initializer, visibility, is_ref):
+                this.emit_let(name, var_type, initializer, false, is_ref)
             Const(name, const_type, value, visibility):
                 string cpp_type = this.emit_type(const_type)
                 string val = this.emit_expr(value)
@@ -540,10 +562,13 @@ class CppCodegen:
             _:
                 int noop = 0
 
-    void fn emit_let(Token name, TypeNode var_type, Expr initializer, bool in_method):
+    void fn emit_let(Token name, TypeNode var_type, Expr initializer, bool in_method, bool is_ref):
         string cpp_type = this.emit_type(var_type)
         if this.type_contains_dynamic(var_type):
             this.add_dynamic_var(name.lexeme)
+        string ref_str = ""
+        if is_ref:
+            ref_str = "&"
         string init_str = ""
         match initializer:
             None():
@@ -555,7 +580,7 @@ class CppCodegen:
                 else:
                     val = this.emit_expr(initializer)
                 init_str = " = ${val}"
-        this.output = this.output + "${this.indent()}${cpp_type} ${name.lexeme}${init_str};\n"
+        this.output = this.output + "${this.indent()}${cpp_type}${ref_str} ${name.lexeme}${init_str};\n"
 
     void fn emit_block_or_stmt(Stmt s):
         match s:
@@ -594,7 +619,10 @@ class CppCodegen:
         string ret_type = this.emit_type(return_type)
         vector[string] param_strs = []
         for p in params:
-            param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+            if p.is_ref:
+                param_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+            else:
+                param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
             match p.param_type:
                 Dynamic():
                     this.add_dynamic_var(p.name.lexeme)
@@ -646,8 +674,8 @@ class CppCodegen:
                                 int noop = 0
                         this.output = this.output + "${this.indent()}for (auto& ${item_name.lexeme} : ${this.emit_method_expr(collection)}) "
                         this.emit_method_block_or_stmt(body)
-            Let(name, var_type, initializer, visibility):
-                this.emit_let(name, var_type, initializer, true)
+            Let(name, var_type, initializer, visibility, is_ref):
+                this.emit_let(name, var_type, initializer, true, is_ref)
             Const(name, const_type, value, visibility):
                 string cpp_type = this.emit_type(const_type)
                 string val = this.emit_method_expr(value)
@@ -749,7 +777,10 @@ class CppCodegen:
         if has_init:
             vector[string] param_strs = []
             for p in init_params:
-                param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+                if p.is_ref:
+                    param_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+                else:
+                    param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
 
             vector[string] init_list = []
             vector[Stmt] remaining_body = []
@@ -794,7 +825,10 @@ class CppCodegen:
                     string ret_type = this.emit_type(mret)
                     vector[string] mparam_strs = []
                     for p in mparams:
-                        mparam_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+                        if p.is_ref:
+                            mparam_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+                        else:
+                            mparam_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
                         match p.param_type:
                             Dynamic():
                                 this.add_dynamic_var(p.name.lexeme)

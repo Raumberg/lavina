@@ -1,0 +1,33 @@
+int fn apply(auto f, int x):
+    return f(x)
+
+int fn apply2(auto f, int x, int y):
+    return f(x, y)
+
+void fn main():
+    // Basic lambda call
+    auto dbl = (int x) => x * 2
+    lv_assert(dbl(5) == 10, "lambda double")
+
+    // Multi-param lambda
+    auto add = (int x, int y) => x + y
+    lv_assert(add(3, 4) == 7, "lambda add")
+
+    // Zero-param lambda
+    auto greet = () => "hello"
+    lv_assert(greet() == "hello", "lambda greet")
+
+    // Lambda stored in variable
+    auto square = (int x) => x * x
+    lv_assert(square(6) == 36, "lambda square")
+
+    // Lambda passed as argument
+    lv_assert(apply((int x) => x + 1, 10) == 11, "lambda as argument")
+    lv_assert(apply2((int x, int y) => x * y, 3, 5) == 15, "lambda 2-arg as argument")
+
+    // Closure — captures outer variable
+    int offset = 10
+    auto shifted = (int x) => x + offset
+    lv_assert(shifted(5) == 15, "lambda closure")
+
+    print("All lambda tests passed!")

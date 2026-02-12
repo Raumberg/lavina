@@ -35,6 +35,7 @@ const string TK_GREATER_EQUAL = "GreaterEqual"
 const string TK_LESS = "Less"
 const string TK_LESS_EQUAL = "LessEqual"
 const string TK_ARROW = "Arrow"
+const string TK_FAT_ARROW = "FatArrow"
 const string TK_DOUBLE_COLON = "DoubleColon"
 const string TK_IDENTIFIER = "Identifier"
 const string TK_STRING = "String"
@@ -84,6 +85,8 @@ const string TK_MATCH = "Match"
 const string TK_BREAK = "Break"
 const string TK_CONTINUE = "Continue"
 const string TK_NOT = "Not"
+const string TK_REF = "Ref"
+const string TK_OWN = "Own"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -192,6 +195,10 @@ string fn lookup_keyword(auto w):
         return TK_CONTINUE
     elif w == "not":
         return TK_NOT
+    elif w == "ref":
+        return TK_REF
+    elif w == "own":
+        return TK_OWN
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
@@ -491,6 +498,8 @@ class Scanner:
         elif c == "=":
             if this.match_char("="):
                 this.add_simple_token(TK_EQUAL_EQUAL)
+            elif this.match_char(">"):
+                this.add_simple_token(TK_FAT_ARROW)
             else:
                 this.add_simple_token(TK_EQUAL)
         elif c == "<":
