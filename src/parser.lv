@@ -58,7 +58,7 @@ class Parser:
 
     void fn skip_formatting():
         while this.match_any([TK_NEWLINE, TK_INDENT, TK_DEDENT]):
-            int noop = 0
+            pass
 
     bool fn is_type_at_pos(int pos):
         auto t = this.peek_at(pos).token_type
@@ -299,7 +299,7 @@ class Parser:
                     this.consume(TK_RIGHT_PAREN, "Expect ')' after type in cast().")
                     return Expr::Cast(expr, target)
             _:
-                int noop = 0
+                pass
 
         vector[Expr] args = []
         if not this.check(TK_RIGHT_PAREN):
@@ -459,6 +459,10 @@ class Parser:
             auto kw = this.previous()
             this.match_any([TK_NEWLINE])
             return Stmt::Continue(kw)
+        if this.match_any([TK_PASS]):
+            auto kw = this.previous()
+            this.match_any([TK_NEWLINE])
+            return Stmt::Pass(kw)
         return this.expression_statement()
 
     Stmt fn throw_statement():
@@ -516,7 +520,7 @@ class Parser:
         vector[Stmt] arm_bodies = []
         while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
-                int noop = 0
+                pass
             else:
                 auto pattern_tok = this.consume(TK_IDENTIFIER, "Expect pattern name in match arm.")
                 string pattern_name = pattern_tok.lexeme
@@ -543,7 +547,7 @@ class Parser:
         vector[Stmt] statements = []
         while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
-                int noop = 0
+                pass
             else:
                 statements.push(this.declaration())
         this.consume(TK_DEDENT, "Expect dedent to end a block.")
@@ -637,7 +641,7 @@ class Parser:
         vector[EnumVariantNode] variants = []
         while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
-                int noop = 0
+                pass
             elif this.check(TK_IDENTIFIER) and this.peek_at(1).token_type == TK_LEFT_PAREN:
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
                 this.consume(TK_LEFT_PAREN, "Expect '(' after variant name.")
@@ -670,7 +674,7 @@ class Parser:
                     Void():
                         is_unit_type = true
                     _:
-                        int noop = 0
+                        pass
                 if not is_unit_type:
                     types.push(vtype)
                     old_fnames.push("value")
@@ -789,7 +793,7 @@ class Parser:
         vector[Stmt] statements = []
         while not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
-                int noop = 0
+                pass
             else:
                 statements.push(this.declaration())
         return statements
@@ -819,8 +823,8 @@ void fn test_parser():
                                 print("  Right is Binary: " + rop.lexeme)
                                 print("OK: precedence correct (1 + (2 * 3))")
                             _:
-                                int noop = 0
+                                pass
                     _:
-                        int noop = 0
+                        pass
             _:
-                int noop = 0
+                pass

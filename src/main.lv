@@ -1,4 +1,5 @@
 import codegen
+import checker
 import parser
 
 // ═══════════════════════════════════════════════════════════════
@@ -60,19 +61,24 @@ int fn main():
 
     string mode = "run"
     string path = ""
+    bool no_check = false
 
-    if args.len() == 2:
-        path = args[1]
-    elif args.len() == 3:
-        if args[1] == "--emit-cpp":
+    // Parse arguments
+    int ai = 1
+    while ai < args.len():
+        if args[ai] == "--no-check":
+            no_check = true
+        elif args[ai] == "--emit-cpp":
             mode = "emit-cpp"
-            path = args[2]
-        elif args[1] == "compile":
+        elif args[ai] == "compile":
             mode = "compile"
-            path = args[2]
         else:
-            print("Unknown option: " + args[1])
-            return 1
+            path = args[ai]
+        ai += 1
+
+    if path == "":
+        print("Usage: bootstrap [--emit-cpp | compile] [--no-check] <file.lv>")
+        return 1
 
     auto resolver = ImportResolver()
     string source = resolver.resolve(path)
@@ -91,6 +97,14 @@ int fn main():
     try:
         auto parser = Parser(scanner.tokens)
         stmts = parser.parse_program()
+
+        if not no_check:
+            auto check_errors = run_checker(stmts)
+            if check_errors.len() > 0:
+                print("Type check errors:")
+                for cerr in check_errors:
+                    print("  " + cerr)
+                return 1
 
         auto codegen = CppCodegen()
         cpp = codegen.generate(stmts)

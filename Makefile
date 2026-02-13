@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-BOOTSTRAP_SRC = src/scanner.lv src/parser.lv src/codegen.lv src/main.lv
+BOOTSTRAP_SRC = src/scanner.lv src/parser.lv src/checker.lv src/codegen.lv src/main.lv
 STAGES_DIR = stages
 
 # Find the latest stageN.cpp by numeric sort

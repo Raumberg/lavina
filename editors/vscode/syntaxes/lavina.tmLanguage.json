@@ -14,6 +14,7 @@
     { "include": "#functions" },
     { "include": "#classes" },
     { "include": "#enums" },
+    { "include": "#user-types" },
     { "include": "#variables" }
   ],
   "repository": {
@@ -60,7 +61,7 @@
       "patterns": [
         {
           "name": "keyword.control.lavina",
-          "match": "\\b(if|elif|else|while|for|in|return|break|continue|match|try|catch|throw|import|as)\\b"
+          "match": "\\b(if|elif|else|while|for|in|return|break|continue|match|try|catch|throw|import|as|pass)\\b"
         },
         {
           "name": "keyword.operator.logical.lavina",
@@ -68,7 +69,7 @@
         },
         {
           "name": "keyword.other.lavina",
-          "match": "\\b(fn|constructor|public|private|static|inline|const|let|comptime|namespace)\\b"
+          "match": "\\b(fn|constructor|public|private|static|inline|const|let|comptime|namespace|ref|own)\\b"
         }
       ]
     },
@@ -141,8 +142,12 @@
         "2": { "name": "entity.name.type.enum.lavina" }
       }
     },
+    "user-types": {
+      "match": "\\b[A-Z][a-zA-Z0-9_]*\\b",
+      "name": "entity.name.type.lavina"
+    },
     "variables": {
-      "match": "\\b[a-zA-Z_]\\w*\\b",
+      "match": "\\b[a-z_]\\w*\\b",
       "name": "variable.other.lavina"
     }
   }

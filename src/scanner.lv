@@ -87,6 +87,7 @@ const string TK_CONTINUE = "Continue"
 const string TK_NOT = "Not"
 const string TK_REF = "Ref"
 const string TK_OWN = "Own"
+const string TK_PASS = "Pass"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -199,6 +200,8 @@ string fn lookup_keyword(auto w):
         return TK_REF
     elif w == "own":
         return TK_OWN
+    elif w == "pass":
+        return TK_PASS
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
@@ -519,7 +522,7 @@ class Scanner:
             else:
                 this.add_simple_token(TK_SLASH)
         elif c == " " or c == "\r" or c == "\t":
-            int noop = 0
+            pass
         elif c == "\n":
             this.add_token(TK_NEWLINE, "\n")
             this.line += 1

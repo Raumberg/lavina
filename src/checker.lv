@@ -1,0 +1,636 @@
+import ast
+
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — Type Checker
+//  Walks the AST between parsing and codegen to catch errors.
+// ═══════════════════════════════════════════════════════════════
+
+// ── Symbol & Scope ─────────────────────────────────────────────
+
+struct Symbol:
+    string name
+    TypeNode sym_type
+    string kind
+    bool is_ref
+    bool is_mutable
+
+struct Scope:
+    vector[string] names
+    vector[Symbol] symbols
+
+// ── Checker ────────────────────────────────────────────────────
+
+class Checker:
+    vector[Scope] scopes
+    vector[string] errors
+    vector[string] warnings
+    // Registries
+    vector[string] known_enum_names
+    vector[vector[EnumVariantNode]] known_enum_variants
+    vector[string] known_func_names
+    vector[TypeNode] known_func_return_types
+    vector[vector[Param]] known_func_params
+    vector[string] known_class_names
+    vector[vector[Stmt]] known_class_bodies
+    // Context
+    TypeNode current_return_type
+    bool in_class
+    string current_class_name
+
+    constructor():
+        this.scopes = []
+        this.errors = []
+        this.warnings = []
+        this.known_enum_names = []
+        this.known_enum_variants = []
+        this.known_func_names = []
+        this.known_func_return_types = []
+        this.known_func_params = []
+        this.known_class_names = []
+        this.known_class_bodies = []
+        this.current_return_type = TypeNode::None()
+        this.in_class = false
+        this.current_class_name = ""
+
+    // ── Error helpers ──────────────────────────────────────────
+
+    void fn error(string msg, Token t):
+        this.errors.push("[${t.line}:${t.col}] Error: ${msg}")
+
+    void fn error_msg(string msg):
+        this.errors.push("Error: ${msg}")
+
+    void fn warn(string msg, Token t):
+        this.warnings.push("[${t.line}:${t.col}] Warning: ${msg}")
+
+    // ── Scope management ───────────────────────────────────────
+
+    void fn push_scope():
+        vector[string] names = []
+        vector[Symbol] syms = []
+        this.scopes.push(Scope(names, syms))
+
+    void fn pop_scope():
+        this.scopes.pop()
+
+    void fn declare(string name, TypeNode t, string kind, bool is_ref, bool is_mutable, Token tok):
+        if this.scopes.len() == 0:
+            return
+        ref auto scope = this.scopes[this.scopes.len() - 1]
+        // Check for redefinition in current scope
+        for n in scope.names:
+            if n == name:
+                this.warn("Redefinition of '${name}' in same scope", tok)
+                return
+        scope.names.push(name)
+        scope.symbols.push(Symbol(name, t, kind, is_ref, is_mutable))
+
+    bool fn resolve(string name):
+        int i = this.scopes.len() - 1
+        while i >= 0:
+            ref auto scope = this.scopes[i]
+            for n in scope.names:
+                if n == name:
+                    return true
+            i -= 1
+        // Check top-level: functions, classes, enums
+        for n in this.known_func_names:
+            if n == name:
+                return true
+        for n in this.known_class_names:
+            if n == name:
+                return true
+        for n in this.known_enum_names:
+            if n == name:
+                return true
+        return false
+
+    Symbol fn lookup(string name):
+        int i = this.scopes.len() - 1
+        while i >= 0:
+            ref auto scope = this.scopes[i]
+            for j in 0..scope.names.len():
+                if scope.names[j] == name:
+                    return scope.symbols[j]
+            i -= 1
+        return Symbol(name, TypeNode::Auto(), "unknown", false, false)
+
+    // ── Type compatibility ─────────────────────────────────────
+
+    bool fn types_compatible(TypeNode expected, TypeNode actual):
+        // Empty literal [] (Array(Auto)) is compatible with any container
+        match actual:
+            Array(a_inner):
+                match a_inner:
+                    Auto():
+                        match expected:
+                            Array(e_inner):
+                                return true
+                            HashSet(e_inner):
+                                return true
+                            HashMap(ek, ev):
+                                return true
+                            _:
+                                pass
+                    _:
+                        pass
+            _:
+                pass
+        // Array type compatibility
+        match expected:
+            Array(e_inner):
+                match actual:
+                    Array(a_inner):
+                        return this.types_compatible(e_inner, a_inner)
+                    _:
+                        pass
+            _:
+                pass
+        // Auto/None/Dynamic accept anything
+        match expected:
+            Auto():
+                return true
+            None():
+                return true
+            Dynamic():
+                return true
+            _:
+                pass
+        match actual:
+            Auto():
+                return true
+            None():
+                return true
+            Dynamic():
+                return true
+            _:
+                pass
+        // Same type check
+        string e = this.type_name(expected)
+        string a = this.type_name(actual)
+        if e == a:
+            return true
+        // Float accepts Int
+        match expected:
+            Float():
+                match actual:
+                    Int():
+                        return true
+                    _:
+                        pass
+            _:
+                pass
+        // Nullable(T) accepts T or NullType
+        match expected:
+            Nullable(inner):
+                match actual:
+                    NullType():
+                        return true
+                    _:
+                        return this.types_compatible(inner, actual)
+            _:
+                pass
+        return false
+
+    string fn type_name(TypeNode t):
+        match t:
+            Int():
+                return "int"
+            Float():
+                return "float"
+            Str():
+                return "string"
+            Bool():
+                return "bool"
+            Void():
+                return "void"
+            Auto():
+                return "auto"
+            Dynamic():
+                return "dynamic"
+            NullType():
+                return "null"
+            Custom(name):
+                return name
+            Array(inner):
+                return "vector[${this.type_name(inner)}]"
+            HashSet(inner):
+                return "set[${this.type_name(inner)}]"
+            HashMap(k, v):
+                return "map[${this.type_name(k)}, ${this.type_name(v)}]"
+            Nullable(inner):
+                return "${this.type_name(inner)}?"
+            _:
+                return "unknown"
+
+    // ── Type inference ─────────────────────────────────────────
+
+    TypeNode fn infer_type(Expr e):
+        match e:
+            None():
+                return TypeNode::None()
+            Literal(kind, value):
+                if kind == "int":
+                    return TypeNode::Int()
+                elif kind == "float":
+                    return TypeNode::Float()
+                elif kind == "string":
+                    return TypeNode::Str()
+                elif kind == "bool":
+                    return TypeNode::Bool()
+                elif kind == "null":
+                    return TypeNode::NullType()
+                return TypeNode::Auto()
+            Variable(name):
+                auto sym = this.lookup(name.lexeme)
+                return sym.sym_type
+            Binary(left, op, right):
+                auto lt = this.infer_type(left)
+                auto rt = this.infer_type(right)
+                // Comparison ops return bool
+                if op.token_type == TK_EQUAL_EQUAL or op.token_type == TK_BANG_EQUAL or op.token_type == TK_LESS or op.token_type == TK_LESS_EQUAL or op.token_type == TK_GREATER or op.token_type == TK_GREATER_EQUAL:
+                    return TypeNode::Bool()
+                // String + anything = string
+                match lt:
+                    Str():
+                        return TypeNode::Str()
+                    _:
+                        pass
+                // Arithmetic: if either is float, result is float
+                match lt:
+                    Float():
+                        return TypeNode::Float()
+                    _:
+                        pass
+                match rt:
+                    Float():
+                        return TypeNode::Float()
+                    _:
+                        pass
+                match lt:
+                    Int():
+                        return TypeNode::Int()
+                    _:
+                        pass
+                return TypeNode::Auto()
+            Unary(op, right):
+                if op.token_type == TK_BANG or op.token_type == TK_NOT:
+                    return TypeNode::Bool()
+                return this.infer_type(right)
+            Logical(left, op, right):
+                return TypeNode::Bool()
+            Call(callee, paren, args):
+                return this.infer_call_type(callee)
+            Grouping(inner):
+                return this.infer_type(inner)
+            Index(object, bracket, index):
+                auto ot = this.infer_type(object)
+                match ot:
+                    Array(inner):
+                        return inner
+                    _:
+                        return TypeNode::Auto()
+            Vector(elements):
+                if elements.len() > 0:
+                    auto inner = this.infer_type(elements[0])
+                    return TypeNode::Array(inner)
+                return TypeNode::Array(TypeNode::Auto())
+            Cast(expr, target_type):
+                return target_type
+            This(kw):
+                return TypeNode::Custom(this.current_class_name)
+            Own(expr):
+                return this.infer_type(expr)
+            _:
+                return TypeNode::Auto()
+
+    TypeNode fn infer_call_type(Expr callee):
+        match callee:
+            Variable(name):
+                // Look up in function registry
+                for i in 0..this.known_func_names.len():
+                    if this.known_func_names[i] == name.lexeme:
+                        return this.known_func_return_types[i]
+                // Constructor call — returns the class type
+                for n in this.known_class_names:
+                    if n == name.lexeme:
+                        return TypeNode::Custom(name.lexeme)
+                for n in this.known_enum_names:
+                    if n == name.lexeme:
+                        return TypeNode::Custom(name.lexeme)
+                return TypeNode::Auto()
+            Get(object, name):
+                return TypeNode::Auto()
+            StaticGet(object, name):
+                // Enum::Variant
+                match object:
+                    Variable(obj_name):
+                        for n in this.known_enum_names:
+                            if n == obj_name.lexeme:
+                                return TypeNode::Custom(obj_name.lexeme)
+                    _:
+                        pass
+                return TypeNode::Auto()
+            _:
+                return TypeNode::Auto()
+
+    // ── Enum helpers ───────────────────────────────────────────
+
+    string fn find_enum_for_variant(string variant_name):
+        for i in 0..this.known_enum_names.len():
+            vector[EnumVariantNode] variants = this.known_enum_variants[i]
+            for v in variants:
+                if v.name.lexeme == variant_name:
+                    return this.known_enum_names[i]
+        return ""
+
+    // ── Statement checking ─────────────────────────────────────
+
+    void fn register_builtins():
+        // Runtime functions that are always available
+        vector[string] builtins = ["print", "println", "lv_assert", "fs_read", "fs_write", "fs_exists", "os_exec", "os_args", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs"]
+        for name in builtins:
+            this.known_func_names.push(name)
+            this.known_func_return_types.push(TypeNode::Auto())
+            vector[Param] empty_params = []
+            this.known_func_params.push(empty_params)
+        pass
+
+    void fn check(vector[Stmt] stmts):
+        this.register_builtins()
+        // Pass 1: collect top-level declarations
+        this.push_scope()
+        for s in stmts:
+            this.collect_decl(s)
+        // Pass 2: check everything
+        for s in stmts:
+            this.check_stmt(s)
+        this.pop_scope()
+
+    void fn collect_decl(Stmt s):
+        match s:
+            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
+                this.known_func_names.push(name.lexeme)
+                this.known_func_return_types.push(return_type)
+                this.known_func_params.push(params)
+            Class(name, body, visibility):
+                this.known_class_names.push(name.lexeme)
+                this.known_class_bodies.push(body)
+            Enum(name, variants, visibility):
+                this.known_enum_names.push(name.lexeme)
+                this.known_enum_variants.push(variants)
+            Const(name, const_type, value, visibility):
+                this.declare(name.lexeme, const_type, "const", false, false, name)
+            Struct(name, body, visibility):
+                this.known_class_names.push(name.lexeme)
+                this.known_class_bodies.push(body)
+            Namespace(name, body, visibility):
+                for ns_stmt in body:
+                    this.collect_decl(ns_stmt)
+            _:
+                pass
+
+    void fn check_stmt(Stmt s):
+        match s:
+            ExprStmt(expr):
+                this.check_expr(expr)
+            Let(name, var_type, initializer, visibility, is_ref):
+                this.check_expr(initializer)
+                auto init_type = this.infer_type(initializer)
+                // Check type compatibility if type is explicit
+                match var_type:
+                    Auto():
+                        pass
+                    None():
+                        pass
+                    _:
+                        if not this.types_compatible(var_type, init_type):
+                            this.error("Cannot assign ${this.type_name(init_type)} to ${this.type_name(var_type)}", name)
+                this.declare(name.lexeme, var_type, "var", is_ref, true, name)
+            Const(name, const_type, value, visibility):
+                this.check_expr(value)
+            Return(keyword, value):
+                this.check_expr(value)
+                match this.current_return_type:
+                    None():
+                        pass
+                    Void():
+                        match value:
+                            None():
+                                pass
+                            _:
+                                this.error("Cannot return a value from void function", keyword)
+                    _:
+                        auto val_type = this.infer_type(value)
+                        if not this.types_compatible(this.current_return_type, val_type):
+                            this.error("Return type mismatch: expected ${this.type_name(this.current_return_type)}, got ${this.type_name(val_type)}", keyword)
+            If(condition, then_branch, else_branch):
+                this.check_expr(condition)
+                this.check_stmt(then_branch)
+                this.check_stmt(else_branch)
+            While(condition, body):
+                this.check_expr(condition)
+                this.check_stmt(body)
+            For(item_name, collection, body):
+                this.check_expr(collection)
+                this.push_scope()
+                // Infer item type from collection
+                auto coll_type = this.infer_type(collection)
+                auto item_type = TypeNode::Auto()
+                match coll_type:
+                    Array(inner):
+                        item_type = inner
+                    _:
+                        pass
+                this.declare(item_name.lexeme, item_type, "var", false, true, item_name)
+                this.check_stmt(body)
+                this.pop_scope()
+            Block(statements):
+                this.push_scope()
+                for st in statements:
+                    this.check_stmt(st)
+                this.pop_scope()
+            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
+                this.check_function(name, params, return_type, body)
+            Class(name, body, visibility):
+                this.check_class(name, body)
+            Struct(name, body, visibility):
+                pass
+            Enum(name, variants, visibility):
+                pass
+            Match(expr, arm_patterns, arm_bodies):
+                this.check_expr(expr)
+                this.check_match(expr, arm_patterns, arm_bodies)
+            Try(try_body, catch_body, exception_name):
+                this.push_scope()
+                this.check_stmt(try_body)
+                this.pop_scope()
+                this.push_scope()
+                if exception_name != "":
+                    this.declare(exception_name, TypeNode::Auto(), "var", false, false, Token(TK_IDENTIFIER, exception_name, 0, 0))
+                this.check_stmt(catch_body)
+                this.pop_scope()
+            Namespace(name, body, visibility):
+                this.push_scope()
+                for ns_stmt in body:
+                    this.collect_decl(ns_stmt)
+                for ns_stmt in body:
+                    this.check_stmt(ns_stmt)
+                this.pop_scope()
+            Import(path, alias):
+                pass
+            Break(keyword):
+                pass
+            Continue(keyword):
+                pass
+            Pass(keyword):
+                pass
+            _:
+                pass
+
+    void fn check_function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body):
+        auto saved_return = this.current_return_type
+        this.current_return_type = return_type
+        this.push_scope()
+        for p in params:
+            this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+        for s in body:
+            this.check_stmt(s)
+        this.pop_scope()
+        this.current_return_type = saved_return
+
+    void fn check_class(Token name, vector[Stmt] body):
+        bool saved_in_class = this.in_class
+        string saved_class_name = this.current_class_name
+        this.in_class = true
+        this.current_class_name = name.lexeme
+        this.push_scope()
+        // Declare 'this'
+        this.declare("this", TypeNode::Custom(name.lexeme), "var", false, false, name)
+        for s in body:
+            match s:
+                Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility):
+                    this.check_function(fname, params, return_type, fbody)
+                Let(lname, var_type, initializer, visibility, is_ref):
+                    this.check_expr(initializer)
+                _:
+                    this.check_stmt(s)
+        this.pop_scope()
+        this.in_class = saved_in_class
+        this.current_class_name = saved_class_name
+
+    // ── Expression checking ────────────────────────────────────
+
+    void fn check_expr(Expr e):
+        match e:
+            None():
+                pass
+            Variable(name):
+                if not this.resolve(name.lexeme):
+                    this.error("Undefined variable '${name.lexeme}'", name)
+            Binary(left, op, right):
+                this.check_expr(left)
+                this.check_expr(right)
+            Unary(op, right):
+                this.check_expr(right)
+            Logical(left, op, right):
+                this.check_expr(left)
+                this.check_expr(right)
+            Grouping(inner):
+                this.check_expr(inner)
+            Call(callee, paren, args):
+                this.check_expr(callee)
+                for a in args:
+                    this.check_expr(a)
+                this.check_call_args(callee, args, paren)
+            Assign(name, value):
+                this.check_expr(value)
+                if not this.resolve(name.lexeme):
+                    this.error("Undefined variable '${name.lexeme}'", name)
+                else:
+                    auto sym = this.lookup(name.lexeme)
+                    if sym.kind == "const":
+                        this.error("Cannot assign to constant '${name.lexeme}'", name)
+            Index(object, bracket, index):
+                this.check_expr(object)
+                this.check_expr(index)
+            IndexSet(object, bracket, index, value):
+                this.check_expr(object)
+                this.check_expr(index)
+                this.check_expr(value)
+            Vector(elements):
+                for el in elements:
+                    this.check_expr(el)
+            Map(keys, values):
+                for k in keys:
+                    this.check_expr(k)
+                for v in values:
+                    this.check_expr(v)
+            Get(object, name):
+                this.check_expr(object)
+            Set(object, name, value):
+                this.check_expr(object)
+                this.check_expr(value)
+            StaticGet(object, name):
+                this.check_expr(object)
+            Cast(expr, target_type):
+                this.check_expr(expr)
+            Throw(expr):
+                this.check_expr(expr)
+            Range(start, end):
+                this.check_expr(start)
+                this.check_expr(end)
+            Lambda(params, body):
+                this.push_scope()
+                for p in params:
+                    this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+                this.check_expr(body)
+                this.pop_scope()
+            Own(expr):
+                this.check_expr(expr)
+            _:
+                pass
+
+    void fn check_call_args(Expr callee, vector[Expr] args, Token paren):
+        match callee:
+            Variable(name):
+                for i in 0..this.known_func_names.len():
+                    if this.known_func_names[i] == name.lexeme:
+                        auto expected = this.known_func_params[i]
+                        // Skip arg count check for builtins (registered with 0 params)
+                        if expected.len() > 0 and args.len() != expected.len():
+                            this.error("Function '${name.lexeme}' expects ${expected.len()} args, got ${args.len()}", paren)
+                        return
+            _:
+                pass
+
+    // ── Match checking ─────────────────────────────────────────
+
+    void fn check_match(Expr expr, vector[MatchArm] arm_patterns, vector[Stmt] arm_bodies):
+        bool has_wildcard = false
+        for i in 0..arm_patterns.len():
+            auto arm = arm_patterns[i]
+            if arm.pattern_name == "_":
+                has_wildcard = true
+            else:
+                // Check variant exists
+                string enum_name = this.find_enum_for_variant(arm.pattern_name)
+                if enum_name == "":
+                    // Not a known variant — might be a binding, skip
+                    pass
+            this.push_scope()
+            // Declare bindings
+            for b in arm.bindings:
+                this.declare(b, TypeNode::Auto(), "var", false, false, Token(TK_IDENTIFIER, b, 0, 0))
+            this.check_stmt(arm_bodies[i])
+            this.pop_scope()
+
+// ── Public API ─────────────────────────────────────────────────
+
+vector[string] fn run_checker(vector[Stmt] stmts):
+    auto checker = Checker()
+    checker.check(stmts)
+    // Print warnings
+    for w in checker.warnings:
+        print(w)
+    return checker.errors

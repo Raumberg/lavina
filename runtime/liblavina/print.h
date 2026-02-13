@@ -1,10 +1,10 @@
 #pragma once
 #include "core.h"
 
-void print(const std::string& s) { std::cout << s << std::endl; }
-void print(int64_t n) { std::cout << n << std::endl; }
-void print(double n) { std::cout << n << std::endl; }
-void print(bool b) { std::cout << (b ? "true" : "false") << std::endl; }
+inline void print(const std::string& s) { std::cout << s << std::endl; }
+inline void print(int64_t n) { std::cout << n << std::endl; }
+inline void print(double n) { std::cout << n << std::endl; }
+inline void print(bool b) { std::cout << (b ? "true" : "false") << std::endl; }
 
 template<typename T>
 void print(const std::vector<T>& v) {

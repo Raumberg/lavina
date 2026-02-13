@@ -15,7 +15,7 @@ syn match lavinaFloat "\<\d\+\.\d\+\>"
 syn match lavinaInt "\<\d\+\>"
 
 " Control flow
-syn keyword lavinaControl if elif else while for in return break continue match try catch throw
+syn keyword lavinaControl if elif else while for in return break continue match try catch throw pass
 
 " Import
 syn keyword lavinaImport import as
@@ -24,7 +24,7 @@ syn keyword lavinaImport import as
 syn keyword lavinaLogical and or not
 
 " Definitions
-syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace
+syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace ref own
 
 " Storage
 syn keyword lavinaStorage class struct enum
@@ -38,8 +38,13 @@ syn keyword lavinaThis this
 
 " Functions (name after fn)
 syn match lavinaFuncDef "\<fn\s\+\zs\w\+"
-" Class/enum name
+" Class/struct/enum name in definitions
 syn match lavinaTypeDef "\<\(class\|struct\|enum\)\s\+\zs\w\+"
+" User types: PascalCase identifiers (starts with uppercase)
+syn match lavinaUserType "\<[A-Z][a-zA-Z0-9_]*\>"
+
+" Function calls: identifier followed by (
+syn match lavinaFuncCall "\<[a-z_][a-zA-Z0-9_]*\ze\s*("
 
 " Operators
 syn match lavinaOperator "&&\|||\|!\|==\|!=\|<=\|>=\|<\|>\|+=\|-=\|\*=\|::\|->\|\.\."
@@ -60,7 +65,9 @@ hi def link lavinaType Type
 hi def link lavinaConstant Boolean
 hi def link lavinaThis Constant
 hi def link lavinaFuncDef Function
+hi def link lavinaFuncCall Function
 hi def link lavinaTypeDef Type
+hi def link lavinaUserType Type
 hi def link lavinaOperator Operator
 
 let b:current_syntax = "lavina"

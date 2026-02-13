@@ -88,3 +88,4 @@ enum Stmt:
     Import(vector[Token] path, string alias)
     Break(Token keyword)
     Continue(Token keyword)
+    Pass(Token keyword)

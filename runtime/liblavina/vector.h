@@ -3,6 +3,7 @@
 
 template<typename T>
 T lv_pop(std::vector<T>& v) {
+    if (v.empty()) throw std::runtime_error("pop on empty vector");
     T val = v.back();
     v.pop_back();
     return val;

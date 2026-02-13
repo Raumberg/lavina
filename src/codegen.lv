@@ -57,16 +57,6 @@ class CppCodegen:
             return found
         return ""
 
-    bool fn variant_has_fields(string enum_name, string variant_name):
-        for i in 0..this.known_enum_names.len():
-            if this.known_enum_names[i] == enum_name:
-                vector[EnumVariantNode] variants = this.known_enum_variants[i]
-                for v in variants:
-                    if v.name.lexeme == variant_name:
-                        return v.types.len() > 0
-                return false
-        return false
-
     EnumVariantNode fn get_variant_info(string enum_name, string variant_name):
         for i in 0..this.known_enum_names.len():
             if this.known_enum_names[i] == enum_name:
@@ -77,16 +67,6 @@ class CppCodegen:
         vector[TypeNode] empty_types = []
         vector[string] empty_names = []
         return EnumVariantNode(Token("", "", 0, 0), empty_types, empty_names)
-
-    bool fn enum_has_data_variants(string enum_name):
-        for i in 0..this.known_enum_names.len():
-            if this.known_enum_names[i] == enum_name:
-                vector[EnumVariantNode] variants = this.known_enum_variants[i]
-                for v in variants:
-                    if v.types.len() > 0:
-                        return true
-                return false
-        return false
 
     bool fn is_known_enum(string name):
         for n in this.known_enum_names:
@@ -310,7 +290,7 @@ class CppCodegen:
                         if this.is_known_enum(tok.lexeme):
                             return "${obj}::make_${name.lexeme}(${arg_strs.join(", ")})"
                     _:
-                        int noop = 0
+                        pass
                 return "${obj}::${name.lexeme}(${arg_strs.join(", ")})"
             Variable(tok):
                 vector[string] arg_strs = []
@@ -381,22 +361,31 @@ class CppCodegen:
             return "(${obj}.count(${args.join(", ")}) > 0)"
         return ""
 
-    string fn emit_lambda(vector[Param] params, Expr body, bool in_method):
-        vector[string] param_strs = []
+    string fn emit_params(vector[Param] params, bool track_dynamic):
+        vector[string] strs = []
         for p in params:
             if p.is_ref:
-                param_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+                strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
             else:
-                param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+                strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+            if track_dynamic:
+                match p.param_type:
+                    Dynamic():
+                        this.add_dynamic_var(p.name.lexeme)
+                    _:
+                        pass
+        return strs.join(", ")
+
+    string fn emit_lambda(vector[Param] params, Expr body, bool in_method):
         string body_str = this.emit_expr(body, in_method)
-        return "[&](${param_strs.join(", ")}) { return ${body_str}; }"
+        return "[&](${this.emit_params(params, false)}) { return ${body_str}; }"
 
     // ── Statement emission ────────────────────────────────────
 
     void fn emit_stmt(Stmt s, bool m):
         match s:
             None():
-                int noop = 0
+                pass
             ExprStmt(expr):
                 this.output = this.output + "${this.indent()}${this.emit_expr(expr, m)};\n"
             Let(name, var_type, initializer, visibility, is_ref):
@@ -416,9 +405,9 @@ class CppCodegen:
                 this.emit_block_or_stmt(then_branch, m)
                 match else_branch:
                     None():
-                        int noop = 0
+                        pass
                     _:
-                        this.output = this.output + "${this.indent()} else "
+                        this.output = this.output + "${this.indent()}else "
                         this.emit_block_or_stmt(else_branch, m)
             While(condition, body):
                 this.output = this.output + "${this.indent()}while (${this.emit_expr(condition, m)}) "
@@ -434,7 +423,7 @@ class CppCodegen:
                                 if this.is_dynamic_var(tok.lexeme):
                                     this.add_dynamic_var(item_name.lexeme)
                             _:
-                                int noop = 0
+                                pass
                         this.output = this.output + "${this.indent()}for (auto& ${item_name.lexeme} : ${this.emit_expr(collection, m)}) "
                         this.emit_block_or_stmt(body, m)
             Block(statements):
@@ -470,8 +459,10 @@ class CppCodegen:
                 this.output = this.output + "${this.indent()}break;\n"
             Continue(keyword):
                 this.output = this.output + "${this.indent()}continue;\n"
+            Pass(keyword):
+                this.output = this.output + "${this.indent()}/* pass */\n"
             _:
-                int noop = 0
+                pass
 
     void fn emit_let(Token name, TypeNode var_type, Expr initializer, bool in_method, bool is_ref):
         string cpp_type = this.emit_type(var_type)
@@ -508,18 +499,8 @@ class CppCodegen:
     void fn emit_function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body):
         vector[string] saved_dynamic = this.dynamic_vars
         string ret_type = this.emit_type(return_type)
-        vector[string] param_strs = []
-        for p in params:
-            if p.is_ref:
-                param_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
-            else:
-                param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
-            match p.param_type:
-                Dynamic():
-                    this.add_dynamic_var(p.name.lexeme)
-                _:
-                    int noop = 0
-        this.output = this.output + "${this.indent()}${ret_type} ${name.lexeme}(${param_strs.join(", ")}) {\n"
+        string param_str = this.emit_params(params, true)
+        this.output = this.output + "${this.indent()}${ret_type} ${name.lexeme}(${param_str}) {\n"
         this.indent_level += 1
         for st in body:
             this.emit_stmt(st, false)
@@ -550,7 +531,7 @@ class CppCodegen:
                     let_field_names.push(fname.lexeme)
                     let_field_types.push(this.emit_type(var_type))
                 _:
-                    int noop = 0
+                    pass
 
         vector[string] init_field_names = []
         vector[string] init_field_types = []
@@ -578,11 +559,11 @@ class CppCodegen:
                                             init_field_names.push(prop.lexeme)
                                             init_field_types.push(cpp_type)
                                     _:
-                                        int noop = 0
+                                        pass
                             _:
-                                int noop = 0
+                                pass
                     _:
-                        int noop = 0
+                        pass
 
         this.output = this.output + "${this.indent()}struct ${name.lexeme} {\n"
         this.indent_level += 1
@@ -602,12 +583,7 @@ class CppCodegen:
             this.output = this.output + "\n"
 
         if has_init:
-            vector[string] param_strs = []
-            for p in init_params:
-                if p.is_ref:
-                    param_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
-                else:
-                    param_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+            string param_str = this.emit_params(init_params, false)
 
             vector[string] init_list = []
             vector[Stmt] remaining_body = []
@@ -624,47 +600,39 @@ class CppCodegen:
                                                 init_list.push("${prop.lexeme}(${tok.lexeme})")
                                                 handled = true
                                             _:
-                                                int noop = 0
+                                                pass
                                     _:
-                                        int noop = 0
+                                        pass
                             _:
-                                int noop = 0
+                                pass
                         if not handled:
                             remaining_body.push(st)
                     _:
                         remaining_body.push(st)
 
             if init_list.len() == 0:
-                this.output = this.output + "${this.indent()}${name.lexeme}(${param_strs.join(", ")}) {\n"
+                this.output = this.output + "${this.indent()}${name.lexeme}(${param_str}) {\n"
             else:
-                this.output = this.output + "${this.indent()}${name.lexeme}(${param_strs.join(", ")})\n"
+                this.output = this.output + "${this.indent()}${name.lexeme}(${param_str})\n"
                 this.output = this.output + "${this.indent()}    : ${init_list.join(", ")} {\n"
+            vector[string] saved_dyn = this.dynamic_vars
             this.indent_level += 1
             for st in remaining_body:
                 this.emit_stmt(st, true)
             this.indent_level -= 1
             this.output = this.output + "${this.indent()}}\n\n"
+            this.dynamic_vars = saved_dyn
 
         for m in methods:
             match m:
                 Function(mname, mparams, mret, mbody, is_inline, is_comptime, is_static, visibility):
                     vector[string] saved_dyn = this.dynamic_vars
                     string ret_type = this.emit_type(mret)
-                    vector[string] mparam_strs = []
-                    for p in mparams:
-                        if p.is_ref:
-                            mparam_strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
-                        else:
-                            mparam_strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
-                        match p.param_type:
-                            Dynamic():
-                                this.add_dynamic_var(p.name.lexeme)
-                            _:
-                                int noop = 0
+                    string mparam_str = this.emit_params(mparams, true)
                     if mname.lexeme == "destructor":
                         this.output = this.output + "${this.indent()}~${name.lexeme}() {\n"
                     else:
-                        this.output = this.output + "${this.indent()}${ret_type} ${mname.lexeme}(${mparam_strs.join(", ")}) {\n"
+                        this.output = this.output + "${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
                     this.indent_level += 1
                     for st in mbody:
                         this.emit_stmt(st, true)
@@ -672,7 +640,7 @@ class CppCodegen:
                     this.output = this.output + "${this.indent()}}\n\n"
                     this.dynamic_vars = saved_dyn
                 _:
-                    int noop = 0
+                    pass
 
         this.indent_level -= 1
         this.output = this.output + "${this.indent()}};\n\n"
@@ -688,6 +656,8 @@ class CppCodegen:
                     return "std::string"
                 elif kind == "bool":
                     return "bool"
+                elif kind == "null":
+                    return "std::nullptr_t"
                 return "std::any"
             Variable(tok):
                 for i in 0..param_names.len():
@@ -701,7 +671,13 @@ class CppCodegen:
                 string rt = this.infer_expr_type(right, param_names, param_types)
                 if lt == rt and lt != "std::any":
                     return lt
+                if lt == "std::string" or rt == "std::string":
+                    return "std::string"
                 return "std::any"
+            Unary(op, right):
+                return this.infer_expr_type(right, param_names, param_types)
+            Grouping(inner):
+                return this.infer_expr_type(inner, param_names, param_types)
             Call(callee, paren, args):
                 match callee:
                     Variable(tok):
@@ -711,10 +687,31 @@ class CppCodegen:
                             if param_names[ci] == tok.lexeme:
                                 return param_types[ci]
                         return tok.lexeme
+                    StaticGet(object, name):
+                        match object:
+                            Variable(tok):
+                                if this.is_known_enum(tok.lexeme):
+                                    return tok.lexeme
+                            _:
+                                pass
+                        return "std::any"
                     _:
                         return "std::any"
             Vector(elements):
+                if elements.len() > 0:
+                    string inner = this.infer_expr_type(elements[0], param_names, param_types)
+                    if inner != "std::any":
+                        return "std::vector<${inner}>"
                 return "std::vector<std::any>"
+            Map(keys, values):
+                string kt = "std::any"
+                string vt = "std::any"
+                if keys.len() > 0:
+                    kt = this.infer_expr_type(keys[0], param_names, param_types)
+                    vt = this.infer_expr_type(values[0], param_names, param_types)
+                return "std::unordered_map<${kt}, ${vt}>"
+            Cast(expr, target_type):
+                return this.emit_type(target_type)
             _:
                 return "std::any"
 
@@ -733,7 +730,7 @@ class CppCodegen:
                         if n == enum_name:
                             has_self_ref = true
                     _:
-                        int noop = 0
+                        pass
 
         if has_self_ref:
             this.output = this.output + "${this.indent()}struct ${enum_name};\n"
@@ -752,7 +749,7 @@ class CppCodegen:
                             if n == enum_name:
                                 cpp_type = "std::shared_ptr<${enum_name}>"
                         _:
-                            int noop = 0
+                            pass
                     this.output = this.output + "${cpp_type} ${fname}; "
                 this.output = this.output + "};\n"
             else:
@@ -784,7 +781,7 @@ class CppCodegen:
                             if n == enum_name:
                                 is_self_ref = true
                         _:
-                            int noop = 0
+                            pass
                     if is_self_ref:
                         params.push("${enum_name} ${fname}")
                         field_inits.push("std::make_shared<${enum_name}>(std::move(${fname}))")
@@ -817,7 +814,7 @@ class CppCodegen:
 
         this.output = this.output + "${this.indent()}{\n"
         this.indent_level += 1
-        this.output = this.output + "${this.indent()}auto& ${temp} = ${match_val};\n"
+        this.output = this.output + "${this.indent()}const auto& ${temp} = ${match_val};\n"
 
         bool first = true
         for ai in 0..arm_patterns.len():
@@ -858,7 +855,7 @@ class CppCodegen:
                                             if n == ename:
                                                 is_self_ref = true
                                         _:
-                                            int noop = 0
+                                            pass
                                 if is_self_ref:
                                     this.output = this.output + "${this.indent()}auto& ${arm.bindings[bi]} = *_v.${field_name};\n"
                                 else:
