@@ -102,6 +102,16 @@ class Parser:
             pos = this.skip_type_tokens(pos)
             pos += 1
             return pos
+        // Check for Identifier[Type, Type, ...] (generic type args)
+        if tt == TK_IDENTIFIER and this.peek_at(pos + 1).token_type == TK_LEFT_BRACKET:
+            // Could be generic type args — skip Ident [ Type , Type ]
+            int try_pos = pos + 2
+            try_pos = this.skip_type_tokens(try_pos)
+            while this.peek_at(try_pos).token_type == TK_COMMA:
+                try_pos += 1
+                try_pos = this.skip_type_tokens(try_pos)
+            if this.peek_at(try_pos).token_type == TK_RIGHT_BRACKET:
+                return try_pos + 1
         return pos + 1
 
     bool fn check_function_start():
@@ -158,7 +168,28 @@ class Parser:
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after hashmap types.")
             t = TypeNode::HashMap(k, v)
         elif this.match_any([TK_IDENTIFIER]):
-            t = TypeNode::Custom(this.previous().lexeme)
+            string custom_name = this.previous().lexeme
+            vector[TypeNode] type_args = []
+            if this.check(TK_LEFT_BRACKET):
+                // Peek ahead to see if this is a type arg list (Type, Type]) vs index
+                int save_pos = this.current
+                this.advance()
+                bool is_type_args = true
+                try:
+                    TypeNode first_arg = this.parse_type()
+                    type_args.push(first_arg)
+                    while this.match_any([TK_COMMA]):
+                        type_args.push(this.parse_type())
+                    if not this.check(TK_RIGHT_BRACKET):
+                        is_type_args = false
+                catch e:
+                    is_type_args = false
+                if is_type_args:
+                    this.consume(TK_RIGHT_BRACKET, "Expect ']' after type arguments.")
+                else:
+                    type_args = []
+                    this.current = save_pos
+            t = TypeNode::Custom(custom_name, type_args)
         else:
             auto tok = this.peek()
             throw "Expect type. Got " + tok.token_type + " at " + tok.line + ":" + tok.col
@@ -166,6 +197,32 @@ class Parser:
         if this.match_any([TK_QUESTION]):
             t = TypeNode::Nullable(t)
         return t
+
+    string fn type_to_string(ref TypeNode t):
+        match t:
+            Int():
+                return "int64_t"
+            Float():
+                return "double"
+            Str():
+                return "std::string"
+            Bool():
+                return "bool"
+            Void():
+                return "void"
+            Auto():
+                return "auto"
+            Custom(name, type_args):
+                if type_args.len() > 0:
+                    vector[string] ta = []
+                    for ref a in type_args:
+                        ta.push(this.type_to_string(a))
+                    return name + "<" + ta.join(", ") + ">"
+                return name
+            Array(inner):
+                return "std::vector<" + this.type_to_string(inner) + ">"
+            _:
+                return "auto"
 
     // ── Expression parsing ──────────────────────────────────
 
@@ -271,6 +328,35 @@ class Parser:
 
     Expr fn call():
         Expr expr = this.primary()
+        // Check for generic type args: Variable[Type, ...](args)
+        match expr:
+            Variable(tok):
+                if this.check(TK_LEFT_BRACKET):
+                    int save_pos = this.current
+                    this.advance()
+                    bool is_type_args = true
+                    vector[string] type_strs = []
+                    try:
+                        TypeNode first_t = this.parse_type()
+                        type_strs.push(this.type_to_string(first_t))
+                        while this.match_any([TK_COMMA]):
+                            TypeNode next_t = this.parse_type()
+                            type_strs.push(this.type_to_string(next_t))
+                        if not this.check(TK_RIGHT_BRACKET):
+                            is_type_args = false
+                    catch e:
+                        is_type_args = false
+                    if is_type_args:
+                        this.consume(TK_RIGHT_BRACKET, "Expect ']'.")
+                        if this.check(TK_LEFT_PAREN):
+                            string new_name = tok.lexeme + "<" + type_strs.join(", ") + ">"
+                            expr = Expr::Variable(Token(TK_IDENTIFIER, new_name, tok.line, tok.col))
+                        else:
+                            this.current = save_pos
+                    else:
+                        this.current = save_pos
+            _:
+                pass
         bool more = true
         while more:
             if this.match_any([TK_LEFT_PAREN]):
@@ -599,6 +685,13 @@ class Parser:
         this.consume(TK_FN, "Expect 'fn' keyword after return type.")
         auto name = this.consume(TK_IDENTIFIER, "Expect function name.")
 
+        vector[string] type_params = []
+        if this.match_any([TK_LEFT_BRACKET]):
+            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            while this.match_any([TK_COMMA]):
+                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
         vector[Param] params = []
         if not this.check(TK_RIGHT_PAREN):
@@ -617,7 +710,7 @@ class Parser:
 
         this.consume(TK_COLON, "Expect ':' before function body.")
         vector[Stmt] body = this.block()
-        return Stmt::Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility)
+        return Stmt::Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params)
 
     Stmt fn class_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect class name.")
@@ -630,12 +723,18 @@ class Parser:
 
     Stmt fn struct_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect struct name.")
+        vector[string] type_params = []
+        if this.match_any([TK_LEFT_BRACKET]):
+            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            while this.match_any([TK_COMMA]):
+                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
         this.consume(TK_COLON, "Expect ':' after struct name.")
         auto old = this.in_class_body
         this.in_class_body = true
         auto body = this.block()
         this.in_class_body = old
-        return Stmt::Struct(name, body, visibility)
+        return Stmt::Struct(name, body, visibility, type_params)
 
     Stmt fn enum_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect enum name.")
@@ -776,7 +875,8 @@ class Parser:
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
                 this.consume(TK_COLON, "Expect ':' before body.")
                 vector[Stmt] body = this.block()
-                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, false, is_static, visibility)
+                vector[string] empty_tp = []
+                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, false, is_static, visibility, empty_tp)
 
         if this.match_any([TK_REF_MUT]):
             return this.var_declaration_with_ref(visibility, true, true)

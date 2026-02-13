@@ -103,6 +103,11 @@ class Checker:
         for ref n in this.known_enum_names:
             if n == name:
                 return true
+        // Check if this is a generic instantiation like "Pair<int64_t, std::string>"
+        int angle = name.indexOf("<")
+        if angle >= 0:
+            string base = name.substring(0, angle)
+            return this.resolve(base)
         return false
 
     Symbol fn lookup(ref string name):
@@ -210,7 +215,7 @@ class Checker:
                 return "dynamic"
             NullType():
                 return "null"
-            Custom(name):
+            Custom(name, _):
                 return name
             Array(inner):
                 return "vector[${this.type_name(inner)}]"
@@ -298,7 +303,7 @@ class Checker:
             Cast(expr, target_type):
                 return target_type
             This(kw):
-                return TypeNode::Custom(this.current_class_name)
+                return TypeNode::Custom(this.current_class_name, [])
             Own(expr):
                 return this.infer_type(expr)
             _:
@@ -314,10 +319,10 @@ class Checker:
                 // Constructor call — returns the class type
                 for ref n in this.known_class_names:
                     if n == name.lexeme:
-                        return TypeNode::Custom(name.lexeme)
+                        return TypeNode::Custom(name.lexeme, [])
                 for ref n in this.known_enum_names:
                     if n == name.lexeme:
-                        return TypeNode::Custom(name.lexeme)
+                        return TypeNode::Custom(name.lexeme, [])
                 return TypeNode::Auto()
             Get(object, name):
                 return TypeNode::Auto()
@@ -327,7 +332,7 @@ class Checker:
                     Variable(obj_name):
                         for ref n in this.known_enum_names:
                             if n == obj_name.lexeme:
-                                return TypeNode::Custom(obj_name.lexeme)
+                                return TypeNode::Custom(obj_name.lexeme, [])
                     _:
                         pass
                 return TypeNode::Auto()
@@ -369,7 +374,7 @@ class Checker:
 
     void fn collect_decl(ref Stmt s):
         match s:
-            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
+            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
                 this.known_func_names.push(name.lexeme)
                 this.known_func_return_types.push(return_type)
                 this.known_func_params.push(params)
@@ -381,7 +386,7 @@ class Checker:
                 this.known_enum_variants.push(variants)
             Const(name, const_type, value, visibility):
                 this.declare(name.lexeme, const_type, "const", false, false, name)
-            Struct(name, body, visibility):
+            Struct(name, body, visibility, struct_tp):
                 this.known_class_names.push(name.lexeme)
                 this.known_class_bodies.push(body)
             Namespace(name, body, visibility):
@@ -450,11 +455,11 @@ class Checker:
                 for ref st in statements:
                     this.check_stmt(st)
                 this.pop_scope()
-            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
+            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
                 this.check_function(name, params, return_type, body)
             Class(name, body, visibility):
                 this.check_class(name, body)
-            Struct(name, body, visibility):
+            Struct(name, body, visibility, struct_tp):
                 pass
             Enum(name, variants, visibility):
                 pass
@@ -506,10 +511,10 @@ class Checker:
         this.current_class_name = name.lexeme
         this.push_scope()
         // Declare 'this'
-        this.declare("this", TypeNode::Custom(name.lexeme), "var", false, false, name)
+        this.declare("this", TypeNode::Custom(name.lexeme, []), "var", false, false, name)
         for ref s in body:
             match s:
-                Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility):
+                Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility, fn_tp):
                     this.check_function(fname, params, return_type, fbody)
                 Let(lname, var_type, initializer, visibility, is_ref, is_mut):
                     this.check_expr(initializer)

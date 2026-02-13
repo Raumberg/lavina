@@ -103,7 +103,12 @@ class CppCodegen:
                 return "std::any"
             NullType():
                 return "std::nullptr_t"
-            Custom(name):
+            Custom(name, type_args):
+                if type_args.len() > 0:
+                    vector[string] ta = []
+                    for ref a in type_args:
+                        ta.push(this.emit_type(a))
+                    return "${name}<${ta.join(", ")}>"
                 return name
             Array(inner):
                 return "std::vector<${this.emit_type(inner)}>"
@@ -448,12 +453,13 @@ class CppCodegen:
                     exc_name = exception_name
                 this.output = this.output + "${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_block_or_stmt(catch_body, m)
-            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
-                this.emit_function(name, params, return_type, body)
+            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
+                this.emit_function(name, params, return_type, body, type_params)
             Class(name, body, visibility):
-                this.emit_class(name, body)
-            Struct(name, body, visibility):
-                this.emit_class(name, body)
+                vector[string] empty_tp = []
+                this.emit_class(name, body, empty_tp)
+            Struct(name, body, visibility, type_params):
+                this.emit_class(name, body, type_params)
             Enum(name, variants, visibility):
                 this.emit_enum(name, variants)
             Match(expr, arm_patterns, arm_bodies):
@@ -506,8 +512,13 @@ class CppCodegen:
                 this.indent_level -= 1
                 this.output = this.output + "${this.indent()}}\n"
 
-    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body):
+    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params):
         vector[string] saved_dynamic = this.dynamic_vars
+        if type_params.len() > 0:
+            vector[string] tps = []
+            for ref tp in type_params:
+                tps.push("typename ${tp}")
+            this.output = this.output + "${this.indent()}template<${tps.join(", ")}>\n"
         string ret_type = this.emit_type(return_type)
         string param_str = this.emit_params(params, true)
         this.output = this.output + "${this.indent()}${ret_type} ${name.lexeme}(${param_str}) {\n"
@@ -520,7 +531,7 @@ class CppCodegen:
 
     // ── Class emission ────────────────────────────────────────
 
-    void fn emit_class(ref Token name, ref vector[Stmt] body):
+    void fn emit_class(ref Token name, ref vector[Stmt] body, ref vector[string] type_params):
         vector[Stmt] init_body = []
         vector[Param] init_params = []
         bool has_init = false
@@ -530,7 +541,7 @@ class CppCodegen:
 
         for ref st in body:
             match st:
-                Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility):
+                Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility, fn_tp):
                     if fname.lexeme == "constructor":
                         has_init = true
                         init_body = fbody
@@ -575,6 +586,11 @@ class CppCodegen:
                     _:
                         pass
 
+        if type_params.len() > 0:
+            vector[string] tps = []
+            for ref tp in type_params:
+                tps.push("typename ${tp}")
+            this.output = this.output + "${this.indent()}template<${tps.join(", ")}>\n"
         this.output = this.output + "${this.indent()}struct ${name.lexeme} {\n"
         this.indent_level += 1
 
@@ -635,7 +651,7 @@ class CppCodegen:
 
         for ref m in methods:
             match m:
-                Function(mname, mparams, mret, mbody, is_inline, is_comptime, is_static, visibility):
+                Function(mname, mparams, mret, mbody, is_inline, is_comptime, is_static, visibility, m_tp):
                     vector[string] saved_dyn = this.dynamic_vars
                     string ret_type = this.emit_type(mret)
                     string mparam_str = this.emit_params(mparams, true)
@@ -736,7 +752,7 @@ class CppCodegen:
         for ref v in variants:
             for ref ft in v.types:
                 match ft:
-                    Custom(n):
+                    Custom(n, _):
                         if n == enum_name:
                             has_self_ref = true
                     _:
@@ -755,7 +771,7 @@ class CppCodegen:
                     string cpp_type = this.emit_type(v.types[fi])
                     string fname = v.field_names[fi]
                     match v.types[fi]:
-                        Custom(n):
+                        Custom(n, _):
                             if n == enum_name:
                                 cpp_type = "std::shared_ptr<${enum_name}>"
                         _:
@@ -787,7 +803,7 @@ class CppCodegen:
                     string fname = v.field_names[fi]
                     bool is_self_ref = false
                     match v.types[fi]:
-                        Custom(n):
+                        Custom(n, _):
                             if n == enum_name:
                                 is_self_ref = true
                         _:
@@ -861,7 +877,7 @@ class CppCodegen:
                                 bool is_self_ref = false
                                 if bi < vinfo.types.len():
                                     match vinfo.types[bi]:
-                                        Custom(n):
+                                        Custom(n, _):
                                             if n == ename:
                                                 is_self_ref = true
                                         _:
@@ -893,7 +909,7 @@ class CppCodegen:
 
         for ref stmt in stmts:
             match stmt:
-                Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
+                Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
                     if name.lexeme == "main":
                         this.has_main = true
                         this.output = this.output + "int main(int argc, char* argv[]) {\n"

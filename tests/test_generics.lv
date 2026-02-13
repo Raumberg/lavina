@@ -1,0 +1,135 @@
+// ── Generic functions ───────────────────────────────────────
+
+T fn identity[T](T x):
+    return x
+
+T fn first_of[T](T a, T b):
+    return a
+
+T fn add_generic[T](T a, T b):
+    return a + b
+
+U fn transform[T, U](T input, U default_val):
+    return default_val
+
+// ── Generic structs ────────────────────────────────────────
+
+struct Pair[T, U]:
+    T first
+    U second
+
+struct Wrapper[T]:
+    T value
+
+struct Triple[A, B, C]:
+    A x
+    B y
+    C z
+
+// ── Functions using generic structs ────────────────────────
+
+T fn unwrap[T](Wrapper[T] w):
+    return w.value
+
+Pair[U, T] fn swap_pair[T, U](Pair[T, U] p):
+    return Pair[U, T](p.second, p.first)
+
+// ── Tests ──────────────────────────────────────────────────
+
+void fn main():
+    // 1. Generic identity — multiple types
+    auto i = identity(42)
+    lv_assert(i == 42, "identity int")
+    auto s = identity("hello")
+    lv_assert(s == "hello", "identity string")
+    auto f = identity(3.14)
+    lv_assert(f == 3.14, "identity float")
+    auto b = identity(true)
+    lv_assert(b == true, "identity bool")
+
+    // 2. Generic function with two same-type params
+    lv_assert(first_of(10, 20) == 10, "first_of int")
+    lv_assert(first_of("a", "b") == "a", "first_of string")
+
+    // 3. Generic add
+    lv_assert(add_generic(3, 7) == 10, "add_generic int")
+    lv_assert(add_generic("foo", "bar") == "foobar", "add_generic string")
+    lv_assert(add_generic(1.5, 2.5) == 4.0, "add_generic float")
+
+    // 4. Multi-type-param function
+    auto t = transform(42, "default")
+    lv_assert(t == "default", "transform returns U")
+
+    // 5. Basic generic struct
+    Pair[int, string] p = Pair[int, string](1, "world")
+    lv_assert(p.first == 1, "pair first")
+    lv_assert(p.second == "world", "pair second")
+
+    // 6. Generic struct — different type combos
+    Pair[string, int] p2 = Pair[string, int]("age", 30)
+    lv_assert(p2.first == "age", "pair string-int first")
+    lv_assert(p2.second == 30, "pair string-int second")
+
+    Pair[float, float] p3 = Pair[float, float](1.0, 2.0)
+    lv_assert(p3.first == 1.0, "pair float first")
+    lv_assert(p3.second == 2.0, "pair float second")
+
+    Pair[bool, string] p4 = Pair[bool, string](true, "yes")
+    lv_assert(p4.first == true, "pair bool-string first")
+    lv_assert(p4.second == "yes", "pair bool-string second")
+
+    // 7. Single-param generic struct
+    Wrapper[int] wi = Wrapper[int](42)
+    lv_assert(wi.value == 42, "wrapper int")
+    Wrapper[string] ws = Wrapper[string]("wrapped")
+    lv_assert(ws.value == "wrapped", "wrapper string")
+
+    // 8. Three type params
+    Triple[int, string, bool] tr = Triple[int, string, bool](1, "two", true)
+    lv_assert(tr.x == 1, "triple x")
+    lv_assert(tr.y == "two", "triple y")
+    lv_assert(tr.z == true, "triple z")
+
+    // 9. Unwrap — generic function taking generic struct
+    lv_assert(unwrap(Wrapper[int](99)) == 99, "unwrap int")
+    lv_assert(unwrap(Wrapper[string]("hi")) == "hi", "unwrap string")
+
+    // 10. Swap pair
+    Pair[int, string] before = Pair[int, string](1, "one")
+    auto after = swap_pair(before)
+    lv_assert(after.first == "one", "swap first")
+    lv_assert(after.second == 1, "swap second")
+
+    // 11. Nested generic structs
+    Pair[int, Pair[string, bool]] nested = Pair[int, Pair[string, bool]](1, Pair[string, bool]("ok", true))
+    lv_assert(nested.first == 1, "nested outer first")
+    lv_assert(nested.second.first == "ok", "nested inner first")
+    lv_assert(nested.second.second == true, "nested inner second")
+
+    Wrapper[Pair[int, int]] wp = Wrapper[Pair[int, int]](Pair[int, int](10, 20))
+    lv_assert(wp.value.first == 10, "wrapper-pair first")
+    lv_assert(wp.value.second == 20, "wrapper-pair second")
+
+    // 12. Generic struct in a vector
+    vector[Pair[int, string]] pairs = []
+    pairs.push(Pair[int, string](1, "a"))
+    pairs.push(Pair[int, string](2, "b"))
+    pairs.push(Pair[int, string](3, "c"))
+    lv_assert(pairs.len() == 3, "vector of pairs len")
+    lv_assert(pairs[0].first == 1, "vector pair 0 first")
+    lv_assert(pairs[2].second == "c", "vector pair 2 second")
+
+    // 13. Generic function called with result of another generic
+    auto nested_id = identity(identity(identity(42)))
+    lv_assert(nested_id == 42, "nested identity calls")
+
+    // 14. Generic struct assigned to auto
+    auto auto_pair = Pair[int, string](100, "auto")
+    lv_assert(auto_pair.first == 100, "auto pair first")
+    lv_assert(auto_pair.second == "auto", "auto pair second")
+
+    // 15. Wrapper of wrapper
+    Wrapper[Wrapper[int]] ww = Wrapper[Wrapper[int]](Wrapper[int](7))
+    lv_assert(ww.value.value == 7, "wrapper of wrapper")
+
+    print("All generics tests passed!")

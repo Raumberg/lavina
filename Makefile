@@ -32,6 +32,43 @@ snapshot: bootstrap
 		echo "Saved $(STAGES_DIR)/stage$(NEXT_NUM).cpp"; \
 	fi
 
+# ── Evolve: bootstrap with codegen changes ──────────────────
+# When codegen output changes, the old stage and new compiler
+# produce different C++. This target verifies the new output is
+# a fixed point of itself and saves it as a new stage.
+
+evolve: $(BOOTSTRAP_SRC)
+	@if [ -z "$(LATEST_STAGE)" ]; then echo "No stages found in $(STAGES_DIR)/"; exit 1; fi
+	@echo "Bootstrapping from $(LATEST_STAGE)"
+	cp runtime/lavina.h /tmp/lavina.h
+	cp -r runtime/liblavina /tmp/liblavina
+	g++ -std=c++23 -I/tmp -o /tmp/lavina_prev $(LATEST_STAGE)
+	/tmp/lavina_prev --emit-cpp src/main.lv > /tmp/lavina_next.cpp
+	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
+	/tmp/lavina_next --emit-cpp src/main.lv > /tmp/lavina_verify.cpp
+	@if diff -q /tmp/lavina_next.cpp /tmp/lavina_verify.cpp > /dev/null 2>&1; then \
+		echo "Fixed point OK — no evolution needed (use 'make bootstrap')."; \
+	else \
+		echo "Codegen changed — verifying new output is a fixed point..."; \
+		g++ -std=c++23 -I/tmp -o /tmp/lavina_verify /tmp/lavina_verify.cpp; \
+		/tmp/lavina_verify --emit-cpp src/main.lv > /tmp/lavina_verify2.cpp; \
+		if diff -q /tmp/lavina_verify.cpp /tmp/lavina_verify2.cpp > /dev/null 2>&1; then \
+			echo "New fixed point OK."; \
+			CUR_NUM=$$(echo $(LATEST_STAGE) | grep -o '[0-9]*' | tail -1); \
+			NEXT_NUM=$$((CUR_NUM + 1)); \
+			read -p "Stage $$NEXT_NUM description: " DESC; \
+			echo "// Stage $$NEXT_NUM: $$DESC" > $(STAGES_DIR)/stage$$NEXT_NUM.cpp; \
+			cat /tmp/lavina_verify.cpp >> $(STAGES_DIR)/stage$$NEXT_NUM.cpp; \
+			cp /tmp/lavina_verify.cpp /tmp/lavina_next.cpp; \
+			cp /tmp/lavina_verify /tmp/lavina_next; \
+			echo "Saved $(STAGES_DIR)/stage$$NEXT_NUM.cpp"; \
+			echo "Evolution successful."; \
+		else \
+			echo "ERROR: new output is NOT a fixed point. The compiler does not converge."; \
+			exit 1; \
+		fi; \
+	fi
+
 # ── Run test suite ───────────────────────────────────────────
 
 test:
@@ -62,4 +99,4 @@ clean:
 	rm -f /tmp/lavina.h
 	rm -rf /tmp/liblavina
 
-.PHONY: bootstrap snapshot clean test
+.PHONY: bootstrap snapshot evolve clean test
