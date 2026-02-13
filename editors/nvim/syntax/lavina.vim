@@ -24,7 +24,7 @@ syn keyword lavinaImport import as
 syn keyword lavinaLogical and or not
 
 " Definitions
-syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace ref own cpp
+syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace ref own cpp extern link type
 
 " Storage
 syn keyword lavinaStorage class struct enum

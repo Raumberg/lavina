@@ -1,0 +1,21 @@
+// Test: extern blocks for FFI
+extern "cmath":
+    float fn sqrt(float x) = "std::sqrt"
+    float fn fabs(float x) = "std::fabs"
+
+void fn main():
+    float val = 16.0
+    float result = sqrt(val)
+    // sqrt(16) should be 4.0
+    if result > 3.99 and result < 4.01:
+        print("PASS: sqrt(16) = 4.0")
+    else:
+        print("FAIL: sqrt(16) = " + to_string(result))
+        exit(1)
+
+    float neg = fabs(-42.5)
+    if neg > 42.49 and neg < 42.51:
+        print("PASS: fabs(-42.5) = 42.5")
+    else:
+        print("FAIL: fabs(-42.5) = " + to_string(neg))
+        exit(1)

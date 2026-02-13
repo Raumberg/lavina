@@ -67,6 +67,19 @@ enum Expr:
     Range(Expr start, Expr end)
     Lambda(vector[Param] params, Expr body)
     Own(Expr expr)
+    AddressOf(Expr expr)
+
+// ── Extern helpers ──────────────────────────────────────────
+
+struct ExternType:
+    string lavina_name
+    string cpp_name
+
+struct ExternFn:
+    string name
+    string cpp_name
+    TypeNode return_type
+    vector[Param] params
 
 // ── Match arm ────────────────────────────────────────────────
 
@@ -98,3 +111,4 @@ enum Stmt:
     Continue(Token keyword)
     Pass(Token keyword)
     CppBlock(string code)
+    Extern(string header, string link_lib, vector[ExternType] types, vector[ExternFn] functions)

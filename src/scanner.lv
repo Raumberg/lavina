@@ -99,6 +99,9 @@ const string TK_USIZE = "USize"
 const string TK_CSTRING = "CString"
 const string TK_PTR = "Ptr"
 const string TK_CPP = "Cpp"
+const string TK_AMPERSAND = "Ampersand"
+const string TK_EXTERN = "Extern"
+const string TK_LINK = "Link"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -233,6 +236,10 @@ string fn lookup_keyword(ref string w):
         return TK_PTR
     elif w == "cpp":
         return TK_CPP
+    elif w == "extern":
+        return TK_EXTERN
+    elif w == "link":
+        return TK_LINK
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
@@ -516,7 +523,7 @@ class Scanner:
             if this.match_char("&"):
                 this.add_simple_token(TK_AND)
             else:
-                this.add_error("Unexpected character: &")
+                this.add_simple_token(TK_AMPERSAND)
         elif c == "|":
             if this.match_char("|"):
                 this.add_simple_token(TK_OR)

@@ -5,18 +5,15 @@
 
 extern "sqlite3.h" link "sqlite3":
     type sqlite3
+    int32 fn sqlite3_open(cstring filename, ptr[ptr[sqlite3]] db_out) = "sqlite3_open"
     int32 fn sqlite3_close(ptr[sqlite3] db) = "sqlite3_close"
     int32 fn sqlite3_exec(ptr[sqlite3] db, cstring sql, ptr[void] callback, ptr[void] arg, ptr[ptr[int8]] errmsg) = "sqlite3_exec"
     cstring fn sqlite3_errmsg(ptr[sqlite3] db) = "sqlite3_errmsg"
 
 void fn main():
     // Open an in-memory database
-    // (sqlite3_open needs &db, so we use a cpp block)
     ptr[sqlite3] db = null
-    cpp {
-        db = nullptr;
-        sqlite3_open(":memory:", &db);
-    }
+    sqlite3_open(":memory:", &db)
 
     if db == null:
         print("Failed to open database")
@@ -24,13 +21,8 @@ void fn main():
 
     print("SQLite database opened successfully")
 
-    // Create a table
-    // Note: no auto-conversions yet, so we use cpp blocks for C calls
-    // that need null pointers and C strings
-    int32 rc = 0
-    cpp {
-        rc = sqlite3_exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)", nullptr, nullptr, nullptr);
-    }
+    // Create a table — auto-conversions handle string→cstring and null→ptr
+    int32 rc = sqlite3_exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)", null, null, null)
     if rc != 0:
         print("Failed to create table")
         sqlite3_close(db)
@@ -39,9 +31,7 @@ void fn main():
     print("Table 'users' created")
 
     // Insert some rows
-    cpp {
-        rc = sqlite3_exec(db, "INSERT INTO users VALUES (1, 'Alice', 30), (2, 'Bob', 25), (3, 'Charlie', 35)", nullptr, nullptr, nullptr);
-    }
+    rc = sqlite3_exec(db, "INSERT INTO users VALUES (1, 'Alice', 30), (2, 'Bob', 25), (3, 'Charlie', 35)", null, null, null)
     if rc != 0:
         print("Failed to insert data")
         sqlite3_close(db)

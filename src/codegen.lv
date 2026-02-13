@@ -14,6 +14,12 @@ class CppCodegen:
     vector[string] known_enum_names
     vector[vector[EnumVariantNode]] known_enum_variants
     vector[string] dynamic_vars
+    vector[string] extern_includes
+    vector[string] extern_link_libs
+    hashmap[string, string] extern_fn_names
+    hashmap[string, string] extern_type_names
+    hashmap[string, vector[Param]] extern_fn_params
+    hashmap[string, TypeNode] var_types
 
     constructor():
         this.output = ""
@@ -24,6 +30,12 @@ class CppCodegen:
         this.known_enum_names = []
         this.known_enum_variants = []
         this.dynamic_vars = []
+        this.extern_includes = []
+        this.extern_link_libs = []
+        this.extern_fn_names = {}
+        this.extern_type_names = {}
+        this.var_types = {}
+        this.extern_fn_params = {}
 
     // ── Helpers ───────────────────────────────────────────────
 
@@ -95,6 +107,94 @@ class CppCodegen:
             tps.push("typename ${tp}")
         return "${this.indent()}template<${tps.join(", ")}>\n"
 
+    string fn wrap_convert(string expr, ref TypeNode from, ref TypeNode expected):
+        match from:
+            Str():
+                match expected:
+                    CString():
+                        return "(${expr}).c_str()"
+                    _:
+                        pass
+            CString():
+                match expected:
+                    Str():
+                        return "std::string(${expr})"
+                    _:
+                        pass
+            Int():
+                match expected:
+                    Int32():
+                        return "static_cast<int32_t>(${expr})"
+                    USize():
+                        return "static_cast<size_t>(${expr})"
+                    _:
+                        pass
+            Int32():
+                match expected:
+                    Int():
+                        return "static_cast<int64_t>(${expr})"
+                    _:
+                        pass
+            USize():
+                match expected:
+                    Int():
+                        return "static_cast<int64_t>(${expr})"
+                    _:
+                        pass
+            Float():
+                match expected:
+                    Float32():
+                        return "static_cast<float>(${expr})"
+                    _:
+                        pass
+            Float32():
+                match expected:
+                    Float():
+                        return "static_cast<double>(${expr})"
+                    _:
+                        pass
+            _:
+                pass
+        return expr
+
+    string fn wrap_extern_arg(string expr, ref Expr original, ref TypeNode expected):
+        match original:
+            Literal(kind, value):
+                if kind == "null":
+                    match expected:
+                        Ptr(inner):
+                            return "nullptr"
+                        _:
+                            pass
+                if kind == "string":
+                    match expected:
+                        CString():
+                            return "(${expr}).c_str()"
+                        _:
+                            pass
+                if kind == "int":
+                    match expected:
+                        Int32():
+                            return "static_cast<int32_t>(${expr})"
+                        USize():
+                            return "static_cast<size_t>(${expr})"
+                        _:
+                            pass
+                if kind == "float":
+                    match expected:
+                        Float32():
+                            return "static_cast<float>(${expr})"
+                        _:
+                            pass
+                return expr
+            Variable(tok):
+                if this.var_types.has(tok.lexeme):
+                    TypeNode vt = this.var_types[tok.lexeme]
+                    return this.wrap_convert(expr, vt, expected)
+            _:
+                pass
+        return expr
+
     // ── Type emission ─────────────────────────────────────────
 
     string fn emit_type(ref TypeNode t):
@@ -121,6 +221,8 @@ class CppCodegen:
                     for ref a in type_args:
                         ta.push(this.emit_type(a))
                     return "${name}<${ta.join(", ")}>"
+                if this.extern_type_names.has(name):
+                    return this.extern_type_names[name]
                 return name
             Array(inner):
                 return "std::vector<${this.emit_type(inner)}>"
@@ -287,6 +389,8 @@ class CppCodegen:
                 return this.emit_lambda(params, body, m)
             Own(expr):
                 return "std::move(${this.emit_expr(expr, m)})"
+            AddressOf(expr):
+                return "&(${this.emit_expr(expr, m)})"
             _:
                 return ""
 
@@ -341,6 +445,17 @@ class CppCodegen:
                     arg_strs.push(this.emit_expr(a, in_method))
                 if tok.lexeme == "exit":
                     return "lv_exit(${arg_strs.join(", ")})"
+                if this.extern_fn_params.has(tok.lexeme):
+                    vector[Param] eparams = this.extern_fn_params[tok.lexeme]
+                    for i in 0..arg_strs.len():
+                        if i < eparams.len():
+                            arg_strs[i] = this.wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type)
+                    string fn_name = tok.lexeme
+                    if this.extern_fn_names.has(tok.lexeme):
+                        fn_name = this.extern_fn_names[tok.lexeme]
+                    return "${fn_name}(${arg_strs.join(", ")})"
+                if this.extern_fn_names.has(tok.lexeme):
+                    return "${this.extern_fn_names[tok.lexeme]}(${arg_strs.join(", ")})"
                 return "${tok.lexeme}(${arg_strs.join(", ")})"
             _:
                 string func = this.emit_expr(callee, in_method)
@@ -413,6 +528,7 @@ class CppCodegen:
                 strs.push("const ${this.emit_type(p.param_type)}& ${p.name.lexeme}")
             else:
                 strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+            this.var_types[p.name.lexeme] = p.param_type
             if track_dynamic:
                 match p.param_type:
                     Dynamic():
@@ -519,11 +635,35 @@ class CppCodegen:
                     auto trimmed = line.trim()
                     if trimmed != "":
                         this.output +="${this.indent()}${trimmed}\n"
+            Extern(header, link_lib, types, functions):
+                // Collect includes and name mappings (deduplicate)
+                string inc_line = ""
+                bool has_dot = header.indexOf(".") >= 0
+                if has_dot:
+                    inc_line = "#include \"${header}\""
+                else:
+                    inc_line = "#include <${header}>"
+                bool already = false
+                for ref existing in this.extern_includes:
+                    if existing == inc_line:
+                        already = true
+                if not already:
+                    this.extern_includes.push(inc_line)
+                if link_lib != "":
+                    this.extern_link_libs.push(link_lib)
+                for ref et in types:
+                    if et.lavina_name != et.cpp_name:
+                        this.extern_type_names[et.lavina_name] = et.cpp_name
+                for ref ef in functions:
+                    if ef.name != ef.cpp_name:
+                        this.extern_fn_names[ef.name] = ef.cpp_name
+                    this.extern_fn_params[ef.name] = ef.params
             _:
                 pass
 
     void fn emit_let(ref Token name, ref TypeNode var_type, ref Expr initializer, bool in_method, bool is_ref, bool is_mut):
         string cpp_type = this.emit_type(var_type)
+        this.var_types[name.lexeme] = var_type
         if this.type_contains_dynamic(var_type):
             this.add_dynamic_var(name.lexeme)
         string const_str = ""
@@ -538,6 +678,15 @@ class CppCodegen:
                 init_str = this.default_init(cpp_type)
             _:
                 string val = this.emit_expr(initializer, in_method)
+                // Use nullptr for pointer types initialized to null
+                bool is_ptr = false
+                match var_type:
+                    Ptr(inner):
+                        is_ptr = true
+                    _:
+                        pass
+                if is_ptr and val == "std::nullopt":
+                    val = "nullptr"
                 init_str = " = ${val}"
         this.output +="${this.indent()}${const_str}${cpp_type}${ref_str} ${name.lexeme}${init_str};\n"
 
@@ -946,7 +1095,19 @@ class CppCodegen:
     // ── Main entry point ──────────────────────────────────────
 
     string fn generate(ref vector[Stmt] stmts):
-        this.declarations = "#include \"lavina.h\"\n\n"
+        // First pass: collect extern declarations
+        for ref stmt in stmts:
+            match stmt:
+                Extern(header, link_lib, types, functions):
+                    this.emit_stmt(stmt, false)
+                    this.output = ""
+                _:
+                    pass
+
+        this.declarations = "#include \"lavina.h\"\n"
+        for ref inc in this.extern_includes:
+            this.declarations +="${inc}\n"
+        this.declarations +="\n"
 
         for ref stmt in stmts:
             match stmt:
@@ -966,6 +1127,8 @@ class CppCodegen:
                         this.emit_stmt(stmt, false)
                         this.declarations +=this.output
                         this.output = ""
+                Extern(header, link_lib, types, functions):
+                    pass
                 _:
                     this.emit_stmt(stmt, false)
                     this.declarations +=this.output

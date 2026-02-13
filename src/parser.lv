@@ -383,6 +383,9 @@ class Parser:
         if this.match_any([TK_OWN]):
             Expr right = this.unary()
             return Expr::Own(right)
+        if this.match_any([TK_AMPERSAND]):
+            Expr right = this.unary()
+            return Expr::AddressOf(right)
         return this.call()
 
     Expr fn call():
@@ -894,6 +897,9 @@ class Parser:
                 this.advance()
             this.match_any([TK_NEWLINE])
 
+        if this.match_any([TK_EXTERN]):
+            return this.extern_declaration()
+
         if this.match_any([TK_IMPORT]):
             return this.import_statement()
 
@@ -945,6 +951,47 @@ class Parser:
                 return this.var_declaration(visibility)
 
         return this.statement()
+
+    // ── Extern declaration ─────────────────────────────────
+
+    Stmt fn extern_declaration():
+        auto header = this.consume(TK_STRING, "Expect header string after 'extern'.").lexeme
+        string link_lib = ""
+        if this.match_any([TK_LINK]):
+            link_lib = this.consume(TK_STRING, "Expect library string after 'link'.").lexeme
+        this.consume(TK_COLON, "Expect ':' after extern header.")
+        this.match_any([TK_NEWLINE])
+        this.consume(TK_INDENT, "Expect indentation to start extern body.")
+
+        vector[ExternType] types = []
+        vector[ExternFn] functions = []
+        while not this.check(TK_DEDENT) and not this.is_at_end():
+            if this.match_any([TK_NEWLINE]):
+                pass
+            elif this.check(TK_IDENTIFIER) and this.peek().lexeme == "type":
+                this.advance()
+                auto type_name = this.consume(TK_IDENTIFIER, "Expect type name after 'type'.")
+                string cpp_name = type_name.lexeme
+                if this.match_any([TK_EQUAL]):
+                    cpp_name = this.consume(TK_STRING, "Expect C++ name string.").lexeme
+                types.push(ExternType(type_name.lexeme, cpp_name))
+                this.match_any([TK_NEWLINE])
+            else:
+                // Parse: ReturnType fn name(params) [= "cpp_name"]
+                TypeNode ret_type = this.parse_type()
+                this.consume(TK_FN, "Expect 'fn' in extern function declaration.")
+                auto fn_name = this.consume(TK_IDENTIFIER, "Expect function name.")
+                this.consume(TK_LEFT_PAREN, "Expect '(' after extern function name.")
+                vector[Param] params = this.parse_param_list()
+                this.consume(TK_RIGHT_PAREN, "Expect ')' after extern function params.")
+                string fn_cpp_name = fn_name.lexeme
+                if this.match_any([TK_EQUAL]):
+                    fn_cpp_name = this.consume(TK_STRING, "Expect C++ name string.").lexeme
+                functions.push(ExternFn(fn_name.lexeme, fn_cpp_name, ret_type, params))
+                this.match_any([TK_NEWLINE])
+
+        this.consume(TK_DEDENT, "Expect dedent to end extern body.")
+        return Stmt::Extern(header, link_lib, types, functions)
 
     // ── Main entry point ────────────────────────────────────
 

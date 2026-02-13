@@ -254,6 +254,16 @@ class Checker:
                         return this.types_compatible(inner, actual)
             _:
                 pass
+        // Ptr(T) accepts NullType
+        match expected:
+            Ptr(inner):
+                match actual:
+                    NullType():
+                        return true
+                    _:
+                        pass
+            _:
+                pass
         return false
 
     string fn type_name(ref TypeNode t):
@@ -465,6 +475,15 @@ class Checker:
             Namespace(name, body, visibility):
                 for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
+            Extern(header, link_lib, types, functions):
+                for ref et in types:
+                    this.known_class_names.push(et.lavina_name)
+                    vector[Stmt] empty_body = []
+                    this.known_class_bodies.push(empty_body)
+                for ref ef in functions:
+                    this.known_func_names.push(ef.name)
+                    this.known_func_return_types.push(ef.return_type)
+                    this.known_func_params.push(ef.params)
             _:
                 pass
 
@@ -564,6 +583,8 @@ class Checker:
             Pass(keyword):
                 pass
             CppBlock(code):
+                pass
+            Extern(header, link_lib, types, functions):
                 pass
             _:
                 pass

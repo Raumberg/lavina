@@ -69,7 +69,7 @@
         },
         {
           "name": "keyword.other.lavina",
-          "match": "\\b(fn|constructor|public|private|static|inline|const|let|comptime|namespace|ref|own|cpp)\\b"
+          "match": "\\b(fn|constructor|public|private|static|inline|const|let|comptime|namespace|ref|own|cpp|extern|link|type)\\b"
         }
       ]
     },
