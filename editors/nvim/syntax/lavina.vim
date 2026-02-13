@@ -24,13 +24,13 @@ syn keyword lavinaImport import as
 syn keyword lavinaLogical and or not
 
 " Definitions
-syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace ref own
+syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace ref own cpp
 
 " Storage
 syn keyword lavinaStorage class struct enum
 
 " Types
-syn keyword lavinaType int float string bool void auto dynamic vector hashmap hashset null
+syn keyword lavinaType int float string bool void auto dynamic vector hashmap hashset null int8 int16 int32 int64 float32 float64 usize cstring ptr
 
 " Constants
 syn keyword lavinaConstant true false null
