@@ -1,6 +1,6 @@
 // Test ref and own semantics
 
-void fn modify_vec(ref vector[int] v):
+void fn modify_vec(ref! vector[int] v):
     v.push(42)
 
 void fn consume_string(string s):
@@ -9,11 +9,11 @@ void fn consume_string(string s):
 void fn main():
     // Test 1: ref parameter modifies caller's variable
     auto items = [1, 2, 3]
-    modify_vec(ref items)
+    modify_vec(ref! items)
     lv_assert(items.len() == 4, "ref items")
 
     // Test 2: ref variable alias
-    ref auto alias = items
+    ref! auto alias = items
     alias.push(99)
     lv_assert(items.len() == 5, "ref alias")
 

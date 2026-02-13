@@ -289,7 +289,7 @@ class Parser:
                 more = false
         return expr
 
-    Expr fn finish_call(Expr callee):
+    Expr fn finish_call(ref Expr callee):
         match callee:
             Variable(name):
                 if name.lexeme == "cast":
@@ -303,10 +303,10 @@ class Parser:
 
         vector[Expr] args = []
         if not this.check(TK_RIGHT_PAREN):
-            this.match_any([TK_REF])
+            this.match_any([TK_REF, TK_REF_MUT])
             args.push(this.expression())
             while this.match_any([TK_COMMA]):
-                this.match_any([TK_REF])
+                this.match_any([TK_REF, TK_REF_MUT])
                 args.push(this.expression())
         auto paren = this.consume(TK_RIGHT_PAREN, "Expect ')' after arguments.")
         return Expr::Call(callee, paren, args)
@@ -389,9 +389,9 @@ class Parser:
             // () => ... is a lambda
             if this.peek_at(1).token_type == TK_FAT_ARROW:
                 return true
-        // Try to skip params: [ref] type ident [, [ref] type ident]*
+        // Try to skip params: [ref|ref!] type ident [, [ref|ref!] type ident]*
         int start_pos = 0
-        if this.peek_at(0).token_type == TK_REF:
+        if this.peek_at(0).token_type == TK_REF or this.peek_at(0).token_type == TK_REF_MUT:
             start_pos = 1
         if this.is_type_at_pos(start_pos):
             int pos = start_pos
@@ -406,7 +406,7 @@ class Parser:
                     pos += 1
                     if this.peek_at(pos).token_type == TK_COMMA:
                         pos += 1
-                        if this.peek_at(pos).token_type == TK_REF:
+                        if this.peek_at(pos).token_type == TK_REF or this.peek_at(pos).token_type == TK_REF_MUT:
                             pos += 1
                         if not this.is_type_at_pos(pos):
                             valid = false
@@ -422,15 +422,17 @@ class Parser:
         // Already consumed '('. Parse params and '=>' body.
         vector[Param] params = []
         if not this.check(TK_RIGHT_PAREN):
-            bool p_ref = this.match_any([TK_REF])
+            bool p_mut = this.match_any([TK_REF_MUT])
+            bool p_ref = p_mut or this.match_any([TK_REF])
             TypeNode param_type = this.parse_type()
             auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name in lambda.")
-            params.push(Param(param_name, param_type, p_ref))
+            params.push(Param(param_name, param_type, p_ref, p_mut))
             while this.match_any([TK_COMMA]):
-                p_ref = this.match_any([TK_REF])
+                p_mut = this.match_any([TK_REF_MUT])
+                p_ref = p_mut or this.match_any([TK_REF])
                 param_type = this.parse_type()
                 param_name = this.consume(TK_IDENTIFIER, "Expect parameter name in lambda.")
-                params.push(Param(param_name, param_type, p_ref))
+                params.push(Param(param_name, param_type, p_ref, p_mut))
         this.consume(TK_RIGHT_PAREN, "Expect ')' after lambda parameters.")
         this.consume(TK_FAT_ARROW, "Expect '=>' after lambda parameters.")
         Expr body = this.expression()
@@ -561,9 +563,9 @@ class Parser:
     // ── Declaration parsing ─────────────────────────────────
 
     Stmt fn var_declaration(string visibility):
-        return this.var_declaration_with_ref(visibility, false)
+        return this.var_declaration_with_ref(visibility, false, false)
 
-    Stmt fn var_declaration_with_ref(string visibility, bool is_ref):
+    Stmt fn var_declaration_with_ref(string visibility, bool is_ref, bool is_mut):
         TypeNode var_type = this.parse_type()
         auto name = this.consume(TK_IDENTIFIER, "Expect variable name after type.")
 
@@ -571,7 +573,7 @@ class Parser:
         if this.match_any([TK_EQUAL]):
             initializer = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return Stmt::Let(name, var_type, initializer, visibility, is_ref)
+        return Stmt::Let(name, var_type, initializer, visibility, is_ref, is_mut)
 
     Stmt fn const_declaration(string visibility):
         TypeNode const_type = this.parse_type()
@@ -598,15 +600,17 @@ class Parser:
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
         vector[Param] params = []
         if not this.check(TK_RIGHT_PAREN):
-            bool p_ref = this.match_any([TK_REF])
+            bool p_mut = this.match_any([TK_REF_MUT])
+            bool p_ref = p_mut or this.match_any([TK_REF])
             TypeNode param_type = this.parse_type()
             auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-            params.push(Param(param_name, param_type, p_ref))
+            params.push(Param(param_name, param_type, p_ref, p_mut))
             while this.match_any([TK_COMMA]):
-                p_ref = this.match_any([TK_REF])
+                p_mut = this.match_any([TK_REF_MUT])
+                p_ref = p_mut or this.match_any([TK_REF])
                 param_type = this.parse_type()
                 param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-                params.push(Param(param_name, param_type, p_ref))
+                params.push(Param(param_name, param_type, p_ref, p_mut))
         this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
 
         this.consume(TK_COLON, "Expect ':' before function body.")
@@ -756,22 +760,26 @@ class Parser:
                 this.consume(TK_LEFT_PAREN, "Expect '(' after " + ctor_name + ".")
                 vector[Param] params = []
                 if not this.check(TK_RIGHT_PAREN):
-                    bool p_ref = this.match_any([TK_REF])
+                    bool p_mut = this.match_any([TK_REF_MUT])
+                    bool p_ref = p_mut or this.match_any([TK_REF])
                     TypeNode param_type = this.parse_type()
                     auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-                    params.push(Param(param_name, param_type, p_ref))
+                    params.push(Param(param_name, param_type, p_ref, p_mut))
                     while this.match_any([TK_COMMA]):
-                        p_ref = this.match_any([TK_REF])
+                        p_mut = this.match_any([TK_REF_MUT])
+                        p_ref = p_mut or this.match_any([TK_REF])
                         param_type = this.parse_type()
                         param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-                        params.push(Param(param_name, param_type, p_ref))
+                        params.push(Param(param_name, param_type, p_ref, p_mut))
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
                 this.consume(TK_COLON, "Expect ':' before body.")
                 vector[Stmt] body = this.block()
                 return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, false, is_static, visibility)
 
+        if this.match_any([TK_REF_MUT]):
+            return this.var_declaration_with_ref(visibility, true, true)
         if this.match_any([TK_REF]):
-            return this.var_declaration_with_ref(visibility, true)
+            return this.var_declaration_with_ref(visibility, true, false)
 
         if this.is_type_at_pos(0):
             int next_pos = this.skip_type_tokens(0)

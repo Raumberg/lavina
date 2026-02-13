@@ -15,13 +15,13 @@ class ImportResolver:
     constructor():
         this.resolved_paths = []
 
-    bool fn already_resolved(string path):
+    bool fn already_resolved(ref string path):
         for p in this.resolved_paths:
             if p == path:
                 return true
         return false
 
-    string fn get_directory(string path):
+    string fn get_directory(ref string path):
         int i = path.len() - 1
         while i >= 0:
             if path.charAt(i) == "/":
