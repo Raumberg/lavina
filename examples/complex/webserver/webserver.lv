@@ -1,0 +1,26 @@
+extern "httplib.h":
+    type Server = "httplib::Server"
+    type Request = "httplib::Request"
+    type Response = "httplib::Response"
+
+void fn main():
+    print("Starting server on http://localhost:8080")
+
+    Server svr
+
+    svr.Get("/", (ref Request req, ref! Response res):
+        res.set_content("Hello from Lavina!", "text/plain")
+    )
+
+    svr.Get("/json", (ref Request req, ref! Response res):
+        res.set_content("{\"language\": \"lavina\", \"status\": \"running\"}", "application/json")
+    )
+
+    svr.Get("/greet", (ref Request req, ref! Response res):
+        string name = "World"
+        if req.has_param("name"):
+            name = req.get_param_value("name")
+        res.set_content("Hello, ${name}!", "text/plain")
+    )
+
+    svr.listen("0.0.0.0", 8080)

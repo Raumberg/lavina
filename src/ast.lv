@@ -68,6 +68,7 @@ enum Expr:
     Lambda(vector[Param] params, Expr body)
     Own(Expr expr)
     AddressOf(Expr expr)
+    BlockLambda(vector[Param] params, int body_id)
 
 // ── Extern helpers ──────────────────────────────────────────
 

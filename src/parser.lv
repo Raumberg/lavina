@@ -11,11 +11,13 @@ class Parser:
     vector[Token] tokens
     int current
     bool in_class_body
+    vector[vector[Stmt]] lambda_blocks
 
     constructor(vector[Token] tokens):
         this.tokens = tokens
         this.current = 0
         this.in_class_body = false
+        this.lambda_blocks = []
 
     // ── Helpers ─────────────────────────────────────────────
 
@@ -549,10 +551,12 @@ class Parser:
     bool fn try_parse_lambda():
         // We already consumed '('. Look ahead to see if this is a lambda.
         // Lambda: () => expr  OR  (type ident, ...) => expr
+        //         () : block  OR  (type ident, ...) : block
         int saved = this.current
         if this.check(TK_RIGHT_PAREN):
-            // () => ... is a lambda
-            if this.peek_at(1).token_type == TK_FAT_ARROW:
+            // () => ... or (): ... is a lambda
+            string next_type = this.peek_at(1).token_type
+            if next_type == TK_FAT_ARROW or next_type == TK_COLON:
                 return true
         // Try to skip params: [ref|ref!] type ident [, [ref|ref!] type ident]*
         int start_pos = 0
@@ -576,7 +580,8 @@ class Parser:
                         if not this.is_type_at_pos(pos):
                             valid = false
                     elif this.peek_at(pos).token_type == TK_RIGHT_PAREN:
-                        if this.peek_at(pos + 1).token_type == TK_FAT_ARROW:
+                        string after_paren = this.peek_at(pos + 1).token_type
+                        if after_paren == TK_FAT_ARROW or after_paren == TK_COLON:
                             return true
                         return false
                     else:
@@ -584,12 +589,17 @@ class Parser:
         return false
 
     Expr fn parse_lambda():
-        // Already consumed '('. Parse params and '=>' body.
+        // Already consumed '('. Parse params, then '=>' expr or ':' block.
         vector[Param] params = this.parse_param_list()
         this.consume(TK_RIGHT_PAREN, "Expect ')' after lambda parameters.")
-        this.consume(TK_FAT_ARROW, "Expect '=>' after lambda parameters.")
-        Expr body = this.expression()
-        return Expr::Lambda(params, body)
+        if this.match_any([TK_FAT_ARROW]):
+            Expr body = this.expression()
+            return Expr::Lambda(params, body)
+        this.consume(TK_COLON, "Expect '=>' or ':' after lambda parameters.")
+        vector[Stmt] body = this.block()
+        int body_id = this.lambda_blocks.len()
+        this.lambda_blocks.push(body)
+        return Expr::BlockLambda(params, body_id)
 
     // ── Statement parsing ───────────────────────────────────
 

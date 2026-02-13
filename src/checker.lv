@@ -671,6 +671,11 @@ class Checker:
                     this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
                 this.check_expr(body)
                 this.pop_scope()
+            BlockLambda(params, body_id):
+                this.push_scope()
+                for ref p in params:
+                    this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+                this.pop_scope()
             Own(expr):
                 this.check_expr(expr)
             AddressOf(expr):

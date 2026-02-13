@@ -121,6 +121,7 @@ int fn main():
     vector[string] mod_full_names = []
     vector[string] mod_aliases = []
     vector[vector[Stmt]] mod_stmts_list = []
+    vector[vector[Stmt]] all_lambda_blocks = []
 
     for ref mod in resolver.modules:
         auto mod_scanner = Scanner(mod.source)
@@ -137,6 +138,8 @@ int fn main():
             mod_full_names.push(mod.full_name)
             mod_aliases.push(mod.alias)
             mod_stmts_list.push(mod_stmts)
+            for ref lb in mod_parser.lambda_blocks:
+                all_lambda_blocks.push(lb)
         catch err:
             print("Error in module ${mod.full_name}: ${err.what()}")
             return 1
@@ -172,8 +175,11 @@ int fn main():
                     print("  ${cerr}")
                 return 1
 
+        for ref lb in parser.lambda_blocks:
+            all_lambda_blocks.push(lb)
         auto codegen = CppCodegen()
         codegen.set_modules(mod_short_names, mod_full_names, mod_aliases, mod_stmts_list)
+        codegen.lambda_blocks = all_lambda_blocks
         cpp = codegen.generate(stmts)
         has_main = codegen.has_main
     catch err:

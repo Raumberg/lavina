@@ -23,6 +23,7 @@ class CppCodegen:
     vector[string] module_full_names
     vector[string] module_aliases
     vector[vector[Stmt]] module_stmts
+    vector[vector[Stmt]] lambda_blocks
 
     constructor():
         this.output = ""
@@ -42,6 +43,7 @@ class CppCodegen:
         this.module_full_names = []
         this.module_aliases = []
         this.module_stmts = []
+        this.lambda_blocks = []
 
     void fn set_modules(ref vector[string] short_names, ref vector[string] full_names, ref vector[string] aliases, ref vector[vector[Stmt]] stmts):
         this.module_short_names = short_names
@@ -402,6 +404,8 @@ class CppCodegen:
                 return "std::move(${this.emit_expr(expr, m)})"
             AddressOf(expr):
                 return "&(${this.emit_expr(expr, m)})"
+            BlockLambda(params, body_id):
+                return this.emit_block_lambda(params, body_id, m)
             _:
                 return ""
 
@@ -551,6 +555,20 @@ class CppCodegen:
     string fn emit_lambda(ref vector[Param] params, ref Expr body, bool in_method):
         string body_str = this.emit_expr(body, in_method)
         return "[&](${this.emit_params(params, false)}) { return ${body_str}; }"
+
+    string fn emit_block_lambda(ref vector[Param] params, int body_id, bool in_method):
+        string param_str = this.emit_params(params, false)
+        string saved_output = this.output
+        this.output = ""
+        int saved_indent = this.indent_level
+        this.indent_level = 2
+        vector[Stmt] body = this.lambda_blocks[body_id]
+        for ref st in body:
+            this.emit_stmt(st, in_method)
+        string body_str = this.output
+        this.output = saved_output
+        this.indent_level = saved_indent
+        return "[&](${param_str}) {\n${body_str}${this.indent()}    }"
 
     // ── Statement emission ────────────────────────────────────
 
