@@ -1,8 +1,0 @@
-string hello = "Hello"
-string world = "World"
-string greeting = hello + ", " + world + "!"
-print(greeting)
-
-string empty = ""
-print(empty)
-print("literal string")

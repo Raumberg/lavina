@@ -9,11 +9,19 @@ import parser
 
 // ── Import Resolver ──────────────────────────────────────────
 
+struct ModuleInfo:
+    string short_name
+    string full_name
+    string alias
+    string source
+
 class ImportResolver:
     vector[string] resolved_paths
+    vector[ModuleInfo] modules
 
     constructor():
         this.resolved_paths = []
+        this.modules = []
 
     bool fn already_resolved(ref string path):
         for ref p in this.resolved_paths:
@@ -42,11 +50,28 @@ class ImportResolver:
         for ref line in lines:
             string trimmed = line.trim()
             if trimmed.starts_with("import "):
-                string module_name = trimmed.substring(7, trimmed.len()).trim()
-                string module_path = "${dir}${module_name}.lv"
-                string resolved = this.resolve(module_path)
-                if resolved != "":
-                    result +=resolved + "\n"
+                string import_str = trimmed.substring(7, trimmed.len()).trim()
+                string alias = ""
+                string mod_path = import_str
+                int as_pos = import_str.indexOf(" as ")
+                if as_pos >= 0:
+                    alias = import_str.substring(as_pos + 4, import_str.len()).trim()
+                    mod_path = import_str.substring(0, as_pos).trim()
+                string file_rel = mod_path.replace("::", "/")
+                vector[string] segments = file_rel.split("/")
+                string module_file = "${dir}${file_rel}.lv"
+                if segments.len() > 1:
+                    // Multi-segment: module import with namespace
+                    string short_name = segments[segments.len() - 1]
+                    string full_name = segments.join("_")
+                    string mod_source = this.resolve(module_file)
+                    if mod_source != "":
+                        this.modules.push(ModuleInfo(short_name, full_name, alias, mod_source))
+                else:
+                    // Single-segment: inline import (legacy behavior)
+                    string resolved = this.resolve(module_file)
+                    if resolved != "":
+                        result +=resolved + "\n"
             else:
                 result +=line + "\n"
         return result
@@ -91,6 +116,32 @@ int fn main():
     auto resolver = ImportResolver()
     string source = resolver.resolve(path)
 
+    // Parse each module
+    vector[string] mod_short_names = []
+    vector[string] mod_full_names = []
+    vector[string] mod_aliases = []
+    vector[vector[Stmt]] mod_stmts_list = []
+
+    for ref mod in resolver.modules:
+        auto mod_scanner = Scanner(mod.source)
+        mod_scanner.scan_tokens()
+        if mod_scanner.errors.len() > 0:
+            print("Scanner errors in module ${mod.full_name}:")
+            for ref err in mod_scanner.errors:
+                print(err)
+            return 1
+        try:
+            auto mod_parser = Parser(mod_scanner.tokens)
+            vector[Stmt] mod_stmts = mod_parser.parse_program()
+            mod_short_names.push(mod.short_name)
+            mod_full_names.push(mod.full_name)
+            mod_aliases.push(mod.alias)
+            mod_stmts_list.push(mod_stmts)
+        catch err:
+            print("Error in module ${mod.full_name}: ${err.what()}")
+            return 1
+
+    // Parse main source
     auto scanner = Scanner(source)
     scanner.scan_tokens()
     if scanner.errors.len() > 0:
@@ -107,7 +158,14 @@ int fn main():
         stmts = parser.parse_program()
 
         if not no_check:
-            auto check_errors = run_checker(stmts)
+            // Combine all module stmts + main stmts for type checking
+            vector[Stmt] all_stmts = []
+            for ref ms in mod_stmts_list:
+                for ref s in ms:
+                    all_stmts.push(s)
+            for ref s in stmts:
+                all_stmts.push(s)
+            auto check_errors = run_checker(all_stmts)
             if check_errors.len() > 0:
                 print("Type check errors:")
                 for ref cerr in check_errors:
@@ -115,6 +173,7 @@ int fn main():
                 return 1
 
         auto codegen = CppCodegen()
+        codegen.set_modules(mod_short_names, mod_full_names, mod_aliases, mod_stmts_list)
         cpp = codegen.generate(stmts)
         has_main = codegen.has_main
     catch err:

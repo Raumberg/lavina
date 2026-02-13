@@ -652,7 +652,12 @@ class Checker:
                 this.check_expr(object)
                 this.check_expr(value)
             StaticGet(object, name):
-                this.check_expr(object)
+                // Skip checking object if it's a variable (could be a namespace)
+                match object:
+                    Variable(tok):
+                        pass
+                    _:
+                        this.check_expr(object)
             Cast(expr, target_type):
                 this.check_expr(expr)
             Throw(expr):

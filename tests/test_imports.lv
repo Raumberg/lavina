@@ -1,4 +1,4 @@
-import helpers/math_helper
+import helpers::math_helper
 
 void fn main():
     lv_assert(add(3, 4) == 7, "imported add")

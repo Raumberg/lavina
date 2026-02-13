@@ -1,21 +1,23 @@
-string s = "Hello, World!"
+void fn main():
 
-print(s.len())
-print(s.upper())
-print(s.lower())
-print(s.contains("World"))
-print(s.contains("xyz"))
-print(s.indexOf("World"))
-print(s.starts_with("Hello"))
-print(s.ends_with("!"))
-print(s.charAt(0))
-print(s.substring(0, 5))
-print(s.replace("World", "Lavina"))
+    string s = "Hello, World!"
 
-string padded = "  hello  "
-print(padded.trim())
+    print(s.len())
+    print(s.upper())
+    print(s.lower())
+    print(s.contains("World"))
+    print(s.contains("xyz"))
+    print(s.indexOf("World"))
+    print(s.starts_with("Hello"))
+    print(s.ends_with("!"))
+    print(s.charAt(0))
+    print(s.substring(0, 5))
+    print(s.replace("World", "Lavina"))
 
-string csv = "a,b,c,d"
-auto parts = csv.split(",")
-print(parts.len())
-print(parts.join(" | "))
+    string padded = "  hello  "
+    print(padded.trim())
+
+    string csv = "a,b,c,d"
+    auto parts = csv.split(",")
+    print(parts.len())
+    print(parts.join(" | "))

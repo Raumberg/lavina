@@ -7,9 +7,10 @@ class Player:
         this.health = this.health + amount
 
     void fn info():
-        print("Player: " + this.name + ", HP: " + this.health)
+        print("Player: ${this.name}, HP: ${this.health}"
 
-auto p = Player("Alina")
-p.info()
-p.heal(20)
-p.info()
+void fn main():
+    auto p = Player("Alina")
+    p.info()
+    p.heal(20)
+    p.info()

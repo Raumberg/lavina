@@ -19,6 +19,10 @@ class CppCodegen:
     hashmap[string, string] extern_type_names
     hashmap[string, vector[Param]] extern_fn_params
     hashmap[string, TypeNode] var_types
+    vector[string] module_short_names
+    vector[string] module_full_names
+    vector[string] module_aliases
+    vector[vector[Stmt]] module_stmts
 
     constructor():
         this.output = ""
@@ -34,6 +38,16 @@ class CppCodegen:
         this.extern_type_names = {}
         this.var_types = {}
         this.extern_fn_params = {}
+        this.module_short_names = []
+        this.module_full_names = []
+        this.module_aliases = []
+        this.module_stmts = []
+
+    void fn set_modules(ref vector[string] short_names, ref vector[string] full_names, ref vector[string] aliases, ref vector[vector[Stmt]] stmts):
+        this.module_short_names = short_names
+        this.module_full_names = full_names
+        this.module_aliases = aliases
+        this.module_stmts = stmts
 
     // ── Helpers ───────────────────────────────────────────────
 
@@ -1126,10 +1140,78 @@ class CppCodegen:
             _:
                 this.emit_stmt(arm_body, in_method)
 
+    // ── Module emission ──────────────────────────────────────
+
+    void fn emit_using_if_public(ref string ns, ref Stmt stmt):
+        match stmt:
+            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Class(name, body, visibility):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Struct(name, body, visibility, type_params):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Enum(name, variants, methods, visibility, type_params):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Const(name, const_type, value, visibility):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Let(name, var_type, initializer, visibility, is_ref, is_mut):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            _:
+                pass
+
+    void fn emit_module(int index):
+        string full_name = this.module_full_names[index]
+        string short_name = this.module_short_names[index]
+        string alias = this.module_aliases[index]
+
+        this.output +="namespace ${full_name} {\n"
+        this.indent_level = 1
+
+        for ref stmt in this.module_stmts[index]:
+            match stmt:
+                Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
+                    if name.lexeme == "main":
+                        pass
+                    else:
+                        this.emit_stmt(stmt, false)
+                Extern(header, link_lib, types, functions):
+                    pass
+                _:
+                    this.emit_stmt(stmt, false)
+
+        this.indent_level = 0
+        this.output +="} // namespace ${full_name}\n"
+
+        if short_name != full_name:
+            this.output +="namespace ${short_name} = ${full_name};\n"
+        if alias != "":
+            this.output +="namespace ${alias} = ${full_name};\n"
+
+        for ref stmt in this.module_stmts[index]:
+            this.emit_using_if_public(full_name, stmt)
+
+        this.output +="\n"
+        this.declarations +=this.output
+        this.output = ""
+
     // ── Main entry point ──────────────────────────────────────
 
     string fn generate(ref vector[Stmt] stmts):
-        // First pass: collect extern declarations
+        // First pass: collect extern declarations from modules and main
+        for mi in 0..this.module_stmts.len():
+            for ref stmt in this.module_stmts[mi]:
+                match stmt:
+                    Extern(header, link_lib, types, functions):
+                        this.emit_stmt(stmt, false)
+                        this.output = ""
+                    _:
+                        pass
         for ref stmt in stmts:
             match stmt:
                 Extern(header, link_lib, types, functions):
@@ -1142,6 +1224,10 @@ class CppCodegen:
         for ref inc in this.extern_includes:
             this.declarations +="${inc}\n"
         this.declarations +="\n"
+
+        // Emit modules in dependency order
+        for mi in 0..this.module_stmts.len():
+            this.emit_module(mi)
 
         for ref stmt in stmts:
             match stmt:
