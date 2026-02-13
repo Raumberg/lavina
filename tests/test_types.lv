@@ -1,0 +1,37 @@
+// Test expanded type system
+
+void fn test_int_types():
+    int8 a = 42
+    int16 b = 1000
+    int32 c = 100000
+    int64 d = 9999999
+    print("int8: " + a)
+    print("int16: " + b)
+    print("int32: " + c)
+    print("int64: " + d)
+
+void fn test_float_types():
+    float32 x = 3.14
+    float64 y = 2.718
+    print("float32: " + x)
+    print("float64: " + y)
+
+void fn test_usize():
+    usize idx = 0
+    vector[string] items = ["a", "b", "c"]
+    print("usize idx: " + idx)
+
+void fn test_cross_type():
+    int32 a = 10
+    int b = a
+    float32 c = 1.5
+    float d = c
+    print("int32->int: " + b)
+    print("float32->float: " + d)
+
+void fn main():
+    test_int_types()
+    test_float_types()
+    test_usize()
+    test_cross_type()
+    print("All type tests passed!")

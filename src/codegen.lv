@@ -130,6 +130,20 @@ class CppCodegen:
                 return "std::unordered_map<${this.emit_type(key_type)}, ${this.emit_type(value_type)}>"
             Nullable(inner):
                 return "std::optional<${this.emit_type(inner)}>"
+            Int8():
+                return "int8_t"
+            Int16():
+                return "int16_t"
+            Int32():
+                return "int32_t"
+            Float32():
+                return "float"
+            USize():
+                return "size_t"
+            CString():
+                return "const char*"
+            Ptr(inner):
+                return "${this.emit_type(inner)}*"
             _:
                 return "auto"
 
@@ -173,6 +187,18 @@ class CppCodegen:
             return " = false"
         elif cpp_type == "std::string":
             return " = \"\""
+        elif cpp_type == "int8_t":
+            return " = 0"
+        elif cpp_type == "int16_t":
+            return " = 0"
+        elif cpp_type == "int32_t":
+            return " = 0"
+        elif cpp_type == "size_t":
+            return " = 0"
+        elif cpp_type == "float":
+            return " = 0.0f"
+        elif cpp_type == "const char*":
+            return " = nullptr"
         return ""
 
     // ── Expression emission ───────────────────────────────────
@@ -486,6 +512,13 @@ class CppCodegen:
                 this.output +="${this.indent()}continue;\n"
             Pass(keyword):
                 this.output +="${this.indent()}/* pass */\n"
+            CppBlock(code):
+                // Emit raw C++ lines with current indentation
+                auto lines = code.split("\n")
+                for ref line in lines:
+                    auto trimmed = line.trim()
+                    if trimmed != "":
+                        this.output +="${this.indent()}${trimmed}\n"
             _:
                 pass
 

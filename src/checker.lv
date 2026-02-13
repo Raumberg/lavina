@@ -175,11 +175,70 @@ class Checker:
         string a = this.type_name(actual)
         if e == a:
             return true
-        // Float accepts Int
+        // Integer family compatibility
+        bool e_is_int = false
+        bool a_is_int = false
+        match expected:
+            Int():
+                e_is_int = true
+            Int8():
+                e_is_int = true
+            Int16():
+                e_is_int = true
+            Int32():
+                e_is_int = true
+            USize():
+                e_is_int = true
+            _:
+                pass
+        match actual:
+            Int():
+                a_is_int = true
+            Int8():
+                a_is_int = true
+            Int16():
+                a_is_int = true
+            Int32():
+                a_is_int = true
+            USize():
+                a_is_int = true
+            _:
+                pass
+        if e_is_int and a_is_int:
+            return true
+        // Float family compatibility
+        bool e_is_float = false
+        bool a_is_float = false
         match expected:
             Float():
+                e_is_float = true
+            Float32():
+                e_is_float = true
+            _:
+                pass
+        match actual:
+            Float():
+                a_is_float = true
+            Float32():
+                a_is_float = true
+            _:
+                pass
+        if e_is_float and a_is_float:
+            return true
+        // Float accepts Int
+        if e_is_float and a_is_int:
+            return true
+        // CString compatible with Str
+        match expected:
+            CString():
                 match actual:
-                    Int():
+                    Str():
+                        return true
+                    _:
+                        pass
+            Str():
+                match actual:
+                    CString():
                         return true
                     _:
                         pass
@@ -225,6 +284,20 @@ class Checker:
                 return "map[${this.type_name(k)}, ${this.type_name(v)}]"
             Nullable(inner):
                 return "${this.type_name(inner)}?"
+            Int8():
+                return "int8"
+            Int16():
+                return "int16"
+            Int32():
+                return "int32"
+            Float32():
+                return "float32"
+            USize():
+                return "usize"
+            CString():
+                return "cstring"
+            Ptr(inner):
+                return "ptr[${this.type_name(inner)}]"
             _:
                 return "unknown"
 
@@ -489,6 +562,8 @@ class Checker:
             Continue(keyword):
                 pass
             Pass(keyword):
+                pass
+            CppBlock(code):
                 pass
             _:
                 pass

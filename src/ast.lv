@@ -21,6 +21,13 @@ enum TypeNode:
     HashSet(TypeNode inner)
     HashMap(TypeNode key_type, TypeNode value_type)
     Nullable(TypeNode inner)
+    Int8
+    Int16
+    Int32
+    Float32
+    USize
+    CString
+    Ptr(TypeNode inner)
 
 // ── Helper structs ───────────────────────────────────────────
 
@@ -90,3 +97,4 @@ enum Stmt:
     Break(Token keyword)
     Continue(Token keyword)
     Pass(Token keyword)
+    CppBlock(string code)

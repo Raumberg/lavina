@@ -89,6 +89,16 @@ const string TK_REF = "Ref"
 const string TK_REF_MUT = "RefMut"
 const string TK_OWN = "Own"
 const string TK_PASS = "Pass"
+const string TK_INT8 = "Int8"
+const string TK_INT16 = "Int16"
+const string TK_INT32 = "Int32"
+const string TK_INT64 = "Int64"
+const string TK_FLOAT32 = "Float32"
+const string TK_FLOAT64 = "Float64"
+const string TK_USIZE = "USize"
+const string TK_CSTRING = "CString"
+const string TK_PTR = "Ptr"
+const string TK_CPP = "Cpp"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -203,6 +213,26 @@ string fn lookup_keyword(ref string w):
         return TK_OWN
     elif w == "pass":
         return TK_PASS
+    elif w == "int8":
+        return TK_INT8
+    elif w == "int16":
+        return TK_INT16
+    elif w == "int32":
+        return TK_INT32
+    elif w == "int64":
+        return TK_INT64
+    elif w == "float32":
+        return TK_FLOAT32
+    elif w == "float64":
+        return TK_FLOAT64
+    elif w == "usize":
+        return TK_USIZE
+    elif w == "cstring":
+        return TK_CSTRING
+    elif w == "ptr":
+        return TK_PTR
+    elif w == "cpp":
+        return TK_CPP
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
@@ -381,10 +411,49 @@ class Scanner:
         if kw == TK_REF and this.peek() == "!":
             this.advance()
             this.add_token(TK_REF_MUT, "ref!")
+        elif kw == TK_CPP:
+            // Only treat as cpp block if followed by '{'
+            int save = this.current
+            int save_col = this.column
+            while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
+                this.advance()
+            if not this.is_at_end() and this.peek() == "{":
+                this.current = save
+                this.column = save_col
+                this.scan_cpp_block()
+            else:
+                this.current = save
+                this.column = save_col
+                this.add_token(TK_IDENTIFIER, text)
         elif kw != "":
             this.add_token(kw, text)
         else:
             this.add_token(TK_IDENTIFIER, text)
+
+    void fn scan_cpp_block():
+        // Skip whitespace before '{'
+        while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
+            this.advance()
+        if this.is_at_end() or this.peek() != "{":
+            this.add_error("Expect '{' after 'cpp'")
+            return
+        this.advance()
+        int depth = 1
+        int content_start = this.current
+        while not this.is_at_end() and depth > 0:
+            auto c = this.advance()
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+            elif c == "\n":
+                this.line += 1
+                this.column = 1
+        if depth != 0:
+            this.add_error("Unterminated cpp block")
+            return
+        auto content = this.source.substring(content_start, this.current - 1)
+        this.add_token(TK_CPP, content)
 
     void fn scan_token():
         if this.at_line_start:

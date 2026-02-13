@@ -84,10 +84,34 @@ class Parser:
             return true
         if t == TK_IDENTIFIER:
             return true
+        if t == TK_INT8:
+            return true
+        if t == TK_INT16:
+            return true
+        if t == TK_INT32:
+            return true
+        if t == TK_INT64:
+            return true
+        if t == TK_FLOAT32:
+            return true
+        if t == TK_FLOAT64:
+            return true
+        if t == TK_USIZE:
+            return true
+        if t == TK_CSTRING:
+            return true
+        if t == TK_PTR:
+            return true
         return false
 
     int fn skip_type_tokens(int pos):
         auto tt = this.peek_at(pos).token_type
+        if tt == TK_PTR:
+            pos += 1
+            pos += 1
+            pos = this.skip_type_tokens(pos)
+            pos += 1
+            return pos
         if tt == TK_VECTOR or tt == TK_HASHSET:
             pos += 1
             pos += 1
@@ -167,6 +191,27 @@ class Parser:
             TypeNode v = this.parse_type()
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after hashmap types.")
             t = TypeNode::HashMap(k, v)
+        elif this.match_any([TK_INT8]):
+            t = TypeNode::Int8()
+        elif this.match_any([TK_INT16]):
+            t = TypeNode::Int16()
+        elif this.match_any([TK_INT32]):
+            t = TypeNode::Int32()
+        elif this.match_any([TK_INT64]):
+            t = TypeNode::Int()
+        elif this.match_any([TK_FLOAT32]):
+            t = TypeNode::Float32()
+        elif this.match_any([TK_FLOAT64]):
+            t = TypeNode::Float()
+        elif this.match_any([TK_USIZE]):
+            t = TypeNode::USize()
+        elif this.match_any([TK_CSTRING]):
+            t = TypeNode::CString()
+        elif this.match_any([TK_PTR]):
+            this.consume(TK_LEFT_BRACKET, "Expect '[' after 'ptr'.")
+            TypeNode inner = this.parse_type()
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after ptr type.")
+            t = TypeNode::Ptr(inner)
         elif this.match_any([TK_IDENTIFIER]):
             string custom_name = this.previous().lexeme
             vector[TypeNode] type_args = []
@@ -221,6 +266,20 @@ class Parser:
                 return name
             Array(inner):
                 return "std::vector<${this.type_to_string(inner)}>"
+            Int8():
+                return "int8_t"
+            Int16():
+                return "int16_t"
+            Int32():
+                return "int32_t"
+            Float32():
+                return "float"
+            USize():
+                return "size_t"
+            CString():
+                return "const char*"
+            Ptr(inner):
+                return "${this.type_to_string(inner)}*"
             _:
                 return "auto"
 
@@ -555,6 +614,10 @@ class Parser:
             auto kw = this.previous()
             this.match_any([TK_NEWLINE])
             return Stmt::Pass(kw)
+        if this.match_any([TK_CPP]):
+            auto code = this.previous().lexeme
+            this.match_any([TK_NEWLINE])
+            return Stmt::CppBlock(code)
         return this.expression_statement()
 
     Stmt fn throw_statement():
