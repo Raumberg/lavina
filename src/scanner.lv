@@ -571,7 +571,7 @@ void fn test_scanner():
     print("Tokens: " + scanner.tokens.len())
     if scanner.errors.len() > 0:
         print("ERRORS:")
-        for err in scanner.errors:
+        for ref err in scanner.errors:
             print(err)
     else:
         for tok in scanner.tokens:

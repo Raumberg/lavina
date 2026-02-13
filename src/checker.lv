@@ -78,7 +78,7 @@ class Checker:
             return
         ref! auto scope = this.scopes[this.scopes.len() - 1]
         // Check for redefinition in current scope
-        for n in scope.names:
+        for ref n in scope.names:
             if n == name:
                 this.warn("Redefinition of '${name}' in same scope", tok)
                 return
@@ -89,18 +89,18 @@ class Checker:
         int i = this.scopes.len() - 1
         while i >= 0:
             ref! auto scope = this.scopes[i]
-            for n in scope.names:
+            for ref n in scope.names:
                 if n == name:
                     return true
             i -= 1
         // Check top-level: functions, classes, enums
-        for n in this.known_func_names:
+        for ref n in this.known_func_names:
             if n == name:
                 return true
-        for n in this.known_class_names:
+        for ref n in this.known_class_names:
             if n == name:
                 return true
-        for n in this.known_enum_names:
+        for ref n in this.known_enum_names:
             if n == name:
                 return true
         return false
@@ -312,10 +312,10 @@ class Checker:
                     if this.known_func_names[i] == name.lexeme:
                         return this.known_func_return_types[i]
                 // Constructor call — returns the class type
-                for n in this.known_class_names:
+                for ref n in this.known_class_names:
                     if n == name.lexeme:
                         return TypeNode::Custom(name.lexeme)
-                for n in this.known_enum_names:
+                for ref n in this.known_enum_names:
                     if n == name.lexeme:
                         return TypeNode::Custom(name.lexeme)
                 return TypeNode::Auto()
@@ -325,7 +325,7 @@ class Checker:
                 // Enum::Variant
                 match object:
                     Variable(obj_name):
-                        for n in this.known_enum_names:
+                        for ref n in this.known_enum_names:
                             if n == obj_name.lexeme:
                                 return TypeNode::Custom(obj_name.lexeme)
                     _:
@@ -339,7 +339,7 @@ class Checker:
     string fn find_enum_for_variant(ref string variant_name):
         for i in 0..this.known_enum_names.len():
             vector[EnumVariantNode] variants = this.known_enum_variants[i]
-            for v in variants:
+            for ref v in variants:
                 if v.name.lexeme == variant_name:
                     return this.known_enum_names[i]
         return ""
@@ -349,7 +349,7 @@ class Checker:
     void fn register_builtins():
         // Runtime functions that are always available
         vector[string] builtins = ["print", "println", "lv_assert", "fs_read", "fs_write", "fs_exists", "os_exec", "os_args", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs"]
-        for name in builtins:
+        for ref name in builtins:
             this.known_func_names.push(name)
             this.known_func_return_types.push(TypeNode::Auto())
             vector[Param] empty_params = []
@@ -360,10 +360,10 @@ class Checker:
         this.register_builtins()
         // Pass 1: collect top-level declarations
         this.push_scope()
-        for s in stmts:
+        for ref s in stmts:
             this.collect_decl(s)
         // Pass 2: check everything
-        for s in stmts:
+        for ref s in stmts:
             this.check_stmt(s)
         this.pop_scope()
 
@@ -385,7 +385,7 @@ class Checker:
                 this.known_class_names.push(name.lexeme)
                 this.known_class_bodies.push(body)
             Namespace(name, body, visibility):
-                for ns_stmt in body:
+                for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
             _:
                 pass
@@ -431,7 +431,7 @@ class Checker:
             While(condition, body):
                 this.check_expr(condition)
                 this.check_stmt(body)
-            For(item_name, collection, body):
+            For(item_name, collection, body, is_ref, is_mut):
                 this.check_expr(collection)
                 this.push_scope()
                 // Infer item type from collection
@@ -442,12 +442,12 @@ class Checker:
                         item_type = inner
                     _:
                         pass
-                this.declare(item_name.lexeme, item_type, "var", false, true, item_name)
+                this.declare(item_name.lexeme, item_type, "var", is_ref, is_mut or not is_ref, item_name)
                 this.check_stmt(body)
                 this.pop_scope()
             Block(statements):
                 this.push_scope()
-                for st in statements:
+                for ref st in statements:
                     this.check_stmt(st)
                 this.pop_scope()
             Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility):
@@ -472,9 +472,9 @@ class Checker:
                 this.pop_scope()
             Namespace(name, body, visibility):
                 this.push_scope()
-                for ns_stmt in body:
+                for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
-                for ns_stmt in body:
+                for ref ns_stmt in body:
                     this.check_stmt(ns_stmt)
                 this.pop_scope()
             Import(path, alias):
@@ -492,9 +492,9 @@ class Checker:
         auto saved_return = this.current_return_type
         this.current_return_type = return_type
         this.push_scope()
-        for p in params:
+        for ref p in params:
             this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
-        for s in body:
+        for ref s in body:
             this.check_stmt(s)
         this.pop_scope()
         this.current_return_type = saved_return
@@ -507,7 +507,7 @@ class Checker:
         this.push_scope()
         // Declare 'this'
         this.declare("this", TypeNode::Custom(name.lexeme), "var", false, false, name)
-        for s in body:
+        for ref s in body:
             match s:
                 Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility):
                     this.check_function(fname, params, return_type, fbody)
@@ -540,7 +540,7 @@ class Checker:
                 this.check_expr(inner)
             Call(callee, paren, args):
                 this.check_expr(callee)
-                for a in args:
+                for ref a in args:
                     this.check_expr(a)
                 this.check_call_args(callee, args, paren)
             Assign(name, value):
@@ -559,12 +559,12 @@ class Checker:
                 this.check_expr(index)
                 this.check_expr(value)
             Vector(elements):
-                for el in elements:
+                for ref el in elements:
                     this.check_expr(el)
             Map(keys, values):
-                for k in keys:
+                for ref k in keys:
                     this.check_expr(k)
-                for v in values:
+                for ref v in values:
                     this.check_expr(v)
             Get(object, name):
                 this.check_expr(object)
@@ -582,7 +582,7 @@ class Checker:
                 this.check_expr(end)
             Lambda(params, body):
                 this.push_scope()
-                for p in params:
+                for ref p in params:
                     this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
                 this.check_expr(body)
                 this.pop_scope()
@@ -620,7 +620,7 @@ class Checker:
                     pass
             this.push_scope()
             // Declare bindings
-            for b in arm.bindings:
+            for ref b in arm.bindings:
                 this.declare(b, TypeNode::Auto(), "var", false, false, Token(TK_IDENTIFIER, b, 0, 0))
             this.check_stmt(arm_bodies[i])
             this.pop_scope()
@@ -631,6 +631,6 @@ vector[string] fn run_checker(ref vector[Stmt] stmts):
     auto checker = Checker()
     checker.check(stmts)
     // Print warnings
-    for w in checker.warnings:
+    for ref w in checker.warnings:
         print(w)
     return checker.errors

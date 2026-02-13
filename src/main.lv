@@ -16,7 +16,7 @@ class ImportResolver:
         this.resolved_paths = []
 
     bool fn already_resolved(ref string path):
-        for p in this.resolved_paths:
+        for ref p in this.resolved_paths:
             if p == path:
                 return true
         return false
@@ -39,7 +39,7 @@ class ImportResolver:
 
         string result = ""
         vector[string] lines = source.split("\n")
-        for line in lines:
+        for ref line in lines:
             string trimmed = line.trim()
             if trimmed.starts_with("import "):
                 string module_name = trimmed.substring(7, trimmed.len()).trim()
@@ -87,7 +87,7 @@ int fn main():
     scanner.scan_tokens()
     if scanner.errors.len() > 0:
         print("Scanner errors:")
-        for err in scanner.errors:
+        for ref err in scanner.errors:
             print(err)
         return 1
 
@@ -102,7 +102,7 @@ int fn main():
             auto check_errors = run_checker(stmts)
             if check_errors.len() > 0:
                 print("Type check errors:")
-                for cerr in check_errors:
+                for ref cerr in check_errors:
                     print("  " + cerr)
                 return 1
 

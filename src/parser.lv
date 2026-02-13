@@ -50,7 +50,7 @@ class Parser:
         return this.peek().token_type == tk_type
 
     bool fn match_any(vector[string] types):
-        for t in types:
+        for ref t in types:
             if this.check(t):
                 this.advance()
                 return true
@@ -494,6 +494,8 @@ class Parser:
         return Stmt::While(condition, body)
 
     Stmt fn for_statement():
+        bool f_mut = this.match_any([TK_REF_MUT])
+        bool f_ref = f_mut or this.match_any([TK_REF])
         auto item_name = this.consume(TK_IDENTIFIER, "Expect variable name after 'for'.")
         this.consume(TK_IN, "Expect 'in' after variable name.")
         Expr collection = this.expression()
@@ -502,7 +504,7 @@ class Parser:
             collection = Expr::Range(collection, end_expr)
         this.consume(TK_COLON, "Expect ':' after for loop header.")
         Stmt body = Stmt::Block(this.block())
-        return Stmt::For(item_name, collection, body)
+        return Stmt::For(item_name, collection, body, f_ref, f_mut)
 
     Stmt fn return_statement():
         auto keyword = this.previous()
@@ -820,7 +822,7 @@ void fn test_parser():
     vector[Stmt] stmts = parser.parse_program()
 
     print("Parsed statements: " + stmts.len())
-    for stmt in stmts:
+    for ref stmt in stmts:
         match stmt:
             ExprStmt(expr):
                 match expr:
