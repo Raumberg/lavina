@@ -42,7 +42,7 @@ class Parser:
         if this.check(tk_type):
             return this.advance()
         auto t = this.peek()
-        throw message + " Got " + t.token_type + " at " + t.line + ":" + t.col
+        throw "${message} Got ${t.token_type} at ${t.line}:${t.col}"
 
     bool fn check(string tk_type):
         if this.is_at_end():
@@ -192,7 +192,7 @@ class Parser:
             t = TypeNode::Custom(custom_name, type_args)
         else:
             auto tok = this.peek()
-            throw "Expect type. Got " + tok.token_type + " at " + tok.line + ":" + tok.col
+            throw "Expect type. Got ${tok.token_type} at ${tok.line}:${tok.col}"
 
         if this.match_any([TK_QUESTION]):
             t = TypeNode::Nullable(t)
@@ -217,10 +217,10 @@ class Parser:
                     vector[string] ta = []
                     for ref a in type_args:
                         ta.push(this.type_to_string(a))
-                    return name + "<" + ta.join(", ") + ">"
+                    return "${name}<${ta.join(", ")}>"
                 return name
             Array(inner):
-                return "std::vector<" + this.type_to_string(inner) + ">"
+                return "std::vector<${this.type_to_string(inner)}>"
             _:
                 return "auto"
 
@@ -349,7 +349,7 @@ class Parser:
                     if is_type_args:
                         this.consume(TK_RIGHT_BRACKET, "Expect ']'.")
                         if this.check(TK_LEFT_PAREN) or this.check(TK_DOUBLE_COLON):
-                            string new_name = tok.lexeme + "<" + type_strs.join(", ") + ">"
+                            string new_name = "${tok.lexeme}<${type_strs.join(", ")}>"
                             expr = Expr::Variable(Token(TK_IDENTIFIER, new_name, tok.line, tok.col))
                         else:
                             this.current = save_pos
@@ -463,7 +463,23 @@ class Parser:
             return Expr::Map(keys, values)
 
         auto t = this.peek()
-        throw "Expect expression. Got " + t.token_type + " at " + t.line + ":" + t.col
+        throw "Expect expression. Got ${t.token_type} at ${t.line}:${t.col}"
+
+    vector[Param] fn parse_param_list():
+        vector[Param] params = []
+        if not this.check(TK_RIGHT_PAREN):
+            bool p_mut = this.match_any([TK_REF_MUT])
+            bool p_ref = p_mut or this.match_any([TK_REF])
+            TypeNode param_type = this.parse_type()
+            auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+            params.push(Param(param_name, param_type, p_ref, p_mut))
+            while this.match_any([TK_COMMA]):
+                p_mut = this.match_any([TK_REF_MUT])
+                p_ref = p_mut or this.match_any([TK_REF])
+                param_type = this.parse_type()
+                param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+                params.push(Param(param_name, param_type, p_ref, p_mut))
+        return params
 
     // ── Lambda parsing ────────────────────────────────────
 
@@ -506,19 +522,7 @@ class Parser:
 
     Expr fn parse_lambda():
         // Already consumed '('. Parse params and '=>' body.
-        vector[Param] params = []
-        if not this.check(TK_RIGHT_PAREN):
-            bool p_mut = this.match_any([TK_REF_MUT])
-            bool p_ref = p_mut or this.match_any([TK_REF])
-            TypeNode param_type = this.parse_type()
-            auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name in lambda.")
-            params.push(Param(param_name, param_type, p_ref, p_mut))
-            while this.match_any([TK_COMMA]):
-                p_mut = this.match_any([TK_REF_MUT])
-                p_ref = p_mut or this.match_any([TK_REF])
-                param_type = this.parse_type()
-                param_name = this.consume(TK_IDENTIFIER, "Expect parameter name in lambda.")
-                params.push(Param(param_name, param_type, p_ref, p_mut))
+        vector[Param] params = this.parse_param_list()
         this.consume(TK_RIGHT_PAREN, "Expect ')' after lambda parameters.")
         this.consume(TK_FAT_ARROW, "Expect '=>' after lambda parameters.")
         Expr body = this.expression()
@@ -693,19 +697,7 @@ class Parser:
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
 
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
-        vector[Param] params = []
-        if not this.check(TK_RIGHT_PAREN):
-            bool p_mut = this.match_any([TK_REF_MUT])
-            bool p_ref = p_mut or this.match_any([TK_REF])
-            TypeNode param_type = this.parse_type()
-            auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-            params.push(Param(param_name, param_type, p_ref, p_mut))
-            while this.match_any([TK_COMMA]):
-                p_mut = this.match_any([TK_REF_MUT])
-                p_ref = p_mut or this.match_any([TK_REF])
-                param_type = this.parse_type()
-                param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-                params.push(Param(param_name, param_type, p_ref, p_mut))
+        vector[Param] params = this.parse_param_list()
         this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
 
         this.consume(TK_COLON, "Expect ':' before function body.")
@@ -864,20 +856,8 @@ class Parser:
             auto ctor_name = this.peek().lexeme
             if (ctor_name == "constructor" or ctor_name == "destructor") and this.peek_at(1).token_type == TK_LEFT_PAREN:
                 auto name_tok = this.advance()
-                this.consume(TK_LEFT_PAREN, "Expect '(' after " + ctor_name + ".")
-                vector[Param] params = []
-                if not this.check(TK_RIGHT_PAREN):
-                    bool p_mut = this.match_any([TK_REF_MUT])
-                    bool p_ref = p_mut or this.match_any([TK_REF])
-                    TypeNode param_type = this.parse_type()
-                    auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-                    params.push(Param(param_name, param_type, p_ref, p_mut))
-                    while this.match_any([TK_COMMA]):
-                        p_mut = this.match_any([TK_REF_MUT])
-                        p_ref = p_mut or this.match_any([TK_REF])
-                        param_type = this.parse_type()
-                        param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
-                        params.push(Param(param_name, param_type, p_ref, p_mut))
+                this.consume(TK_LEFT_PAREN, "Expect '(' after ${ctor_name}.")
+                vector[Param] params = this.parse_param_list()
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
                 this.consume(TK_COLON, "Expect ':' before body.")
                 vector[Stmt] body = this.block()

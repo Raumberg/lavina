@@ -104,7 +104,7 @@ class Token:
         this.col = col
 
     string fn to_string():
-        return this.token_type + "(" + this.lexeme + ") at " + this.line + ":" + this.col
+        return "${this.token_type}(${this.lexeme}) at ${this.line}:${this.col}"
 
 // ── Keyword lookup ──────────────────────────────────────────────
 
@@ -299,7 +299,7 @@ class Scanner:
         this.add_token(tk_type, lexeme)
 
     void fn add_error(string message):
-        auto err = "Error at line " + this.line + ":" + this.column + ": " + message
+        auto err = "Error at line ${this.line}:${this.column}: ${message}"
         this.errors.push(err)
 
     // ── Indentation handling ────────────────────────────────────
@@ -331,36 +331,6 @@ class Scanner:
     // ── Scan individual tokens ──────────────────────────────────
 
     void fn scan_string():
-        int str_start = this.current
-        while not this.is_at_end() and this.peek() != "\"":
-            if this.peek() == "\\":
-                this.advance()
-                this.advance()
-            elif this.peek() == "$" and this.peek_next() == "{":
-                auto value = this.source.substring(str_start, this.current)
-                this.add_token(TK_STRING, value)
-                this.add_token(TK_PLUS, "+")
-                this.add_token(TK_LEFT_PAREN, "(")
-                this.advance()
-                this.advance()
-                this.in_string_interp = true
-                this.interp_brace_depth = 1
-                return
-            else:
-                if this.peek() == "\n":
-                    this.line += 1
-                    this.column = 1
-                this.advance()
-
-        if this.is_at_end():
-            this.add_error("Unterminated string")
-            return
-
-        auto value = this.source.substring(str_start, this.current)
-        this.advance()
-        this.add_token(TK_STRING, value)
-
-    void fn scan_string_rest():
         int str_start = this.current
         while not this.is_at_end() and this.peek() != "\"":
             if this.peek() == "\\":
@@ -447,7 +417,7 @@ class Scanner:
                     this.in_string_interp = false
                     this.add_token(TK_RIGHT_PAREN, ")")
                     this.add_token(TK_PLUS, "+")
-                    this.scan_string_rest()
+                    this.scan_string()
                     return
             this.add_simple_token(TK_RIGHT_BRACE)
         elif c == ",":
@@ -539,7 +509,7 @@ class Scanner:
         elif is_alpha(c):
             this.scan_identifier()
         else:
-            this.add_error("Unexpected character: " + c)
+            this.add_error("Unexpected character: ${c}")
 
     // ── Main entry point ────────────────────────────────────────
 

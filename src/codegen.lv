@@ -30,7 +30,7 @@ class CppCodegen:
     string fn indent():
         string result = ""
         for i in 0..this.indent_level:
-            result = result + "    "
+            result +="    "
         return result
 
     bool fn is_dynamic_var(ref string name):
@@ -72,6 +72,10 @@ class CppCodegen:
         for ref n in this.known_enum_names:
             if n == name:
                 return true
+        int angle = name.indexOf("<")
+        if angle >= 0:
+            string base = name.substring(0, angle)
+            return this.is_known_enum(base)
         return false
 
     bool fn type_contains_dynamic(ref TypeNode t):
@@ -82,6 +86,14 @@ class CppCodegen:
                 return this.type_contains_dynamic(inner)
             _:
                 return false
+
+    string fn template_prefix(ref vector[string] type_params):
+        if type_params.len() == 0:
+            return ""
+        vector[string] tps = []
+        for ref tp in type_params:
+            tps.push("typename ${tp}")
+        return "${this.indent()}template<${tps.join(", ")}>\n"
 
     // ── Type emission ─────────────────────────────────────────
 
@@ -394,35 +406,35 @@ class CppCodegen:
             None():
                 pass
             ExprStmt(expr):
-                this.output = this.output + "${this.indent()}${this.emit_expr(expr, m)};\n"
+                this.output +="${this.indent()}${this.emit_expr(expr, m)};\n"
             Let(name, var_type, initializer, visibility, is_ref, is_mut):
                 this.emit_let(name, var_type, initializer, m, is_ref, is_mut)
             Const(name, const_type, value, visibility):
                 string cpp_type = this.emit_type(const_type)
                 string val = this.emit_expr(value, m)
-                this.output = this.output + "${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
+                this.output +="${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
             Return(keyword, value):
                 match value:
                     None():
-                        this.output = this.output + "${this.indent()}return;\n"
+                        this.output +="${this.indent()}return;\n"
                     _:
-                        this.output = this.output + "${this.indent()}return ${this.emit_expr(value, m)};\n"
+                        this.output +="${this.indent()}return ${this.emit_expr(value, m)};\n"
             If(condition, then_branch, else_branch):
-                this.output = this.output + "${this.indent()}if (${this.emit_expr(condition, m)}) "
+                this.output +="${this.indent()}if (${this.emit_expr(condition, m)}) "
                 this.emit_block_or_stmt(then_branch, m)
                 match else_branch:
                     None():
                         pass
                     _:
-                        this.output = this.output + "${this.indent()}else "
+                        this.output +="${this.indent()}else "
                         this.emit_block_or_stmt(else_branch, m)
             While(condition, body):
-                this.output = this.output + "${this.indent()}while (${this.emit_expr(condition, m)}) "
+                this.output +="${this.indent()}while (${this.emit_expr(condition, m)}) "
                 this.emit_block_or_stmt(body, m)
             For(item_name, collection, body, is_ref, is_mut):
                 match collection:
                     Range(start, end):
-                        this.output = this.output + "${this.indent()}for (int64_t ${item_name.lexeme} = ${this.emit_expr(start, m)}; ${item_name.lexeme} < ${this.emit_expr(end, m)}; ${item_name.lexeme}++) "
+                        this.output +="${this.indent()}for (int64_t ${item_name.lexeme} = ${this.emit_expr(start, m)}; ${item_name.lexeme} < ${this.emit_expr(end, m)}; ${item_name.lexeme}++) "
                         this.emit_block_or_stmt(body, m)
                     _:
                         match collection:
@@ -436,22 +448,22 @@ class CppCodegen:
                             for_type = "auto&"
                         elif is_ref:
                             for_type = "const auto&"
-                        this.output = this.output + "${this.indent()}for (${for_type} ${item_name.lexeme} : ${this.emit_expr(collection, m)}) "
+                        this.output +="${this.indent()}for (${for_type} ${item_name.lexeme} : ${this.emit_expr(collection, m)}) "
                         this.emit_block_or_stmt(body, m)
             Block(statements):
-                this.output = this.output + "${this.indent()}{\n"
+                this.output +="${this.indent()}{\n"
                 this.indent_level += 1
                 for ref st in statements:
                     this.emit_stmt(st, m)
                 this.indent_level -= 1
-                this.output = this.output + "${this.indent()}}\n"
+                this.output +="${this.indent()}}\n"
             Try(try_body, catch_body, exception_name):
-                this.output = this.output + "${this.indent()}try "
+                this.output +="${this.indent()}try "
                 this.emit_block_or_stmt(try_body, m)
                 string exc_name = "e"
                 if exception_name != "":
                     exc_name = exception_name
-                this.output = this.output + "${this.indent()} catch (const std::exception& ${exc_name}) "
+                this.output +="${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_block_or_stmt(catch_body, m)
             Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
                 this.emit_function(name, params, return_type, body, type_params)
@@ -465,15 +477,15 @@ class CppCodegen:
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match_impl(expr, arm_patterns, arm_bodies, m)
             Namespace(name, body, visibility):
-                this.output = this.output + "${this.indent()}// TODO: unsupported namespace\n"
+                this.output +="${this.indent()}// TODO: unsupported namespace\n"
             Import(path, alias):
-                this.output = this.output + "${this.indent()}// TODO: unsupported import\n"
+                this.output +="${this.indent()}// TODO: unsupported import\n"
             Break(keyword):
-                this.output = this.output + "${this.indent()}break;\n"
+                this.output +="${this.indent()}break;\n"
             Continue(keyword):
-                this.output = this.output + "${this.indent()}continue;\n"
+                this.output +="${this.indent()}continue;\n"
             Pass(keyword):
-                this.output = this.output + "${this.indent()}/* pass */\n"
+                this.output +="${this.indent()}/* pass */\n"
             _:
                 pass
 
@@ -494,39 +506,35 @@ class CppCodegen:
             _:
                 string val = this.emit_expr(initializer, in_method)
                 init_str = " = ${val}"
-        this.output = this.output + "${this.indent()}${const_str}${cpp_type}${ref_str} ${name.lexeme}${init_str};\n"
+        this.output +="${this.indent()}${const_str}${cpp_type}${ref_str} ${name.lexeme}${init_str};\n"
 
     void fn emit_block_or_stmt(ref Stmt s, bool m):
         match s:
             Block(stmts):
-                this.output = this.output + "{\n"
+                this.output +="{\n"
                 this.indent_level += 1
                 for ref st in stmts:
                     this.emit_stmt(st, m)
                 this.indent_level -= 1
-                this.output = this.output + "${this.indent()}}\n"
+                this.output +="${this.indent()}}\n"
             _:
-                this.output = this.output + "{\n"
+                this.output +="{\n"
                 this.indent_level += 1
                 this.emit_stmt(s, m)
                 this.indent_level -= 1
-                this.output = this.output + "${this.indent()}}\n"
+                this.output +="${this.indent()}}\n"
 
     void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params):
         vector[string] saved_dynamic = this.dynamic_vars
-        if type_params.len() > 0:
-            vector[string] tps = []
-            for ref tp in type_params:
-                tps.push("typename ${tp}")
-            this.output = this.output + "${this.indent()}template<${tps.join(", ")}>\n"
+        this.output +=this.template_prefix(type_params)
         string ret_type = this.emit_type(return_type)
         string param_str = this.emit_params(params, true)
-        this.output = this.output + "${this.indent()}${ret_type} ${name.lexeme}(${param_str}) {\n"
+        this.output +="${this.indent()}${ret_type} ${name.lexeme}(${param_str}) {\n"
         this.indent_level += 1
         for ref st in body:
             this.emit_stmt(st, false)
         this.indent_level -= 1
-        this.output = this.output + "${this.indent()}}\n\n"
+        this.output +="${this.indent()}}\n\n"
         this.dynamic_vars = saved_dynamic
 
     // ── Class emission ────────────────────────────────────────
@@ -586,12 +594,7 @@ class CppCodegen:
                     _:
                         pass
 
-        if type_params.len() > 0:
-            vector[string] tps = []
-            for ref tp in type_params:
-                tps.push("typename ${tp}")
-            this.output = this.output + "${this.indent()}template<${tps.join(", ")}>\n"
-        this.output = this.output + "${this.indent()}struct ${name.lexeme} {\n"
+        this.output +="${this.template_prefix(type_params)}${this.indent()}struct ${name.lexeme} {\n"
         this.indent_level += 1
 
         for fi in 0..init_field_names.len():
@@ -600,13 +603,13 @@ class CppCodegen:
                 if lfn == init_field_names[fi]:
                     is_let = true
             if not is_let:
-                this.output = this.output + "${this.indent()}${init_field_types[fi]} ${init_field_names[fi]};\n"
+                this.output +="${this.indent()}${init_field_types[fi]} ${init_field_names[fi]};\n"
 
         for li in 0..let_field_names.len():
-            this.output = this.output + "${this.indent()}${let_field_types[li]} ${let_field_names[li]};\n"
+            this.output +="${this.indent()}${let_field_types[li]} ${let_field_names[li]};\n"
 
         if init_field_names.len() > 0 or let_field_names.len() > 0:
-            this.output = this.output + "\n"
+            this.output +="\n"
 
         if has_init:
             string param_str = this.emit_params(init_params, false)
@@ -637,16 +640,16 @@ class CppCodegen:
                         remaining_body.push(st)
 
             if init_list.len() == 0:
-                this.output = this.output + "${this.indent()}${name.lexeme}(${param_str}) {\n"
+                this.output +="${this.indent()}${name.lexeme}(${param_str}) {\n"
             else:
-                this.output = this.output + "${this.indent()}${name.lexeme}(${param_str})\n"
-                this.output = this.output + "${this.indent()}    : ${init_list.join(", ")} {\n"
+                this.output +="${this.indent()}${name.lexeme}(${param_str})\n"
+                this.output +="${this.indent()}    : ${init_list.join(", ")} {\n"
             vector[string] saved_dyn = this.dynamic_vars
             this.indent_level += 1
             for ref st in remaining_body:
                 this.emit_stmt(st, true)
             this.indent_level -= 1
-            this.output = this.output + "${this.indent()}}\n\n"
+            this.output +="${this.indent()}}\n\n"
             this.dynamic_vars = saved_dyn
 
         for ref m in methods:
@@ -656,20 +659,20 @@ class CppCodegen:
                     string ret_type = this.emit_type(mret)
                     string mparam_str = this.emit_params(mparams, true)
                     if mname.lexeme == "destructor":
-                        this.output = this.output + "${this.indent()}~${name.lexeme}() {\n"
+                        this.output +="${this.indent()}~${name.lexeme}() {\n"
                     else:
-                        this.output = this.output + "${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
+                        this.output +="${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
                     this.indent_level += 1
                     for ref st in mbody:
                         this.emit_stmt(st, true)
                     this.indent_level -= 1
-                    this.output = this.output + "${this.indent()}}\n\n"
+                    this.output +="${this.indent()}}\n\n"
                     this.dynamic_vars = saved_dyn
                 _:
                     pass
 
         this.indent_level -= 1
-        this.output = this.output + "${this.indent()}};\n\n"
+        this.output +="${this.indent()}};\n\n"
 
     string fn infer_expr_type(ref Expr e, ref vector[string] param_names, ref vector[string] param_types):
         match e:
@@ -758,50 +761,48 @@ class CppCodegen:
                     _:
                         pass
 
-        string tmpl_line = ""
+        string tmpl_line = this.template_prefix(type_params)
+        string type_suffix = ""
         if type_params.len() > 0:
-            vector[string] tps = []
-            for ref tp in type_params:
-                tps.push("typename ${tp}")
-            tmpl_line = "${this.indent()}template<${tps.join(", ")}>\n"
+            type_suffix = "<${type_params.join(", ")}>"
 
         if has_self_ref:
-            this.output = this.output + "${tmpl_line}${this.indent()}struct ${enum_name};\n"
+            this.output +="${tmpl_line}${this.indent()}struct ${enum_name};\n"
 
-        this.output = this.output + "${tmpl_line}${this.indent()}struct ${enum_name} {\n"
+        this.output +="${tmpl_line}${this.indent()}struct ${enum_name} {\n"
         this.indent_level += 1
 
         for ref v in variants:
             if v.types.len() > 0:
-                this.output = this.output + "${this.indent()}struct ${v.name.lexeme} { "
+                this.output +="${this.indent()}struct ${v.name.lexeme} { "
                 for fi in 0..v.types.len():
                     string cpp_type = this.emit_type(v.types[fi])
                     string fname = v.field_names[fi]
                     match v.types[fi]:
                         Custom(n, _):
                             if n == enum_name:
-                                cpp_type = "std::shared_ptr<${enum_name}>"
+                                cpp_type = "std::shared_ptr<${enum_name}${type_suffix}>"
                         _:
                             pass
-                    this.output = this.output + "${cpp_type} ${fname}; "
-                this.output = this.output + "};\n"
+                    this.output +="${cpp_type} ${fname}; "
+                this.output +="};\n"
             else:
-                this.output = this.output + "${this.indent()}struct ${v.name.lexeme} {};\n"
-        this.output = this.output + "\n"
+                this.output +="${this.indent()}struct ${v.name.lexeme} {};\n"
+        this.output +="\n"
 
-        this.output = this.output + "${this.indent()}std::string _tag;\n"
+        this.output +="${this.indent()}std::string _tag;\n"
 
         vector[string] variant_inner_types = []
         for ref v in variants:
             variant_inner_types.push("${enum_name}::${v.name.lexeme}")
 
-        this.output = this.output + "${this.indent()}std::variant<${variant_inner_types.join(", ")}> _data;\n"
-        this.output = this.output + "\n"
+        this.output +="${this.indent()}std::variant<${variant_inner_types.join(", ")}> _data;\n"
+        this.output +="\n"
 
         for ref v in variants:
             string vname = v.name.lexeme
             if v.types.len() == 0:
-                this.output = this.output + "${this.indent()}static ${enum_name} make_${vname}() { return {\"${vname}\", ${vname}{}}; }\n"
+                this.output +="${this.indent()}static ${enum_name} make_${vname}() { return {\"${vname}\", ${vname}{}}; }\n"
             else:
                 vector[string] params = []
                 vector[string] field_inits = []
@@ -816,37 +817,27 @@ class CppCodegen:
                         _:
                             pass
                     if is_self_ref:
-                        params.push("${enum_name} ${fname}")
-                        field_inits.push("std::make_shared<${enum_name}>(std::move(${fname}))")
+                        params.push("${enum_name}${type_suffix} ${fname}")
+                        field_inits.push("std::make_shared<${enum_name}${type_suffix}>(std::move(${fname}))")
                     else:
                         params.push("${cpp_type} ${fname}")
                         field_inits.push(fname)
-                this.output = this.output + "${this.indent()}static ${enum_name} make_${vname}(${params.join(", ")}) { return {\"${vname}\", ${vname}{${field_inits.join(", ")}}}; }\n"
-        this.output = this.output + "\n"
+                this.output +="${this.indent()}static ${enum_name} make_${vname}(${params.join(", ")}) { return {\"${vname}\", ${vname}{${field_inits.join(", ")}}}; }\n"
+        this.output +="\n"
 
-        this.output = this.output + "${this.indent()}std::string operator[](const std::string& key) const {\n"
+        this.output +="${this.indent()}std::string operator[](const std::string& key) const {\n"
         this.indent_level += 1
-        this.output = this.output + "${this.indent()}if (key == \"_tag\") return _tag;\n"
-        this.output = this.output + "${this.indent()}return \"\";\n"
+        this.output +="${this.indent()}if (key == \"_tag\") return _tag;\n"
+        this.output +="${this.indent()}return \"\";\n"
         this.indent_level -= 1
-        this.output = this.output + "${this.indent()}}\n"
+        this.output +="${this.indent()}}\n"
 
         this.indent_level -= 1
-        this.output = this.output + "${this.indent()}};\n\n"
+        this.output +="${this.indent()}};\n\n"
 
-        if type_params.len() > 0:
-            vector[string] tps2 = []
-            for ref tp in type_params:
-                tps2.push("typename ${tp}")
-            string tmpl2 = "template<${tps2.join(", ")}>\n"
-            string targs = "<${type_params.join(", ")}>"
-            this.output = this.output + "${tmpl2}void print(const ${enum_name}${targs}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
-            this.output = this.output + "${tmpl2}std::string operator+(const std::string& s, const ${enum_name}${targs}& e) { return s + e._tag; }\n"
-            this.output = this.output + "${tmpl2}std::string operator+(const ${enum_name}${targs}& e, const std::string& s) { return e._tag + s; }\n\n"
-        else:
-            this.output = this.output + "void print(const ${enum_name}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
-            this.output = this.output + "std::string operator+(const std::string& s, const ${enum_name}& e) { return s + e._tag; }\n"
-            this.output = this.output + "std::string operator+(const ${enum_name}& e, const std::string& s) { return e._tag + s; }\n\n"
+        this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
+        this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e._tag; }\n"
+        this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e._tag + s; }\n\n"
 
     // ── Match emission ────────────────────────────────────────
 
@@ -855,9 +846,9 @@ class CppCodegen:
         string temp = "_match_${this.temp_counter}"
         this.temp_counter += 1
 
-        this.output = this.output + "${this.indent()}{\n"
+        this.output +="${this.indent()}{\n"
         this.indent_level += 1
-        this.output = this.output + "${this.indent()}const auto& ${temp} = ${match_val};\n"
+        this.output +="${this.indent()}const auto& ${temp} = ${match_val};\n"
 
         bool first = true
         for ai in 0..arm_patterns.len():
@@ -865,13 +856,13 @@ class CppCodegen:
             Stmt arm_body = arm_bodies[ai]
             if arm.pattern_name == "_":
                 if first:
-                    this.output = this.output + "${this.indent()}{\n"
+                    this.output +="${this.indent()}{\n"
                 else:
-                    this.output = this.output + "${this.indent()}else {\n"
+                    this.output +="${this.indent()}else {\n"
                 this.indent_level += 1
                 this.emit_arm_body(arm_body, in_method)
                 this.indent_level -= 1
-                this.output = this.output + "${this.indent()}}\n"
+                this.output +="${this.indent()}}\n"
             else:
                 string keyword = "if"
                 if not first:
@@ -879,14 +870,14 @@ class CppCodegen:
                 first = false
                 string ename = this.find_enum_for_variant(arm.pattern_name)
                 if ename != "":
-                    this.output = this.output + "${this.indent()}${keyword} (std::holds_alternative<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data)) {\n"
+                    this.output +="${this.indent()}${keyword} (std::holds_alternative<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data)) {\n"
                 else:
-                    this.output = this.output + "${this.indent()}${keyword} (${temp}._tag == \"${arm.pattern_name}\") {\n"
+                    this.output +="${this.indent()}${keyword} (${temp}._tag == \"${arm.pattern_name}\") {\n"
                 this.indent_level += 1
 
                 if arm.bindings.len() > 0:
                     if ename != "":
-                        this.output = this.output + "${this.indent()}auto& _v = std::get<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data);\n"
+                        this.output +="${this.indent()}auto& _v = std::get<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data);\n"
                         auto vinfo = this.get_variant_info(ename, arm.pattern_name)
                         for bi in 0..arm.bindings.len():
                             if bi < vinfo.field_names.len():
@@ -900,16 +891,16 @@ class CppCodegen:
                                         _:
                                             pass
                                 if is_self_ref:
-                                    this.output = this.output + "${this.indent()}auto& ${arm.bindings[bi]} = *_v.${field_name};\n"
+                                    this.output +="${this.indent()}auto& ${arm.bindings[bi]} = *_v.${field_name};\n"
                                 else:
-                                    this.output = this.output + "${this.indent()}auto& ${arm.bindings[bi]} = _v.${field_name};\n"
+                                    this.output +="${this.indent()}auto& ${arm.bindings[bi]} = _v.${field_name};\n"
 
                 this.emit_arm_body(arm_body, in_method)
                 this.indent_level -= 1
-                this.output = this.output + "${this.indent()}}\n"
+                this.output +="${this.indent()}}\n"
 
         this.indent_level -= 1
-        this.output = this.output + "${this.indent()}}\n"
+        this.output +="${this.indent()}}\n"
 
     void fn emit_arm_body(ref Stmt arm_body, bool in_method):
         match arm_body:
@@ -929,22 +920,22 @@ class CppCodegen:
                 Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
                     if name.lexeme == "main":
                         this.has_main = true
-                        this.output = this.output + "int main(int argc, char* argv[]) {\n"
-                        this.output = this.output + "    for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);\n"
+                        this.output +="int main(int argc, char* argv[]) {\n"
+                        this.output +="    for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);\n"
                         this.indent_level = 1
                         for ref s in body:
                             this.emit_stmt(s, false)
                         this.indent_level = 0
-                        this.output = this.output + "}\n"
-                        this.declarations = this.declarations + this.output
+                        this.output +="}\n"
+                        this.declarations +=this.output
                         this.output = ""
                     else:
                         this.emit_stmt(stmt, false)
-                        this.declarations = this.declarations + this.output
+                        this.declarations +=this.output
                         this.output = ""
                 _:
                     this.emit_stmt(stmt, false)
-                    this.declarations = this.declarations + this.output
+                    this.declarations +=this.output
                     this.output = ""
 
         return this.declarations

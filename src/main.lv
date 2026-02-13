@@ -43,13 +43,21 @@ class ImportResolver:
             string trimmed = line.trim()
             if trimmed.starts_with("import "):
                 string module_name = trimmed.substring(7, trimmed.len()).trim()
-                string module_path = dir + module_name + ".lv"
+                string module_path = "${dir}${module_name}.lv"
                 string resolved = this.resolve(module_path)
                 if resolved != "":
-                    result = result + resolved + "\n"
+                    result +=resolved + "\n"
             else:
-                result = result + line + "\n"
+                result +=line + "\n"
         return result
+
+// ── Helpers ──────────────────────────────────────────────────
+
+void fn cleanup(ref string cpp_path, ref string header_path, ref string liblavina_path, bool wrote_header):
+    os_exec("rm -f ${cpp_path}")
+    if wrote_header:
+        os_exec("rm -f ${header_path}")
+        os_exec("rm -rf ${liblavina_path}")
 
 // ── Main entry point ─────────────────────────────────────────
 
@@ -103,14 +111,14 @@ int fn main():
             if check_errors.len() > 0:
                 print("Type check errors:")
                 for ref cerr in check_errors:
-                    print("  " + cerr)
+                    print("  ${cerr}")
                 return 1
 
         auto codegen = CppCodegen()
         cpp = codegen.generate(stmts)
         has_main = codegen.has_main
     catch err:
-        print("Error: " + err.what())
+        print("Error: ${err.what()}")
         return 1
 
     if mode == "emit-cpp":
@@ -132,48 +140,39 @@ int fn main():
     if base.ends_with(".lv"):
         base = base.substring(0, base.len() - 3)
 
-    string cpp_path = dir + base + ".cpp"
-    string bin_path = dir + base
-    string header_path = dir + "lavina.h"
+    string cpp_path = "${dir}${base}.cpp"
+    string bin_path = "${dir}${base}"
+    string header_path = "${dir}lavina.h"
 
     fs_write(cpp_path, cpp)
 
     bool wrote_header = false
-    string liblavina_path = dir + "liblavina"
+    string liblavina_path = "${dir}liblavina"
     if not fs_exists(header_path):
         try:
             string header_content = fs_read("runtime/lavina.h")
             fs_write(header_path, header_content)
-            os_exec("cp -r runtime/liblavina " + liblavina_path)
+            os_exec("cp -r runtime/liblavina ${liblavina_path}")
             wrote_header = true
         catch:
             print("Warning: could not find runtime/lavina.h")
 
-    string compile_cmd = "g++ -std=c++23 -o " + bin_path + " " + cpp_path
+    string compile_cmd = "g++ -std=c++23 -o ${bin_path} ${cpp_path}"
     int compile_result = os_exec(compile_cmd)
     if compile_result != 0:
         print("Compilation failed")
-        os_exec("rm -f " + cpp_path)
-        if wrote_header:
-            os_exec("rm -f " + header_path)
-            os_exec("rm -rf " + liblavina_path)
+        cleanup(cpp_path, header_path, liblavina_path, wrote_header)
         return 1
 
     if mode == "compile":
-        os_exec("rm -f " + cpp_path)
-        if wrote_header:
-            os_exec("rm -f " + header_path)
-            os_exec("rm -rf " + liblavina_path)
-        print("Compiled: " + bin_path)
+        cleanup(cpp_path, header_path, liblavina_path, wrote_header)
+        print("Compiled: ${bin_path}")
         return 0
 
     int run_result = os_exec(bin_path)
 
-    os_exec("rm -f " + cpp_path)
-    os_exec("rm -f " + bin_path)
-    if wrote_header:
-        os_exec("rm -f " + header_path)
-        os_exec("rm -rf " + liblavina_path)
+    cleanup(cpp_path, header_path, liblavina_path, wrote_header)
+    os_exec("rm -f ${bin_path}")
 
     if run_result != 0:
         return 1

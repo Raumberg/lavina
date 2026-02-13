@@ -56,6 +56,10 @@ enum Result[T, E]:
     Ok(T val)
     Err(E err)
 
+enum Tree[T]:
+    Leaf(T val)
+    Node(Tree left, T val, Tree right)
+
 // ── Functions using generic structs ────────────────────────
 
 T fn unwrap[T](Wrapper[T] w):
@@ -197,27 +201,40 @@ void fn main():
     lv_assert(box_s.get() == "world", "box set string")
 
     // 18. Generic enum Option[T]
-    Option[int] some_val = Option[int]::make_Some(42)
+    Option[int] some_val = Option[int]::Some(42)
     lv_assert(some_val._tag == "Some", "option some tag")
     lv_assert(describe_option(some_val) == "Some(42)", "option some describe")
 
-    Option[int] none_val = Option[int]::make_EmptyNone()
+    Option[int] none_val = Option[int]::EmptyNone()
     lv_assert(none_val._tag == "EmptyNone", "option none tag")
     lv_assert(describe_option(none_val) == "None", "option none describe")
 
     // 19. Generic enum Result[T, E]
-    Result[int, string] ok_val = Result[int, string]::make_Ok(100)
+    Result[int, string] ok_val = Result[int, string]::Ok(100)
     lv_assert(describe_result(ok_val) == "Ok(100)", "result ok describe")
 
-    Result[int, string] err_val = Result[int, string]::make_Err("not found")
+    Result[int, string] err_val = Result[int, string]::Err("not found")
     lv_assert(describe_result(err_val) == "Err(not found)", "result err describe")
 
     // 20. Generic enum with different type instantiations
-    Option[string] some_str = Option[string]::make_Some("hi")
+    Option[string] some_str = Option[string]::Some("hi")
     match some_str:
         Some(v):
             lv_assert(v == "hi", "option string some match")
         EmptyNone():
             lv_assert(false, "should not be none")
+
+    // 21. Self-referential generic enum
+    Tree[int] leaf1 = Tree[int]::Leaf(1)
+    Tree[int] leaf2 = Tree[int]::Leaf(3)
+    Tree[int] tree = Tree[int]::Node(leaf1, 2, leaf2)
+    lv_assert(tree._tag == "Node", "tree node tag")
+    match tree:
+        Node(l, v, r):
+            lv_assert(v == 2, "tree node val")
+            lv_assert(l._tag == "Leaf", "tree left is leaf")
+            lv_assert(r._tag == "Leaf", "tree right is leaf")
+        _:
+            lv_assert(false, "should be node")
 
     print("All generics tests passed!")
