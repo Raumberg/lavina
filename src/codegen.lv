@@ -611,8 +611,8 @@ class CppCodegen:
                 this.emit_class(name, body, empty_tp)
             Struct(name, body, visibility, type_params):
                 this.emit_class(name, body, type_params)
-            Enum(name, variants, visibility, type_params):
-                this.emit_enum(name, variants, type_params)
+            Enum(name, variants, methods, visibility, type_params):
+                this.emit_enum(name, variants, methods, type_params)
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match_impl(expr, arm_patterns, arm_bodies, m)
             Namespace(name, body, visibility):
@@ -778,6 +778,8 @@ class CppCodegen:
                 string mparam_str = this.emit_params(mparams, true)
                 if mname.lexeme == "destructor":
                     this.output +="${this.indent()}~${class_name.lexeme}() {\n"
+                elif mname.lexeme == "to_string":
+                    this.output +="${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) const {\n"
                 else:
                     this.output +="${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
                 this.indent_level += 1
@@ -853,6 +855,25 @@ class CppCodegen:
             this.emit_class_method(name, m)
         this.indent_level -= 1
         this.output +="${this.indent()}};\n\n"
+
+        // Auto-generate print/concat if to_string method exists
+        bool has_to_string = false
+        for ref m in methods:
+            match m:
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
+                    if mname.lexeme == "to_string":
+                        has_to_string = true
+                _:
+                    pass
+        if has_to_string:
+            string tmpl_line = this.template_prefix(type_params)
+            string type_suffix = ""
+            if type_params.len() > 0:
+                type_suffix = "<${type_params.join(", ")}>"
+            string full_name = "${name.lexeme}${type_suffix}"
+            this.output +="${tmpl_line}${this.indent()}void print(const ${full_name}& _v) { std::cout << _v.to_string() << std::endl; }\n"
+            this.output +="${tmpl_line}${this.indent()}std::string operator+(const std::string& _s, const ${full_name}& _v) { return _s + _v.to_string(); }\n"
+            this.output +="${tmpl_line}${this.indent()}std::string operator+(const ${full_name}& _v, const std::string& _s) { return _v.to_string() + _s; }\n\n"
 
     string fn infer_expr_type(ref Expr e, ref vector[string] param_names, ref vector[string] param_types):
         match e:
@@ -978,7 +999,7 @@ class CppCodegen:
                 this.output +="${this.indent()}static ${enum_name} make_${vname}(${params.join(", ")}) { return {\"${vname}\", ${vname}{${field_inits.join(", ")}}}; }\n"
         this.output +="\n"
 
-    void fn emit_enum_operators(ref string enum_name, ref string type_suffix, ref string tmpl_line):
+    void fn emit_enum_operators(ref string enum_name, ref string type_suffix, ref string tmpl_line, bool has_to_string):
         this.output +="${this.indent()}std::string operator[](const std::string& key) const {\n"
         this.indent_level += 1
         this.output +="${this.indent()}if (key == \"_tag\") return _tag;\n"
@@ -987,11 +1008,16 @@ class CppCodegen:
         this.output +="${this.indent()}}\n"
         this.indent_level -= 1
         this.output +="${this.indent()}};\n\n"
-        this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
-        this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e._tag; }\n"
-        this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e._tag + s; }\n\n"
+        if has_to_string:
+            this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << e.to_string() << std::endl; }\n"
+            this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e.to_string(); }\n"
+            this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e.to_string() + s; }\n\n"
+        else:
+            this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
+            this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e._tag; }\n"
+            this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e._tag + s; }\n\n"
 
-    void fn emit_enum(ref Token name, ref vector[EnumVariantNode] variants, ref vector[string] type_params):
+    void fn emit_enum(ref Token name, ref vector[EnumVariantNode] variants, ref vector[Stmt] methods, ref vector[string] type_params):
         string enum_name = name.lexeme
         this.known_enums[enum_name] = variants
 
@@ -1017,7 +1043,17 @@ class CppCodegen:
         this.indent_level += 1
         this.emit_enum_structs(enum_name, variants, type_suffix)
         this.emit_enum_makers(enum_name, variants, type_suffix)
-        this.emit_enum_operators(enum_name, type_suffix, tmpl_line)
+        for ref m in methods:
+            this.emit_class_method(name, m)
+        bool has_to_string = false
+        for ref m in methods:
+            match m:
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
+                    if mname.lexeme == "to_string":
+                        has_to_string = true
+                _:
+                    pass
+        this.emit_enum_operators(enum_name, type_suffix, tmpl_line, has_to_string)
 
     // ── Match emission ────────────────────────────────────────
 

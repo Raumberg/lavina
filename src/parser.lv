@@ -152,7 +152,8 @@ class Parser:
                 offset += 1
             else:
                 still_modifiers = false
-        return this.peek_at(offset).token_type == TK_FN
+        auto final_tt = this.peek_at(offset).token_type
+        return final_tt == TK_FN or final_tt == TK_OPERATOR
 
     // ── Type parsing ────────────────────────────────────────
 
@@ -752,8 +753,15 @@ class Parser:
             if this.previous().token_type == TK_COMPTIME:
                 is_comptime = true
 
-        this.consume(TK_FN, "Expect 'fn' keyword after return type.")
-        auto name = this.consume(TK_IDENTIFIER, "Expect function name.")
+        Token name = Token("", "", 0, 0)
+        bool is_operator = false
+        if this.match_any([TK_OPERATOR]):
+            is_operator = true
+            auto op_tok = this.advance()
+            name = Token(TK_IDENTIFIER, "operator${op_tok.lexeme}", op_tok.line, op_tok.col)
+        else:
+            this.consume(TK_FN, "Expect 'fn' keyword after return type.")
+            name = this.consume(TK_IDENTIFIER, "Expect function name.")
 
         vector[string] type_params = []
         if this.match_any([TK_LEFT_BRACKET]):
@@ -808,9 +816,15 @@ class Parser:
         this.consume(TK_INDENT, "Expect indentation to start enum body.")
 
         vector[EnumVariantNode] variants = []
+        vector[Stmt] methods = []
         while not this.check(TK_DEDENT) and not this.is_at_end():
             if this.match_any([TK_NEWLINE]):
                 pass
+            elif this.is_function_start():
+                auto old = this.in_class_body
+                this.in_class_body = true
+                methods.push(this.function_declaration("public", false))
+                this.in_class_body = old
             elif this.check(TK_IDENTIFIER) and this.peek_at(1).token_type == TK_LEFT_PAREN:
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
                 this.consume(TK_LEFT_PAREN, "Expect '(' after variant name.")
@@ -851,7 +865,7 @@ class Parser:
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end enum body.")
-        return Stmt::Enum(name, variants, visibility, type_params)
+        return Stmt::Enum(name, variants, methods, visibility, type_params)
 
     Stmt fn import_statement():
         vector[Token] path = []
@@ -945,7 +959,7 @@ class Parser:
                 next_pos += 1
 
             auto next_token = this.peek_at(next_pos).token_type
-            if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME:
+            if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME or next_token == TK_OPERATOR:
                 if this.is_function_start():
                     return this.function_declaration(visibility, is_static)
                 return this.var_declaration(visibility)

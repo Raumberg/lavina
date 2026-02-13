@@ -94,9 +94,20 @@ test:
 	echo "$$passed passed, $$failed failed"; \
 	if [ $$failed -ne 0 ]; then echo "Failed:$$errors"; exit 1; fi
 
+# ── Build compiler binary from latest stage ─────────────────
+
+build:
+	@if [ -z "$(LATEST_STAGE)" ]; then echo "No stages found in $(STAGES_DIR)/"; exit 1; fi
+	@echo "Building from $(LATEST_STAGE)"
+	@mkdir -p build
+	cp runtime/lavina.h /tmp/lavina.h
+	cp -r runtime/liblavina /tmp/liblavina
+	g++ -std=c++23 -O2 -I/tmp -o build/lavina $(LATEST_STAGE)
+	@echo "Built build/lavina"
+
 clean:
 	rm -f /tmp/lavina_prev /tmp/lavina_next /tmp/lavina_next.cpp /tmp/lavina_verify.cpp
 	rm -f /tmp/lavina.h
 	rm -rf /tmp/liblavina
 
-.PHONY: bootstrap snapshot evolve clean test
+.PHONY: bootstrap snapshot evolve clean test build

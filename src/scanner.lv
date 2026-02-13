@@ -102,6 +102,7 @@ const string TK_CPP = "Cpp"
 const string TK_AMPERSAND = "Ampersand"
 const string TK_EXTERN = "Extern"
 const string TK_LINK = "Link"
+const string TK_OPERATOR = "Operator"
 const string TK_INDENT = "Indent"
 const string TK_DEDENT = "Dedent"
 const string TK_NEWLINE = "Newline"
@@ -240,6 +241,8 @@ string fn lookup_keyword(ref string w):
         return TK_EXTERN
     elif w == "link":
         return TK_LINK
+    elif w == "operator":
+        return TK_OPERATOR
     return ""
 
 // ── Helper functions ────────────────────────────────────────────

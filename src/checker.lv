@@ -448,7 +448,7 @@ class Checker:
                 this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params)
             Class(name, body, visibility):
                 this.known_classes[name.lexeme] = body
-            Enum(name, variants, visibility, enum_tp):
+            Enum(name, variants, methods, visibility, enum_tp):
                 this.known_enums[name.lexeme] = variants
             Const(name, const_type, value, visibility):
                 this.declare(name.lexeme, const_type, "const", false, false, name)
@@ -532,7 +532,7 @@ class Checker:
                 this.check_class(name, body)
             Struct(name, body, visibility, struct_tp):
                 pass
-            Enum(name, variants, visibility, enum_tp):
+            Enum(name, variants, methods, visibility, enum_tp):
                 pass
             Match(expr, arm_patterns, arm_bodies):
                 this.check_expr(expr)
