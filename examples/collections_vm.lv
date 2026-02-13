@@ -1,6 +1,0 @@
-vector[int] my_vec = [1, 2, 3]
-hashmap[string, int] my_map = {"a": 10, "b": 20}
-
-print("Vector is:", my_vec)
-print("Map is:", my_map)
-print("Vector length:", len(my_vec))

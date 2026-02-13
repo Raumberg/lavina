@@ -1,0 +1,55 @@
+// Example: SQLite3 FFI
+// Compile: lavina --emit-cpp examples/sqlite.lv > /tmp/sqlite_example.cpp
+// Build:   g++ -std=c++23 -I/tmp -o /tmp/sqlite_example /tmp/sqlite_example.cpp -lsqlite3
+// Run:     /tmp/sqlite_example
+
+extern "sqlite3.h" link "sqlite3":
+    type sqlite3
+    int32 fn sqlite3_close(ptr[sqlite3] db) = "sqlite3_close"
+    int32 fn sqlite3_exec(ptr[sqlite3] db, cstring sql, ptr[void] callback, ptr[void] arg, ptr[ptr[int8]] errmsg) = "sqlite3_exec"
+    cstring fn sqlite3_errmsg(ptr[sqlite3] db) = "sqlite3_errmsg"
+
+void fn main():
+    // Open an in-memory database
+    // (sqlite3_open needs &db, so we use a cpp block)
+    ptr[sqlite3] db = null
+    cpp {
+        db = nullptr;
+        sqlite3_open(":memory:", &db);
+    }
+
+    if db == null:
+        print("Failed to open database")
+        exit(1)
+
+    print("SQLite database opened successfully")
+
+    // Create a table
+    // Note: no auto-conversions yet, so we use cpp blocks for C calls
+    // that need null pointers and C strings
+    int32 rc = 0
+    cpp {
+        rc = sqlite3_exec(db, "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, age INTEGER)", nullptr, nullptr, nullptr);
+    }
+    if rc != 0:
+        print("Failed to create table")
+        sqlite3_close(db)
+        exit(1)
+
+    print("Table 'users' created")
+
+    // Insert some rows
+    cpp {
+        rc = sqlite3_exec(db, "INSERT INTO users VALUES (1, 'Alice', 30), (2, 'Bob', 25), (3, 'Charlie', 35)", nullptr, nullptr, nullptr);
+    }
+    if rc != 0:
+        print("Failed to insert data")
+        sqlite3_close(db)
+        exit(1)
+
+    print("Inserted 3 rows")
+
+    // Clean up
+    sqlite3_close(db)
+    print("Database closed")
+    print("Done!")

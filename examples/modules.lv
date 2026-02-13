@@ -1,7 +1,0 @@
-namespace math:
-    int fn add(int a, int b):
-        return a + b
-
-print("Math namespace defined")
-print(math.add(10, 20)) // Это комментарий
-print("this is namespace: ", math)

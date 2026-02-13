@@ -1,8 +1,0 @@
-class Utils:
-    constructor():
-        print("Utils init")
-
-    public static int fn add(int a, int b):
-        return a + b
-
-print("Static call: " + Utils::add(10, 20))

@@ -1,4 +1,0 @@
-import std::io
-
-string name = io::input("What is your name? ")
-io::print("Hello, " + name + "!")

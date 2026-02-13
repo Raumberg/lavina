@@ -1,8 +1,0 @@
-auto args = os_args()
-print("argc: " + args.len())
-
-fs_write("/tmp/lavina_test.txt", "Hello from Lavina!")
-auto content = fs_read("/tmp/lavina_test.txt")
-print(content)
-print(fs_exists("/tmp/lavina_test.txt"))
-print(fs_exists("/tmp/does_not_exist_xyz.txt"))

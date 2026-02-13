@@ -1,11 +1,17 @@
-int x = 10
-if x > 5:
-    int y = 20
-    print("X is big:", x, "Y is:", y)
-else:
-    print("X is small")
+void fn main():
+    int x = 10
 
-int i = 0
-while i < 3:
-    print("Iteration:", i)
-    i = i + 1
+    if x > 5:
+        if x > 8:
+            print("greater than 8")
+        else:
+            print("between 5 and 8")
+    else:
+        print("5 or less")
+
+    int sum = 0
+    int i = 1
+    while i <= 10:
+        sum = sum + i
+        i = i + 1
+    print(sum)

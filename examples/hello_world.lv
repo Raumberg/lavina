@@ -1,8 +1,0 @@
-string fn hello(string argument):
-    string new_string = argument + ", world!"
-    return new_string
-
-void fn main():
-    string mystring = "Hello"
-    auto mynewstring = hello(mystring)
-    print(mynewstring)
