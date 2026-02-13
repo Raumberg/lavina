@@ -25,13 +25,9 @@ class Checker:
     vector[string] errors
     vector[string] warnings
     // Registries
-    vector[string] known_enum_names
-    vector[vector[EnumVariantNode]] known_enum_variants
-    vector[string] known_func_names
-    vector[TypeNode] known_func_return_types
-    vector[vector[Param]] known_func_params
-    vector[string] known_class_names
-    vector[vector[Stmt]] known_class_bodies
+    hashmap[string, vector[EnumVariantNode]] known_enums
+    hashmap[string, ExternFn] known_funcs
+    hashmap[string, vector[Stmt]] known_classes
     // Context
     TypeNode current_return_type
     bool in_class
@@ -41,13 +37,9 @@ class Checker:
         this.scopes = []
         this.errors = []
         this.warnings = []
-        this.known_enum_names = []
-        this.known_enum_variants = []
-        this.known_func_names = []
-        this.known_func_return_types = []
-        this.known_func_params = []
-        this.known_class_names = []
-        this.known_class_bodies = []
+        this.known_enums = {}
+        this.known_funcs = {}
+        this.known_classes = {}
         this.current_return_type = TypeNode::None()
         this.in_class = false
         this.current_class_name = ""
@@ -94,15 +86,12 @@ class Checker:
                     return true
             i -= 1
         // Check top-level: functions, classes, enums
-        for ref n in this.known_func_names:
-            if n == name:
-                return true
-        for ref n in this.known_class_names:
-            if n == name:
-                return true
-        for ref n in this.known_enum_names:
-            if n == name:
-                return true
+        if this.known_funcs.has(name):
+            return true
+        if this.known_classes.has(name):
+            return true
+        if this.known_enums.has(name):
+            return true
         // Check if this is a generic instantiation like "Pair<int64_t, std::string>"
         int angle = name.indexOf("<")
         if angle >= 0:
@@ -389,6 +378,8 @@ class Checker:
                 return TypeNode::Custom(this.current_class_name, [])
             Own(expr):
                 return this.infer_type(expr)
+            AddressOf(expr):
+                return TypeNode::Ptr(this.infer_type(expr))
             _:
                 return TypeNode::Auto()
 
@@ -396,16 +387,14 @@ class Checker:
         match callee:
             Variable(name):
                 // Look up in function registry
-                for i in 0..this.known_func_names.len():
-                    if this.known_func_names[i] == name.lexeme:
-                        return this.known_func_return_types[i]
+                if this.known_funcs.has(name.lexeme):
+                    ExternFn fi = this.known_funcs[name.lexeme]
+                    return fi.return_type
                 // Constructor call — returns the class type
-                for ref n in this.known_class_names:
-                    if n == name.lexeme:
-                        return TypeNode::Custom(name.lexeme, [])
-                for ref n in this.known_enum_names:
-                    if n == name.lexeme:
-                        return TypeNode::Custom(name.lexeme, [])
+                if this.known_classes.has(name.lexeme):
+                    return TypeNode::Custom(name.lexeme, [])
+                if this.known_enums.has(name.lexeme):
+                    return TypeNode::Custom(name.lexeme, [])
                 return TypeNode::Auto()
             Get(object, name):
                 return TypeNode::Auto()
@@ -413,9 +402,8 @@ class Checker:
                 // Enum::Variant
                 match object:
                     Variable(obj_name):
-                        for ref n in this.known_enum_names:
-                            if n == obj_name.lexeme:
-                                return TypeNode::Custom(obj_name.lexeme, [])
+                        if this.known_enums.has(obj_name.lexeme):
+                            return TypeNode::Custom(obj_name.lexeme, [])
                     _:
                         pass
                 return TypeNode::Auto()
@@ -425,11 +413,12 @@ class Checker:
     // ── Enum helpers ───────────────────────────────────────────
 
     string fn find_enum_for_variant(ref string variant_name):
-        for i in 0..this.known_enum_names.len():
-            vector[EnumVariantNode] variants = this.known_enum_variants[i]
+        vector[string] keys = this.known_enums.keys()
+        for ref key in keys:
+            vector[EnumVariantNode] variants = this.known_enums[key]
             for ref v in variants:
                 if v.name.lexeme == variant_name:
-                    return this.known_enum_names[i]
+                    return key
         return ""
 
     // ── Statement checking ─────────────────────────────────────
@@ -437,11 +426,9 @@ class Checker:
     void fn register_builtins():
         // Runtime functions that are always available
         vector[string] builtins = ["print", "println", "lv_assert", "fs_read", "fs_write", "fs_exists", "os_exec", "os_args", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs"]
+        vector[Param] empty_params = []
         for ref name in builtins:
-            this.known_func_names.push(name)
-            this.known_func_return_types.push(TypeNode::Auto())
-            vector[Param] empty_params = []
-            this.known_func_params.push(empty_params)
+            this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params)
         pass
 
     void fn check(ref vector[Stmt] stmts):
@@ -458,32 +445,24 @@ class Checker:
     void fn collect_decl(ref Stmt s):
         match s:
             Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
-                this.known_func_names.push(name.lexeme)
-                this.known_func_return_types.push(return_type)
-                this.known_func_params.push(params)
+                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params)
             Class(name, body, visibility):
-                this.known_class_names.push(name.lexeme)
-                this.known_class_bodies.push(body)
+                this.known_classes[name.lexeme] = body
             Enum(name, variants, visibility, enum_tp):
-                this.known_enum_names.push(name.lexeme)
-                this.known_enum_variants.push(variants)
+                this.known_enums[name.lexeme] = variants
             Const(name, const_type, value, visibility):
                 this.declare(name.lexeme, const_type, "const", false, false, name)
             Struct(name, body, visibility, struct_tp):
-                this.known_class_names.push(name.lexeme)
-                this.known_class_bodies.push(body)
+                this.known_classes[name.lexeme] = body
             Namespace(name, body, visibility):
                 for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
             Extern(header, link_lib, types, functions):
                 for ref et in types:
-                    this.known_class_names.push(et.lavina_name)
                     vector[Stmt] empty_body = []
-                    this.known_class_bodies.push(empty_body)
+                    this.known_classes[et.lavina_name] = empty_body
                 for ref ef in functions:
-                    this.known_func_names.push(ef.name)
-                    this.known_func_return_types.push(ef.return_type)
-                    this.known_func_params.push(ef.params)
+                    this.known_funcs[ef.name] = ef
             _:
                 pass
 
@@ -689,19 +668,20 @@ class Checker:
                 this.pop_scope()
             Own(expr):
                 this.check_expr(expr)
+            AddressOf(expr):
+                this.check_expr(expr)
             _:
                 pass
 
     void fn check_call_args(ref Expr callee, ref vector[Expr] args, ref Token paren):
         match callee:
             Variable(name):
-                for i in 0..this.known_func_names.len():
-                    if this.known_func_names[i] == name.lexeme:
-                        auto expected = this.known_func_params[i]
-                        // Skip arg count check for builtins (registered with 0 params)
-                        if expected.len() > 0 and args.len() != expected.len():
-                            this.error("Function '${name.lexeme}' expects ${expected.len()} args, got ${args.len()}", paren)
-                        return
+                if this.known_funcs.has(name.lexeme):
+                    ExternFn fi = this.known_funcs[name.lexeme]
+                    // Skip arg count check for builtins (registered with 0 params)
+                    if fi.params.len() > 0 and args.len() != fi.params.len():
+                        this.error("Function '${name.lexeme}' expects ${fi.params.len()} args, got ${args.len()}", paren)
+                    return
             _:
                 pass
 

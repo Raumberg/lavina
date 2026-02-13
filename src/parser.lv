@@ -138,7 +138,7 @@ class Parser:
                 return try_pos + 1
         return pos + 1
 
-    bool fn check_function_start():
+    bool fn is_function_start():
         int offset = 0
         if not this.is_type_at_pos(offset):
             return false
@@ -946,7 +946,7 @@ class Parser:
 
             auto next_token = this.peek_at(next_pos).token_type
             if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME:
-                if this.check_function_start():
+                if this.is_function_start():
                     return this.function_declaration(visibility, is_static)
                 return this.var_declaration(visibility)
 

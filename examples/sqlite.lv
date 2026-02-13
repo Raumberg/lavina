@@ -4,7 +4,7 @@
 // Run:     /tmp/sqlite_example
 
 extern "sqlite3.h" link "sqlite3":
-    type sqlite3
+    type sqlite3 // declare type from sqlite3.h
     int32 fn sqlite3_open(cstring filename, ptr[ptr[sqlite3]] db_out) = "sqlite3_open"
     int32 fn sqlite3_close(ptr[sqlite3] db) = "sqlite3_close"
     int32 fn sqlite3_exec(ptr[sqlite3] db, cstring sql, ptr[void] callback, ptr[void] arg, ptr[ptr[int8]] errmsg) = "sqlite3_exec"
