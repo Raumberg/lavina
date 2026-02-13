@@ -505,6 +505,8 @@ class CppCodegen:
         elif method == "ends_with":
             return "${obj}.ends_with(${args.join(", ")})"
         elif method == "indexOf":
+            if args.len() >= 2:
+                return "lv_index_of(${obj}, ${args[0]}, ${args[1]})"
             return "lv_index_of(${obj}, ${args.join(", ")})"
         elif method == "charAt":
             return "std::string(1, ${obj}[${args.join(", ")}])"
@@ -532,6 +534,20 @@ class CppCodegen:
             return "lv_values(${obj})"
         elif method == "has":
             return "(${obj}.count(${args.join(", ")}) > 0)"
+        elif method == "repeat":
+            return "lv_repeat(${obj}, ${args.join(", ")})"
+        elif method == "pad_left":
+            return "lv_pad_left(${obj}, ${args.join(", ")})"
+        elif method == "pad_right":
+            return "lv_pad_right(${obj}, ${args.join(", ")})"
+        elif method == "sort":
+            return "lv_sort(${obj})"
+        elif method == "unique":
+            return "lv_unique(${obj})"
+        elif method == "slice":
+            return "lv_slice(${obj}, ${args.join(", ")})"
+        elif method == "flatten":
+            return "lv_flatten(${obj})"
         return ""
 
     string fn emit_params(ref vector[Param] params, bool track_dynamic):

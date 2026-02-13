@@ -16,6 +16,9 @@
 #include <fstream>
 #include <algorithm>
 #include <cstdlib>
+#include <chrono>
+#include <thread>
+#include <filesystem>
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
 #endif

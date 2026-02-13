@@ -26,3 +26,22 @@ inline std::string input(const std::string& prompt = "") {
     std::getline(std::cin, line);
     return line;
 }
+
+inline void fs_append(const std::string& path, const std::string& content) {
+    std::ofstream f(path, std::ios::app);
+    if (!f.is_open()) throw std::runtime_error("Cannot append to file: " + path);
+    f << content;
+}
+
+inline std::vector<std::string> fs_read_lines(const std::string& path) {
+    std::ifstream f(path);
+    if (!f.is_open()) throw std::runtime_error("Cannot open file: " + path);
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(f, line)) lines.push_back(line);
+    return lines;
+}
+
+inline bool fs_remove(const std::string& path) {
+    return std::remove(path.c_str()) == 0;
+}
