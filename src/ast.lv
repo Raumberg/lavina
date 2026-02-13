@@ -83,7 +83,7 @@ enum Stmt:
     Function(Token name, vector[Param] params, TypeNode return_type, vector[Stmt] body, bool is_inline, bool is_comptime, bool is_static, string visibility, vector[string] type_params)
     Class(Token name, vector[Stmt] body, string visibility)
     Struct(Token name, vector[Stmt] body, string visibility, vector[string] type_params)
-    Enum(Token name, vector[EnumVariantNode] variants, string visibility)
+    Enum(Token name, vector[EnumVariantNode] variants, string visibility, vector[string] type_params)
     Match(Expr expr, vector[MatchArm] arm_patterns, vector[Stmt] arm_bodies)
     Namespace(Token name, vector[Stmt] body, string visibility)
     Import(vector[Token] path, string alias)

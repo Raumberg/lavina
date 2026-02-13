@@ -26,6 +26,36 @@ struct Triple[A, B, C]:
     B y
     C z
 
+// ── Struct with methods ──────────────────────────────────
+
+struct Box[T]:
+    T value
+
+    T fn get():
+        return this.value
+
+    void fn set(T v):
+        this.value = v
+
+struct Counter:
+    int count
+
+    void fn increment():
+        this.count += 1
+
+    int fn get_count():
+        return this.count
+
+// ── Generic enums ────────────────────────────────────────
+
+enum Option[T]:
+    Some(T val)
+    EmptyNone
+
+enum Result[T, E]:
+    Ok(T val)
+    Err(E err)
+
 // ── Functions using generic structs ────────────────────────
 
 T fn unwrap[T](Wrapper[T] w):
@@ -33,6 +63,22 @@ T fn unwrap[T](Wrapper[T] w):
 
 Pair[U, T] fn swap_pair[T, U](Pair[T, U] p):
     return Pair[U, T](p.second, p.first)
+
+string fn describe_option(ref Option[int] opt):
+    match opt:
+        Some(v):
+            return "Some(" + to_string(v) + ")"
+        EmptyNone():
+            return "None"
+    return "unreachable"
+
+string fn describe_result(ref Result[int, string] res):
+    match res:
+        Ok(v):
+            return "Ok(" + to_string(v) + ")"
+        Err(e):
+            return "Err(" + e + ")"
+    return "unreachable"
 
 // ── Tests ──────────────────────────────────────────────────
 
@@ -131,5 +177,47 @@ void fn main():
     // 15. Wrapper of wrapper
     Wrapper[Wrapper[int]] ww = Wrapper[Wrapper[int]](Wrapper[int](7))
     lv_assert(ww.value.value == 7, "wrapper of wrapper")
+
+    // 16. Struct methods (non-generic)
+    auto c = Counter(0)
+    c.increment()
+    c.increment()
+    c.increment()
+    lv_assert(c.get_count() == 3, "counter methods")
+
+    // 17. Generic struct methods
+    auto box_i = Box[int](10)
+    lv_assert(box_i.get() == 10, "box get int")
+    box_i.set(20)
+    lv_assert(box_i.get() == 20, "box set int")
+
+    auto box_s = Box[string]("hello")
+    lv_assert(box_s.get() == "hello", "box get string")
+    box_s.set("world")
+    lv_assert(box_s.get() == "world", "box set string")
+
+    // 18. Generic enum Option[T]
+    Option[int] some_val = Option[int]::make_Some(42)
+    lv_assert(some_val._tag == "Some", "option some tag")
+    lv_assert(describe_option(some_val) == "Some(42)", "option some describe")
+
+    Option[int] none_val = Option[int]::make_EmptyNone()
+    lv_assert(none_val._tag == "EmptyNone", "option none tag")
+    lv_assert(describe_option(none_val) == "None", "option none describe")
+
+    // 19. Generic enum Result[T, E]
+    Result[int, string] ok_val = Result[int, string]::make_Ok(100)
+    lv_assert(describe_result(ok_val) == "Ok(100)", "result ok describe")
+
+    Result[int, string] err_val = Result[int, string]::make_Err("not found")
+    lv_assert(describe_result(err_val) == "Err(not found)", "result err describe")
+
+    // 20. Generic enum with different type instantiations
+    Option[string] some_str = Option[string]::make_Some("hi")
+    match some_str:
+        Some(v):
+            lv_assert(v == "hi", "option string some match")
+        EmptyNone():
+            lv_assert(false, "should not be none")
 
     print("All generics tests passed!")

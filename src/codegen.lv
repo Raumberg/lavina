@@ -460,8 +460,8 @@ class CppCodegen:
                 this.emit_class(name, body, empty_tp)
             Struct(name, body, visibility, type_params):
                 this.emit_class(name, body, type_params)
-            Enum(name, variants, visibility):
-                this.emit_enum(name, variants)
+            Enum(name, variants, visibility, type_params):
+                this.emit_enum(name, variants, type_params)
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match_impl(expr, arm_patterns, arm_bodies, m)
             Namespace(name, body, visibility):
@@ -743,7 +743,7 @@ class CppCodegen:
 
     // ── Enum emission ─────────────────────────────────────────
 
-    void fn emit_enum(ref Token name, ref vector[EnumVariantNode] variants):
+    void fn emit_enum(ref Token name, ref vector[EnumVariantNode] variants, ref vector[string] type_params):
         string enum_name = name.lexeme
         this.known_enum_names.push(enum_name)
         this.known_enum_variants.push(variants)
@@ -758,10 +758,17 @@ class CppCodegen:
                     _:
                         pass
 
-        if has_self_ref:
-            this.output = this.output + "${this.indent()}struct ${enum_name};\n"
+        string tmpl_line = ""
+        if type_params.len() > 0:
+            vector[string] tps = []
+            for ref tp in type_params:
+                tps.push("typename ${tp}")
+            tmpl_line = "${this.indent()}template<${tps.join(", ")}>\n"
 
-        this.output = this.output + "${this.indent()}struct ${enum_name} {\n"
+        if has_self_ref:
+            this.output = this.output + "${tmpl_line}${this.indent()}struct ${enum_name};\n"
+
+        this.output = this.output + "${tmpl_line}${this.indent()}struct ${enum_name} {\n"
         this.indent_level += 1
 
         for ref v in variants:
@@ -827,9 +834,19 @@ class CppCodegen:
         this.indent_level -= 1
         this.output = this.output + "${this.indent()}};\n\n"
 
-        this.output = this.output + "void print(const ${enum_name}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
-        this.output = this.output + "std::string operator+(const std::string& s, const ${enum_name}& e) { return s + e._tag; }\n"
-        this.output = this.output + "std::string operator+(const ${enum_name}& e, const std::string& s) { return e._tag + s; }\n\n"
+        if type_params.len() > 0:
+            vector[string] tps2 = []
+            for ref tp in type_params:
+                tps2.push("typename ${tp}")
+            string tmpl2 = "template<${tps2.join(", ")}>\n"
+            string targs = "<${type_params.join(", ")}>"
+            this.output = this.output + "${tmpl2}void print(const ${enum_name}${targs}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
+            this.output = this.output + "${tmpl2}std::string operator+(const std::string& s, const ${enum_name}${targs}& e) { return s + e._tag; }\n"
+            this.output = this.output + "${tmpl2}std::string operator+(const ${enum_name}${targs}& e, const std::string& s) { return e._tag + s; }\n\n"
+        else:
+            this.output = this.output + "void print(const ${enum_name}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
+            this.output = this.output + "std::string operator+(const std::string& s, const ${enum_name}& e) { return s + e._tag; }\n"
+            this.output = this.output + "std::string operator+(const ${enum_name}& e, const std::string& s) { return e._tag + s; }\n\n"
 
     // ── Match emission ────────────────────────────────────────
 
@@ -862,14 +879,14 @@ class CppCodegen:
                 first = false
                 string ename = this.find_enum_for_variant(arm.pattern_name)
                 if ename != "":
-                    this.output = this.output + "${this.indent()}${keyword} (std::holds_alternative<${ename}::${arm.pattern_name}>(${temp}._data)) {\n"
+                    this.output = this.output + "${this.indent()}${keyword} (std::holds_alternative<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data)) {\n"
                 else:
                     this.output = this.output + "${this.indent()}${keyword} (${temp}._tag == \"${arm.pattern_name}\") {\n"
                 this.indent_level += 1
 
                 if arm.bindings.len() > 0:
                     if ename != "":
-                        this.output = this.output + "${this.indent()}auto& _v = std::get<${ename}::${arm.pattern_name}>(${temp}._data);\n"
+                        this.output = this.output + "${this.indent()}auto& _v = std::get<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data);\n"
                         auto vinfo = this.get_variant_info(ename, arm.pattern_name)
                         for bi in 0..arm.bindings.len():
                             if bi < vinfo.field_names.len():

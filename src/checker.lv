@@ -381,7 +381,7 @@ class Checker:
             Class(name, body, visibility):
                 this.known_class_names.push(name.lexeme)
                 this.known_class_bodies.push(body)
-            Enum(name, variants, visibility):
+            Enum(name, variants, visibility, enum_tp):
                 this.known_enum_names.push(name.lexeme)
                 this.known_enum_variants.push(variants)
             Const(name, const_type, value, visibility):
@@ -461,7 +461,7 @@ class Checker:
                 this.check_class(name, body)
             Struct(name, body, visibility, struct_tp):
                 pass
-            Enum(name, variants, visibility):
+            Enum(name, variants, visibility, enum_tp):
                 pass
             Match(expr, arm_patterns, arm_bodies):
                 this.check_expr(expr)

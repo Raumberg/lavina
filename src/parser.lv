@@ -348,7 +348,7 @@ class Parser:
                         is_type_args = false
                     if is_type_args:
                         this.consume(TK_RIGHT_BRACKET, "Expect ']'.")
-                        if this.check(TK_LEFT_PAREN):
+                        if this.check(TK_LEFT_PAREN) or this.check(TK_DOUBLE_COLON):
                             string new_name = tok.lexeme + "<" + type_strs.join(", ") + ">"
                             expr = Expr::Variable(Token(TK_IDENTIFIER, new_name, tok.line, tok.col))
                         else:
@@ -738,6 +738,12 @@ class Parser:
 
     Stmt fn enum_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect enum name.")
+        vector[string] type_params = []
+        if this.match_any([TK_LEFT_BRACKET]):
+            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            while this.match_any([TK_COMMA]):
+                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
         this.consume(TK_COLON, "Expect ':' after enum name.")
 
         this.match_any([TK_NEWLINE])
@@ -787,7 +793,7 @@ class Parser:
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end enum body.")
-        return Stmt::Enum(name, variants, visibility)
+        return Stmt::Enum(name, variants, visibility, type_params)
 
     Stmt fn import_statement():
         vector[Token] path = []
