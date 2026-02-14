@@ -237,7 +237,10 @@ int fn main():
         if not has_deps:
             compile_cmd += " -Ideps/include"
     for ref ll in link_libs:
-        compile_cmd += " -l${ll}"
+        if ll.indexOf("/") >= 0:
+            compile_cmd += " ${ll}"
+        else:
+            compile_cmd += " -l${ll}"
     int compile_result = os_exec(compile_cmd)
     if compile_result != 0:
         print("Compilation failed")

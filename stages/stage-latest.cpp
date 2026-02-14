@@ -6622,7 +6622,12 @@ int main(int argc, char* argv[]) {
         }
     }
     for (const auto& ll : link_libs) {
-        compile_cmd = (compile_cmd + ((std::string(" -l") + (ll)) + std::string("")));
+        if ((lv_index_of(ll, std::string("/")) >= INT64_C(0))) {
+            compile_cmd = (compile_cmd + ((std::string(" ") + (ll)) + std::string("")));
+        }
+        else {
+            compile_cmd = (compile_cmd + ((std::string(" -l") + (ll)) + std::string("")));
+        }
     }
     int64_t compile_result = os_exec(compile_cmd);
     if ((compile_result != INT64_C(0))) {
