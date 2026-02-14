@@ -1,0 +1,19 @@
+// git.lv — git operations for cloning and updating dependencies
+
+// Clone a repository at a specific version (tag/branch/commit)
+void fn git_clone(string url, string dest, string version):
+    step("Cloning ${url} @ ${version}")
+    int result = os_exec("git clone --quiet --depth 1 --branch ${version} ${url} ${dest} 2>&1")
+    if result != 0:
+        // fallback: clone default branch and checkout
+        result = os_exec("git clone --quiet ${url} ${dest} 2>&1")
+        if result != 0:
+            error("Failed to clone ${url}")
+            return
+        os_exec("cd ${dest} && git checkout --quiet ${version} 2>&1")
+
+// Fetch latest and checkout a specific version
+void fn git_update(string dest, string version):
+    step("Updating ${dest} to ${version}")
+    os_exec("cd ${dest} && git fetch --quiet --all 2>&1")
+    os_exec("cd ${dest} && git checkout --quiet ${version} 2>&1")

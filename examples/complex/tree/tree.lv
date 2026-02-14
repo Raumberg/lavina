@@ -1,0 +1,45 @@
+// tree — recursive directory listing utility
+// Usage: tree [path]
+
+int dir_count = 0
+int file_count = 0
+
+void fn print_tree(string path, string prefix):
+    auto entries = fs_listdir(path)
+
+    int i = 0
+    int total = entries.len()
+    for ref name in entries:
+        // skip hidden files
+        if name.substring(0, 1) == ".":
+            i += 1
+            continue
+
+        bool is_last = (i == total - 1)
+        string connector = "├── "
+        string child_prefix = "│   "
+        if is_last:
+            connector = "└── "
+            child_prefix = "    "
+
+        string full_path = "${path}/${name}"
+        if fs_is_dir(full_path):
+            print("${prefix}${connector}${name}/")
+            dir_count += 1
+            print_tree(full_path, "${prefix}${child_prefix}")
+        else:
+            print("${prefix}${connector}${name}")
+            file_count += 1
+
+        i += 1
+
+void fn main():
+    string root = "."
+    auto args = os_args()
+    if args.len() > 1:
+        root = args[1]
+
+    print(root)
+    print_tree(root, "")
+    print("")
+    print("${int_to_str(dir_count)} directories, ${int_to_str(file_count)} files")

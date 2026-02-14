@@ -1,0 +1,25 @@
+{
+  "name": "lavina",
+  "displayName": "Lavina",
+  "description": "Syntax highlighting for the Lavina programming language",
+  "version": "0.1.0",
+  "engines": { "vscode": "^1.75.0" },
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [
+      {
+        "id": "lavina",
+        "aliases": ["Lavina", "lavina"],
+        "extensions": [".lv"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "lavina",
+        "scopeName": "source.lavina",
+        "path": "./syntaxes/lavina.tmLanguage.json"
+      }
+    ]
+  }
+}

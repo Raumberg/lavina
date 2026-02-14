@@ -1,0 +1,21 @@
+import helpers::math_helper
+import helpers::greeter as g
+
+void fn main():
+    // Public symbols accessible unqualified (via using)
+    lv_assert(add(3, 4) == 7, "unqualified add")
+    lv_assert(multiply(5, 6) == 30, "unqualified multiply")
+
+    // Qualified access via short name
+    lv_assert(math_helper::add(10, 20) == 30, "qualified add")
+
+    // Qualified access via alias
+    lv_assert(g::greet("World") == "Hello, World!", "aliased greet")
+
+    // Public function that internally calls private function
+    lv_assert(g::get_answer() == 42, "public calls private")
+
+    // Full namespace access
+    lv_assert(helpers_greeter::greet("Test") == "Hello, Test!", "full namespace greet")
+
+    print("test_modules: ALL PASSED")

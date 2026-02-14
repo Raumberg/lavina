@@ -1,0 +1,31 @@
+void fn main():
+    // Concatenation
+    string a = "hello"
+    string b = " world"
+    lv_assert(a + b == "hello world", "string concatenation")
+
+    // Length
+    lv_assert(a.len() == 5, "string length")
+
+    // Methods
+    lv_assert(a.upper() == "HELLO", "upper")
+    lv_assert("HELLO".lower() == "hello", "lower")
+    lv_assert("  hi  ".trim() == "hi", "trim")
+    lv_assert("hello".replace("l", "r") == "herro", "replace")
+    lv_assert("hello".contains("ell"), "contains true")
+    lv_assert(!("hello".contains("xyz")), "contains false")
+    lv_assert("hello".indexOf("ll") == 2, "indexOf found")
+    lv_assert("hello".indexOf("xyz") == -1, "indexOf not found")
+
+    // Split
+    auto parts = "a,b,c".split(",")
+    lv_assert(parts.len() == 3, "split length")
+    lv_assert(parts[0] == "a", "split first")
+    lv_assert(parts[2] == "c", "split last")
+
+    // String interpolation with print format
+    int x = 42
+    string msg = "value is " + x
+    lv_assert(msg.contains("42"), "int to string concat")
+
+    print("test_strings: ALL PASSED")

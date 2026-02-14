@@ -1,0 +1,244 @@
+import codegen
+import checker
+import parser
+
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — Main CLI
+//  Resolves imports, compiles .lv → C++ → binary → run
+// ═══════════════════════════════════════════════════════════════
+
+// ── Import Resolver ──────────────────────────────────────────
+
+struct ModuleInfo:
+    string short_name
+    string full_name
+    string alias
+    string source
+
+class ImportResolver:
+    vector[string] resolved_paths
+    vector[ModuleInfo] modules
+
+    constructor():
+        this.resolved_paths = []
+        this.modules = []
+
+    bool fn already_resolved(ref string path):
+        for ref p in this.resolved_paths:
+            if p == path:
+                return true
+        return false
+
+    string fn get_directory(ref string path):
+        int i = path.len() - 1
+        while i >= 0:
+            if path.charAt(i) == "/":
+                return path.substring(0, i + 1)
+            i -= 1
+        return "./"
+
+    string fn resolve(string file_path):
+        if this.already_resolved(file_path):
+            return ""
+        this.resolved_paths.push(file_path)
+
+        string source = fs_read(file_path)
+        string dir = this.get_directory(file_path)
+
+        string result = ""
+        vector[string] lines = source.split("\n")
+        for ref line in lines:
+            string trimmed = line.trim()
+            if trimmed.starts_with("import "):
+                string import_str = trimmed.substring(7, trimmed.len()).trim()
+                string alias = ""
+                string mod_path = import_str
+                int as_pos = import_str.indexOf(" as ")
+                if as_pos >= 0:
+                    alias = import_str.substring(as_pos + 4, import_str.len()).trim()
+                    mod_path = import_str.substring(0, as_pos).trim()
+                string file_rel = mod_path.replace("::", "/")
+                vector[string] segments = file_rel.split("/")
+                string module_file = "${dir}${file_rel}.lv"
+                if segments.len() > 1:
+                    // Multi-segment: module import with namespace
+                    string short_name = segments[segments.len() - 1]
+                    string full_name = segments.join("_")
+                    string mod_source = this.resolve(module_file)
+                    if mod_source != "":
+                        this.modules.push(ModuleInfo(short_name, full_name, alias, mod_source))
+                else:
+                    // Single-segment: inline import (legacy behavior)
+                    string resolved = this.resolve(module_file)
+                    if resolved != "":
+                        result +=resolved + "\n"
+            else:
+                result +=line + "\n"
+        return result
+
+// ── Helpers ──────────────────────────────────────────────────
+
+void fn cleanup(ref string cpp_path, ref string header_path, ref string liblavina_path, bool wrote_header):
+    os_exec("rm -f ${cpp_path}")
+    if wrote_header:
+        os_exec("rm -f ${header_path}")
+        os_exec("rm -rf ${liblavina_path}")
+
+// ── Main entry point ─────────────────────────────────────────
+
+int fn main():
+    auto args = os_args()
+    if args.len() < 2:
+        print("Usage: bootstrap [--emit-cpp | compile] <file.lv>")
+        return 1
+
+    string mode = "run"
+    string path = ""
+    bool no_check = false
+
+    // Parse arguments
+    int ai = 1
+    while ai < args.len():
+        if args[ai] == "--no-check":
+            no_check = true
+        elif args[ai] == "--emit-cpp":
+            mode = "emit-cpp"
+        elif args[ai] == "compile":
+            mode = "compile"
+        else:
+            path = args[ai]
+        ai += 1
+
+    if path == "":
+        print("Usage: bootstrap [--emit-cpp | compile] [--no-check] <file.lv>")
+        return 1
+
+    auto resolver = ImportResolver()
+    string source = resolver.resolve(path)
+
+    // Parse each module
+    vector[string] mod_short_names = []
+    vector[string] mod_full_names = []
+    vector[string] mod_aliases = []
+    vector[vector[Stmt]] mod_stmts_list = []
+    vector[vector[Stmt]] all_lambda_blocks = []
+
+    for ref mod in resolver.modules:
+        auto mod_scanner = Scanner(mod.source)
+        mod_scanner.scan_tokens()
+        if mod_scanner.errors.len() > 0:
+            print("Scanner errors in module ${mod.full_name}:")
+            for ref err in mod_scanner.errors:
+                print(err)
+            return 1
+        try:
+            auto mod_parser = Parser(mod_scanner.tokens)
+            vector[Stmt] mod_stmts = mod_parser.parse_program()
+            mod_short_names.push(mod.short_name)
+            mod_full_names.push(mod.full_name)
+            mod_aliases.push(mod.alias)
+            mod_stmts_list.push(mod_stmts)
+            for ref lb in mod_parser.lambda_blocks:
+                all_lambda_blocks.push(lb)
+        catch err:
+            print("Error in module ${mod.full_name}: ${err.what()}")
+            return 1
+
+    // Parse main source
+    auto scanner = Scanner(source)
+    scanner.scan_tokens()
+    if scanner.errors.len() > 0:
+        print("Scanner errors:")
+        for ref err in scanner.errors:
+            print(err)
+        return 1
+
+    vector[Stmt] stmts = []
+    string cpp = ""
+    bool has_main = false
+    try:
+        auto parser = Parser(scanner.tokens)
+        stmts = parser.parse_program()
+
+        if not no_check:
+            // Combine all module stmts + main stmts for type checking
+            vector[Stmt] all_stmts = []
+            for ref ms in mod_stmts_list:
+                for ref s in ms:
+                    all_stmts.push(s)
+            for ref s in stmts:
+                all_stmts.push(s)
+            auto check_errors = run_checker(all_stmts)
+            if check_errors.len() > 0:
+                print("Type check errors:")
+                for ref cerr in check_errors:
+                    print("  ${cerr}")
+                return 1
+
+        for ref lb in parser.lambda_blocks:
+            all_lambda_blocks.push(lb)
+        auto codegen = CppCodegen()
+        codegen.set_modules(mod_short_names, mod_full_names, mod_aliases, mod_stmts_list)
+        codegen.lambda_blocks = all_lambda_blocks
+        cpp = codegen.generate(stmts)
+        has_main = codegen.has_main
+    catch err:
+        print("Error: ${err.what()}")
+        return 1
+
+    if mode == "emit-cpp":
+        print(cpp)
+        return 0
+
+    if not has_main:
+        print("Error: no main() function defined.")
+        return 1
+
+    string dir = resolver.get_directory(path)
+    string base = path
+    int si = path.len() - 1
+    while si >= 0:
+        if path.charAt(si) == "/":
+            base = path.substring(si + 1, path.len())
+            break
+        si -= 1
+    if base.ends_with(".lv"):
+        base = base.substring(0, base.len() - 3)
+
+    string cpp_path = "${dir}${base}.cpp"
+    string bin_path = "${dir}${base}"
+    string header_path = "${dir}lavina.h"
+
+    fs_write(cpp_path, cpp)
+
+    bool wrote_header = false
+    string liblavina_path = "${dir}liblavina"
+    if not fs_exists(header_path):
+        try:
+            string header_content = fs_read("runtime/lavina.h")
+            fs_write(header_path, header_content)
+            os_exec("cp -r runtime/liblavina ${liblavina_path}")
+            wrote_header = true
+        catch:
+            print("Warning: could not find runtime/lavina.h")
+
+    string compile_cmd = "g++ -std=c++23 -o ${bin_path} ${cpp_path}"
+    int compile_result = os_exec(compile_cmd)
+    if compile_result != 0:
+        print("Compilation failed")
+        cleanup(cpp_path, header_path, liblavina_path, wrote_header)
+        return 1
+
+    if mode == "compile":
+        cleanup(cpp_path, header_path, liblavina_path, wrote_header)
+        print("Compiled: ${bin_path}")
+        return 0
+
+    int run_result = os_exec(bin_path)
+
+    cleanup(cpp_path, header_path, liblavina_path, wrote_header)
+    os_exec("rm -f ${bin_path}")
+
+    if run_result != 0:
+        return 1
+    return 0

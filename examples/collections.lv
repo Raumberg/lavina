@@ -1,0 +1,24 @@
+void fn main():
+    auto nums = [10, 20, 30, 40, 50]
+    print(nums.len())
+
+    nums.push(60)
+    print(nums.len())
+
+    auto last = nums.pop()
+    print(last)
+    print(nums.len())
+
+    print(nums.contains(30))
+    print(nums.contains(99))
+
+    nums.remove(0)
+    print(nums)
+
+    nums.reverse()
+    print(nums)
+
+    print(nums.is_empty())
+
+    auto words = ["hello", "world"]
+    print(words.join(" "))

@@ -1,0 +1,119 @@
+extern "httplib.h":
+    type Server = "httplib::Server"
+    type Request = "httplib::Request"
+    type Response = "httplib::Response"
+
+// ── Data model ──────────────────────────────────────────────
+
+struct Todo:
+    int id
+    string title
+    bool done
+
+    constructor(int id, string title):
+        this.id = id
+        this.title = title
+        this.done = false
+
+    string fn to_string():
+        string done_str = "false"
+        if this.done:
+            done_str = "true"
+        return "{\"id\": ${this.id}, \"title\": \"${this.title}\", \"done\": ${done_str}}"
+
+// ── JSON helpers ────────────────────────────────────────────
+
+string fn todos_to_json(ref vector[Todo] todos):
+    vector[string] items = []
+    for ref t in todos:
+        items.push(t.to_string())
+    return "[${items.join(", ")}]"
+
+string fn error_json(string message):
+    return "{\"error\": \"${message}\"}"
+
+string fn parse_json_title(ref string body):
+    string key = "\"title\""
+    int pos = body.indexOf(key)
+    if pos < 0:
+        return ""
+    // Find the colon after key
+    string rest = body.substring(pos + key.len(), body.len())
+    int colon = rest.indexOf(":")
+    if colon < 0:
+        return ""
+    rest = rest.substring(colon + 1, rest.len()).trim()
+    // Expect a quoted string value
+    if rest.len() == 0:
+        return ""
+    if rest.charAt(0) != "\"":
+        return ""
+    rest = rest.substring(1, rest.len())
+    int end_quote = rest.indexOf("\"")
+    if end_quote < 0:
+        return ""
+    return rest.substring(0, end_quote)
+
+int fn str_to_int(string s):
+    cpp {
+        return std::stoll(s);
+    }
+    return 0
+
+// ── Main ────────────────────────────────────────────────────
+
+void fn main():
+    vector[Todo] todos = []
+    int next_id = 1
+    string html = fs_read("index.html")
+
+    Server svr
+
+    // Serve HTML UI
+    svr.Get("/", (ref Request req, ref! Response res):
+        res.set_content(html, "text/html")
+    )
+
+    // List all todos
+    svr.Get("/api/todos", (ref Request req, ref! Response res):
+        res.set_content(todos_to_json(todos), "application/json")
+    )
+
+    // Create a todo
+    svr.Post("/api/todos", (ref Request req, ref! Response res):
+        string title = parse_json_title(req.body)
+        if title == "":
+            res.set_content(error_json("title is required"), "application/json")
+            return
+        auto todo = Todo(next_id, title)
+        next_id += 1
+        todos.push(todo)
+        res.set_content(todo.to_string(), "application/json")
+    )
+
+    // Toggle a todo
+    svr.Put("/api/todos/:id/toggle", (ref Request req, ref! Response res):
+        string id_str = req.path_params.at("id")
+        int id = str_to_int(id_str)
+        for i in 0..todos.len():
+            if todos[i].id == id:
+                todos[i].done = not todos[i].done
+                res.set_content(todos[i].to_string(), "application/json")
+                return
+        res.set_content(error_json("not found"), "application/json")
+    )
+
+    // Delete a todo
+    svr.Delete("/api/todos/:id", (ref Request req, ref! Response res):
+        string id_str = req.path_params.at("id")
+        int id = str_to_int(id_str)
+        for i in 0..todos.len():
+            if todos[i].id == id:
+                todos.remove(i)
+                res.set_content("{\"ok\": true}", "application/json")
+                return
+        res.set_content(error_json("not found"), "application/json")
+    )
+
+    print("Lavina Todo App running on http://localhost:8080")
+    svr.listen("0.0.0.0", 8080)

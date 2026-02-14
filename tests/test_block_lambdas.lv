@@ -1,0 +1,43 @@
+// Test: block lambdas with (params): syntax
+
+int fn apply(int x, auto f):
+    return f(x)
+
+void fn run_callback(auto f):
+    f()
+
+void fn main():
+    // Block lambda with return
+    auto double_it = (int x):
+        int result = x * 2
+        return result
+    lv_assert(double_it(5) == 10, "block lambda with return")
+
+    // Block lambda with multiple statements
+    auto compute = (int a, int b):
+        int sum = a + b
+        int product = a * b
+        return sum + product
+    lv_assert(compute(3, 4) == 19, "block lambda multi-stmt")
+
+    // Void block lambda
+    int counter = 0
+    auto inc = ():
+        counter += 1
+    inc()
+    inc()
+    lv_assert(counter == 2, "void block lambda")
+
+    // Block lambda as argument
+    lv_assert(apply(5, (int x):
+        int y = x + 1
+        return y * 2
+    ) == 12, "block lambda as argument")
+
+    // Block lambda with closure
+    int base = 100
+    auto add_base = (int x):
+        return x + base
+    lv_assert(add_base(42) == 142, "block lambda closure")
+
+    print("All block lambda tests passed!")

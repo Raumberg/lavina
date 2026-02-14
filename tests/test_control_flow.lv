@@ -1,0 +1,46 @@
+void fn main():
+    // If/elif/else
+    int x = 10
+    string result = ""
+    if x > 20:
+        result = "big"
+    elif x > 5:
+        result = "medium"
+    else:
+        result = "small"
+    lv_assert(result == "medium", "elif branch")
+
+    // While loop
+    int sum = 0
+    int i = 1
+    while i <= 10:
+        sum += i
+        i += 1
+    lv_assert(sum == 55, "while loop sum 1..10")
+
+    // For-in loop
+    auto items = [10, 20, 30]
+    int total = 0
+    for item in items:
+        total += item
+    lv_assert(total == 60, "for-in loop sum")
+
+    // Break
+    int count = 0
+    while true:
+        count += 1
+        if count == 5:
+            break
+    lv_assert(count == 5, "break from while")
+
+    // Continue
+    int even_sum = 0
+    int j = 0
+    while j < 10:
+        j += 1
+        if j % 2 != 0:
+            continue
+        even_sum += j
+    lv_assert(even_sum == 30, "continue skips odds")
+
+    print("test_control_flow: ALL PASSED")

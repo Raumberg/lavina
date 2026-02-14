@@ -1,0 +1,31 @@
+int fn factorial(int n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+int fn add(int a, int b):
+    return a + b
+
+string fn greet(string name):
+    return "hello " + name
+
+int fn fib(int n):
+    if n <= 1:
+        return n
+    return fib(n - 1) + fib(n - 2)
+
+void fn main():
+    // Basic return values
+    lv_assert(add(3, 4) == 7, "function add")
+    lv_assert(greet("world") == "hello world", "function greet")
+
+    // Recursion
+    lv_assert(factorial(5) == 120, "factorial 5")
+    lv_assert(factorial(0) == 1, "factorial 0")
+
+    // Fibonacci
+    lv_assert(fib(0) == 0, "fib 0")
+    lv_assert(fib(1) == 1, "fib 1")
+    lv_assert(fib(10) == 55, "fib 10")
+
+    print("test_functions: ALL PASSED")

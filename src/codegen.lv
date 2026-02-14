@@ -1,0 +1,1301 @@
+import ast
+
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — C++ Code Generator
+//  Takes AST from the parser and produces C++ source code.
+// ═══════════════════════════════════════════════════════════════
+
+class CppCodegen:
+    string output
+    string declarations
+    int indent_level
+    int temp_counter
+    bool has_main
+    hashmap[string, vector[EnumVariantNode]] known_enums
+    vector[string] dynamic_vars
+    vector[string] extern_includes
+    vector[string] extern_link_libs
+    hashmap[string, string] extern_fn_names
+    hashmap[string, string] extern_type_names
+    hashmap[string, vector[Param]] extern_fn_params
+    hashmap[string, TypeNode] var_types
+    vector[string] module_short_names
+    vector[string] module_full_names
+    vector[string] module_aliases
+    vector[vector[Stmt]] module_stmts
+    vector[vector[Stmt]] lambda_blocks
+
+    constructor():
+        this.output = ""
+        this.declarations = ""
+        this.indent_level = 0
+        this.temp_counter = 0
+        this.has_main = false
+        this.known_enums = {}
+        this.dynamic_vars = []
+        this.extern_includes = []
+        this.extern_link_libs = []
+        this.extern_fn_names = {}
+        this.extern_type_names = {}
+        this.var_types = {}
+        this.extern_fn_params = {}
+        this.module_short_names = []
+        this.module_full_names = []
+        this.module_aliases = []
+        this.module_stmts = []
+        this.lambda_blocks = []
+
+    void fn set_modules(ref vector[string] short_names, ref vector[string] full_names, ref vector[string] aliases, ref vector[vector[Stmt]] stmts):
+        this.module_short_names = short_names
+        this.module_full_names = full_names
+        this.module_aliases = aliases
+        this.module_stmts = stmts
+
+    // ── Helpers ───────────────────────────────────────────────
+
+    string fn indent():
+        string result = ""
+        for i in 0..this.indent_level:
+            result +="    "
+        return result
+
+    bool fn is_dynamic_var(ref string name):
+        for ref v in this.dynamic_vars:
+            if v == name:
+                return true
+        return false
+
+    void fn add_dynamic_var(string name):
+        if not this.is_dynamic_var(name):
+            this.dynamic_vars.push(name)
+
+    string fn find_enum_for_variant(ref string variant_name):
+        string found = ""
+        int count = 0
+        vector[string] keys = this.known_enums.keys()
+        for ref key in keys:
+            vector[EnumVariantNode] variants = this.known_enums[key]
+            for ref v in variants:
+                if v.name.lexeme == variant_name:
+                    if count == 0:
+                        found = key
+                    count += 1
+        if count == 1:
+            return found
+        return ""
+
+    EnumVariantNode fn get_variant_info(ref string enum_name, ref string variant_name):
+        if this.known_enums.has(enum_name):
+            vector[EnumVariantNode] variants = this.known_enums[enum_name]
+            for ref v in variants:
+                if v.name.lexeme == variant_name:
+                    return v
+        vector[TypeNode] empty_types = []
+        vector[string] empty_names = []
+        return EnumVariantNode(Token("", "", 0, 0), empty_types, empty_names)
+
+    bool fn is_known_enum(ref string name):
+        if this.known_enums.has(name):
+            return true
+        int angle = name.indexOf("<")
+        if angle >= 0:
+            string base = name.substring(0, angle)
+            return this.known_enums.has(base)
+        return false
+
+    bool fn type_contains_dynamic(ref TypeNode t):
+        match t:
+            Dynamic():
+                return true
+            Array(inner):
+                return this.type_contains_dynamic(inner)
+            _:
+                return false
+
+    string fn template_prefix(ref vector[string] type_params):
+        if type_params.len() == 0:
+            return ""
+        vector[string] tps = []
+        for ref tp in type_params:
+            tps.push("typename ${tp}")
+        return "${this.indent()}template<${tps.join(", ")}>\n"
+
+    string fn wrap_convert(string expr, ref TypeNode from, ref TypeNode expected):
+        match from:
+            Str():
+                match expected:
+                    CString():
+                        return "(${expr}).c_str()"
+                    _:
+                        pass
+            CString():
+                match expected:
+                    Str():
+                        return "std::string(${expr})"
+                    _:
+                        pass
+            Int():
+                match expected:
+                    Int32():
+                        return "static_cast<int32_t>(${expr})"
+                    USize():
+                        return "static_cast<size_t>(${expr})"
+                    _:
+                        pass
+            Int32():
+                match expected:
+                    Int():
+                        return "static_cast<int64_t>(${expr})"
+                    _:
+                        pass
+            USize():
+                match expected:
+                    Int():
+                        return "static_cast<int64_t>(${expr})"
+                    _:
+                        pass
+            Float():
+                match expected:
+                    Float32():
+                        return "static_cast<float>(${expr})"
+                    _:
+                        pass
+            Float32():
+                match expected:
+                    Float():
+                        return "static_cast<double>(${expr})"
+                    _:
+                        pass
+            _:
+                pass
+        return expr
+
+    string fn wrap_extern_arg(string expr, ref Expr original, ref TypeNode expected):
+        match original:
+            Literal(kind, value):
+                if kind == "null":
+                    match expected:
+                        Ptr(inner):
+                            return "nullptr"
+                        _:
+                            pass
+                if kind == "string":
+                    match expected:
+                        CString():
+                            return "(${expr}).c_str()"
+                        _:
+                            pass
+                if kind == "int":
+                    match expected:
+                        Int32():
+                            return "static_cast<int32_t>(${expr})"
+                        USize():
+                            return "static_cast<size_t>(${expr})"
+                        _:
+                            pass
+                if kind == "float":
+                    match expected:
+                        Float32():
+                            return "static_cast<float>(${expr})"
+                        _:
+                            pass
+                return expr
+            Variable(tok):
+                if this.var_types.has(tok.lexeme):
+                    TypeNode vt = this.var_types[tok.lexeme]
+                    return this.wrap_convert(expr, vt, expected)
+            _:
+                pass
+        return expr
+
+    // ── Type emission ─────────────────────────────────────────
+
+    string fn emit_type(ref TypeNode t):
+        match t:
+            Int():
+                return "int64_t"
+            Float():
+                return "double"
+            Str():
+                return "std::string"
+            Bool():
+                return "bool"
+            Void():
+                return "void"
+            Auto():
+                return "auto"
+            Dynamic():
+                return "std::any"
+            NullType():
+                return "std::nullptr_t"
+            Custom(name, type_args):
+                if type_args.len() > 0:
+                    vector[string] ta = []
+                    for ref a in type_args:
+                        ta.push(this.emit_type(a))
+                    return "${name}<${ta.join(", ")}>"
+                if this.extern_type_names.has(name):
+                    return this.extern_type_names[name]
+                return name
+            Array(inner):
+                return "std::vector<${this.emit_type(inner)}>"
+            HashSet(inner):
+                return "std::unordered_set<${this.emit_type(inner)}>"
+            HashMap(key_type, value_type):
+                return "std::unordered_map<${this.emit_type(key_type)}, ${this.emit_type(value_type)}>"
+            Nullable(inner):
+                return "std::optional<${this.emit_type(inner)}>"
+            Int8():
+                return "int8_t"
+            Int16():
+                return "int16_t"
+            Int32():
+                return "int32_t"
+            Float32():
+                return "float"
+            USize():
+                return "size_t"
+            CString():
+                return "const char*"
+            Ptr(inner):
+                return "${this.emit_type(inner)}*"
+            _:
+                return "auto"
+
+    string fn token_to_cpp_op(Token t):
+        if t.token_type == TK_PLUS:
+            return "+"
+        elif t.token_type == TK_MINUS:
+            return "-"
+        elif t.token_type == TK_STAR:
+            return "*"
+        elif t.token_type == TK_SLASH:
+            return "/"
+        elif t.token_type == TK_PERCENT:
+            return "%"
+        elif t.token_type == TK_EQUAL_EQUAL:
+            return "=="
+        elif t.token_type == TK_BANG_EQUAL:
+            return "!="
+        elif t.token_type == TK_LESS:
+            return "<"
+        elif t.token_type == TK_LESS_EQUAL:
+            return "<="
+        elif t.token_type == TK_GREATER:
+            return ">"
+        elif t.token_type == TK_GREATER_EQUAL:
+            return ">="
+        elif t.token_type == TK_BANG or t.token_type == TK_NOT:
+            return "!"
+        elif t.token_type == TK_AND:
+            return "&&"
+        elif t.token_type == TK_OR:
+            return "||"
+        return "/* unknown op */"
+
+    string fn default_init(string cpp_type):
+        if cpp_type == "int64_t":
+            return " = 0"
+        elif cpp_type == "double":
+            return " = 0.0"
+        elif cpp_type == "bool":
+            return " = false"
+        elif cpp_type == "std::string":
+            return " = \"\""
+        elif cpp_type == "int8_t":
+            return " = 0"
+        elif cpp_type == "int16_t":
+            return " = 0"
+        elif cpp_type == "int32_t":
+            return " = 0"
+        elif cpp_type == "size_t":
+            return " = 0"
+        elif cpp_type == "float":
+            return " = 0.0f"
+        elif cpp_type == "const char*":
+            return " = nullptr"
+        return ""
+
+    // ── Expression emission ───────────────────────────────────
+
+    string fn emit_expr(ref Expr e, bool m):
+        match e:
+            None():
+                return ""
+            Literal(kind, value):
+                return this.emit_literal(kind, value)
+            Unary(op, right):
+                string r = this.emit_expr(right, m)
+                string op_str = this.token_to_cpp_op(op)
+                return "(${op_str}${r})"
+            Binary(left, op, right):
+                string l = this.emit_expr(left, m)
+                string r = this.emit_expr(right, m)
+                string op_str = this.token_to_cpp_op(op)
+                return "(${l} ${op_str} ${r})"
+            Grouping(inner):
+                return "(${this.emit_expr(inner, m)})"
+            Variable(name):
+                return name.lexeme
+            Assign(name, value):
+                return "${name.lexeme} = ${this.emit_expr(value, m)}"
+            Logical(left, op, right):
+                string l = this.emit_expr(left, m)
+                string r = this.emit_expr(right, m)
+                string op_str = "&&"
+                if op.token_type == TK_OR:
+                    op_str = "||"
+                return "${l} ${op_str} ${r}"
+            Call(callee, paren, args):
+                return this.emit_call_expr(callee, args, m)
+            Index(object, bracket, index):
+                return "${this.emit_expr(object, m)}[${this.emit_expr(index, m)}]"
+            IndexSet(object, bracket, index, value):
+                return "${this.emit_expr(object, m)}[${this.emit_expr(index, m)}] = ${this.emit_expr(value, m)}"
+            Vector(elements):
+                if elements.len() == 0:
+                    return "{}"
+                vector[string] elems = []
+                for ref el in elements:
+                    elems.push(this.emit_expr(el, m))
+                return "std::vector{${elems.join(", ")}}"
+            Map(keys, values):
+                vector[string] entries = []
+                for i in 0..keys.len():
+                    entries.push("{${this.emit_expr(keys[i], m)}, ${this.emit_expr(values[i], m)}}")
+                return "{{${entries.join(", ")}}}"
+            Get(object, name):
+                if m:
+                    match object:
+                        This(kw):
+                            return "this->${name.lexeme}"
+                        _:
+                            return "${this.emit_expr(object, m)}.${name.lexeme}"
+                return "${this.emit_expr(object, m)}.${name.lexeme}"
+            Set(object, name, value):
+                if m:
+                    match object:
+                        This(kw):
+                            return "this->${name.lexeme} = ${this.emit_expr(value, m)}"
+                        _:
+                            return "${this.emit_expr(object, m)}.${name.lexeme} = ${this.emit_expr(value, m)}"
+                return "${this.emit_expr(object, m)}.${name.lexeme} = ${this.emit_expr(value, m)}"
+            StaticGet(object, name):
+                if m:
+                    match object:
+                        This(kw):
+                            return "(*this)::${name.lexeme}"
+                        _:
+                            return "${this.emit_expr(object, m)}::${name.lexeme}"
+                return "${this.emit_expr(object, m)}::${name.lexeme}"
+            This(keyword):
+                return "(*this)"
+            Cast(expr, target_type):
+                string ex = this.emit_expr(expr, m)
+                string t = this.emit_type(target_type)
+                if this.is_dynamic_expression(expr):
+                    return "std::any_cast<${t}>(${ex})"
+                return "static_cast<${t}>(${ex})"
+            Throw(expr):
+                return "throw std::runtime_error(${this.emit_expr(expr, m)})"
+            Lambda(params, body):
+                return this.emit_lambda(params, body, m)
+            Own(expr):
+                return "std::move(${this.emit_expr(expr, m)})"
+            AddressOf(expr):
+                return "&(${this.emit_expr(expr, m)})"
+            BlockLambda(params, body_id):
+                return this.emit_block_lambda(params, body_id, m)
+            _:
+                return ""
+
+    string fn emit_literal(string kind, string value):
+        if kind == "int":
+            return "${value}LL"
+        elif kind == "float":
+            return value
+        elif kind == "string":
+            return "std::string(\"${value}\")"
+        elif kind == "bool":
+            return value
+        elif kind == "null":
+            return "std::nullopt"
+        return value
+
+    bool fn is_dynamic_expression(ref Expr e):
+        match e:
+            Variable(name):
+                return this.is_dynamic_var(name.lexeme)
+            Index(object, bracket, index):
+                return this.is_dynamic_expression(object)
+            _:
+                return false
+
+    string fn emit_call_expr(ref Expr callee, ref vector[Expr] args, bool in_method):
+        match callee:
+            Get(object, name):
+                string obj = this.emit_expr(object, in_method)
+                vector[string] arg_strs = []
+                for ref a in args:
+                    arg_strs.push(this.emit_expr(a, in_method))
+                string remapped = this.try_remap_method(obj, name.lexeme, arg_strs)
+                if remapped != "":
+                    return remapped
+                return "${obj}.${name.lexeme}(${arg_strs.join(", ")})"
+            StaticGet(object, name):
+                string obj = this.emit_expr(object, in_method)
+                vector[string] arg_strs = []
+                for ref a in args:
+                    arg_strs.push(this.emit_expr(a, in_method))
+                match object:
+                    Variable(tok):
+                        if this.is_known_enum(tok.lexeme):
+                            return "${obj}::make_${name.lexeme}(${arg_strs.join(", ")})"
+                    _:
+                        pass
+                return "${obj}::${name.lexeme}(${arg_strs.join(", ")})"
+            Variable(tok):
+                vector[string] arg_strs = []
+                for ref a in args:
+                    arg_strs.push(this.emit_expr(a, in_method))
+                if tok.lexeme == "exit":
+                    return "lv_exit(${arg_strs.join(", ")})"
+                if this.extern_fn_params.has(tok.lexeme):
+                    vector[Param] eparams = this.extern_fn_params[tok.lexeme]
+                    for i in 0..arg_strs.len():
+                        if i < eparams.len():
+                            arg_strs[i] = this.wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type)
+                    string fn_name = tok.lexeme
+                    if this.extern_fn_names.has(tok.lexeme):
+                        fn_name = this.extern_fn_names[tok.lexeme]
+                    return "${fn_name}(${arg_strs.join(", ")})"
+                if this.extern_fn_names.has(tok.lexeme):
+                    return "${this.extern_fn_names[tok.lexeme]}(${arg_strs.join(", ")})"
+                return "${tok.lexeme}(${arg_strs.join(", ")})"
+            _:
+                string func = this.emit_expr(callee, in_method)
+                vector[string] arg_strs = []
+                for ref a in args:
+                    arg_strs.push(this.emit_expr(a, in_method))
+                return "${func}(${arg_strs.join(", ")})"
+
+    string fn try_remap_method(ref string obj, ref string method, ref vector[string] args):
+        if method == "len":
+            return "static_cast<int64_t>(${obj}.size())"
+        elif method == "is_empty":
+            return "${obj}.empty()"
+        elif method == "contains":
+            return "lv_contains(${obj}, ${args.join(", ")})"
+        elif method == "add":
+            return "${obj}.insert(${args.join(", ")})"
+        elif method == "upper":
+            return "lv_upper(${obj})"
+        elif method == "lower":
+            return "lv_lower(${obj})"
+        elif method == "trim":
+            return "lv_trim(${obj})"
+        elif method == "replace":
+            return "lv_replace(${obj}, ${args.join(", ")})"
+        elif method == "split":
+            if args.len() > 0:
+                return "lv_split(${obj}, ${args[0]})"
+            return "lv_split(${obj}, std::string(\" \"))"
+        elif method == "starts_with":
+            return "${obj}.starts_with(${args.join(", ")})"
+        elif method == "ends_with":
+            return "${obj}.ends_with(${args.join(", ")})"
+        elif method == "indexOf":
+            if args.len() >= 2:
+                return "lv_index_of(${obj}, ${args[0]}, ${args[1]})"
+            return "lv_index_of(${obj}, ${args.join(", ")})"
+        elif method == "charAt":
+            return "std::string(1, ${obj}[${args.join(", ")}])"
+        elif method == "substring":
+            if args.len() >= 2:
+                return "${obj}.substr(${args[0]}, (${args[1]}) - (${args[0]}))"
+            return "${obj}.substr(${args.join(", ")})"
+        elif method == "push":
+            return "${obj}.push_back(${args.join(", ")})"
+        elif method == "pop":
+            return "lv_pop(${obj})"
+        elif method == "clear":
+            return "${obj}.clear()"
+        elif method == "remove":
+            return "lv_remove(${obj}, ${args.join(", ")})"
+        elif method == "join":
+            if args.len() > 0:
+                return "lv_join(${obj}, ${args[0]})"
+            return "lv_join(${obj}, std::string(\"\"))"
+        elif method == "reverse":
+            return "lv_reverse(${obj})"
+        elif method == "keys":
+            return "lv_keys(${obj})"
+        elif method == "values":
+            return "lv_values(${obj})"
+        elif method == "has":
+            return "(${obj}.count(${args.join(", ")}) > 0)"
+        elif method == "repeat":
+            return "lv_repeat(${obj}, ${args.join(", ")})"
+        elif method == "pad_left":
+            return "lv_pad_left(${obj}, ${args.join(", ")})"
+        elif method == "pad_right":
+            return "lv_pad_right(${obj}, ${args.join(", ")})"
+        elif method == "sort":
+            return "lv_sort(${obj})"
+        elif method == "unique":
+            return "lv_unique(${obj})"
+        elif method == "slice":
+            return "lv_slice(${obj}, ${args.join(", ")})"
+        elif method == "flatten":
+            return "lv_flatten(${obj})"
+        return ""
+
+    string fn emit_params(ref vector[Param] params, bool track_dynamic):
+        vector[string] strs = []
+        for ref p in params:
+            if p.is_ref and p.is_mut:
+                strs.push("${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+            elif p.is_ref:
+                strs.push("const ${this.emit_type(p.param_type)}& ${p.name.lexeme}")
+            else:
+                strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
+            this.var_types[p.name.lexeme] = p.param_type
+            if track_dynamic:
+                match p.param_type:
+                    Dynamic():
+                        this.add_dynamic_var(p.name.lexeme)
+                    _:
+                        pass
+        return strs.join(", ")
+
+    string fn emit_lambda(ref vector[Param] params, ref Expr body, bool in_method):
+        string body_str = this.emit_expr(body, in_method)
+        return "[&](${this.emit_params(params, false)}) { return ${body_str}; }"
+
+    string fn emit_block_lambda(ref vector[Param] params, int body_id, bool in_method):
+        string param_str = this.emit_params(params, false)
+        string saved_output = this.output
+        this.output = ""
+        int saved_indent = this.indent_level
+        this.indent_level = 2
+        vector[Stmt] body = this.lambda_blocks[body_id]
+        for ref st in body:
+            this.emit_stmt(st, in_method)
+        string body_str = this.output
+        this.output = saved_output
+        this.indent_level = saved_indent
+        return "[&](${param_str}) {\n${body_str}${this.indent()}    }"
+
+    // ── Statement emission ────────────────────────────────────
+
+    void fn emit_stmt(ref Stmt s, bool m):
+        match s:
+            None():
+                pass
+            ExprStmt(expr):
+                this.output +="${this.indent()}${this.emit_expr(expr, m)};\n"
+            Let(name, var_type, initializer, visibility, is_ref, is_mut):
+                this.emit_let(name, var_type, initializer, m, is_ref, is_mut)
+            Const(name, const_type, value, visibility):
+                string cpp_type = this.emit_type(const_type)
+                string val = this.emit_expr(value, m)
+                this.output +="${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
+            Return(keyword, value):
+                match value:
+                    None():
+                        this.output +="${this.indent()}return;\n"
+                    _:
+                        this.output +="${this.indent()}return ${this.emit_expr(value, m)};\n"
+            If(condition, then_branch, else_branch):
+                this.output +="${this.indent()}if (${this.emit_expr(condition, m)}) "
+                this.emit_block_or_stmt(then_branch, m)
+                match else_branch:
+                    None():
+                        pass
+                    _:
+                        this.output +="${this.indent()}else "
+                        this.emit_block_or_stmt(else_branch, m)
+            While(condition, body):
+                this.output +="${this.indent()}while (${this.emit_expr(condition, m)}) "
+                this.emit_block_or_stmt(body, m)
+            For(item_name, collection, body, is_ref, is_mut):
+                match collection:
+                    Range(start, end):
+                        this.output +="${this.indent()}for (int64_t ${item_name.lexeme} = ${this.emit_expr(start, m)}; ${item_name.lexeme} < ${this.emit_expr(end, m)}; ${item_name.lexeme}++) "
+                        this.emit_block_or_stmt(body, m)
+                    _:
+                        match collection:
+                            Variable(tok):
+                                if this.is_dynamic_var(tok.lexeme):
+                                    this.add_dynamic_var(item_name.lexeme)
+                            _:
+                                pass
+                        string for_type = "auto"
+                        if is_ref and is_mut:
+                            for_type = "auto&"
+                        elif is_ref:
+                            for_type = "const auto&"
+                        this.output +="${this.indent()}for (${for_type} ${item_name.lexeme} : ${this.emit_expr(collection, m)}) "
+                        this.emit_block_or_stmt(body, m)
+            Block(statements):
+                this.output +="${this.indent()}{\n"
+                this.indent_level += 1
+                for ref st in statements:
+                    this.emit_stmt(st, m)
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n"
+            Try(try_body, catch_body, exception_name):
+                this.output +="${this.indent()}try "
+                this.emit_block_or_stmt(try_body, m)
+                string exc_name = "e"
+                if exception_name != "":
+                    exc_name = exception_name
+                this.output +="${this.indent()} catch (const std::exception& ${exc_name}) "
+                this.emit_block_or_stmt(catch_body, m)
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                this.emit_function(name, params, return_type, body, type_params, comptime_mode)
+            Class(name, body, visibility):
+                vector[string] empty_tp = []
+                this.emit_class(name, body, empty_tp)
+            Struct(name, body, visibility, type_params):
+                this.emit_class(name, body, type_params)
+            Enum(name, variants, methods, visibility, type_params):
+                this.emit_enum(name, variants, methods, type_params)
+            Match(expr, arm_patterns, arm_bodies):
+                this.emit_match_impl(expr, arm_patterns, arm_bodies, m)
+            Namespace(name, body, visibility):
+                this.output +="${this.indent()}// TODO: unsupported namespace\n"
+            Import(path, alias):
+                this.output +="${this.indent()}// TODO: unsupported import\n"
+            Break(keyword):
+                this.output +="${this.indent()}break;\n"
+            Continue(keyword):
+                this.output +="${this.indent()}continue;\n"
+            Pass(keyword):
+                this.output +="${this.indent()}/* pass */\n"
+            CppBlock(code):
+                // Emit raw C++ lines with current indentation
+                auto lines = code.split("\n")
+                for ref line in lines:
+                    auto trimmed = line.trim()
+                    if trimmed != "":
+                        this.output +="${this.indent()}${trimmed}\n"
+            Extern(header, link_lib, types, functions):
+                // Collect includes and name mappings (deduplicate)
+                string inc_line = ""
+                bool has_dot = header.indexOf(".") >= 0
+                if has_dot:
+                    inc_line = "#include \"${header}\""
+                else:
+                    inc_line = "#include <${header}>"
+                bool already = false
+                for ref existing in this.extern_includes:
+                    if existing == inc_line:
+                        already = true
+                if not already:
+                    this.extern_includes.push(inc_line)
+                if link_lib != "":
+                    this.extern_link_libs.push(link_lib)
+                for ref et in types:
+                    if et.lavina_name != et.cpp_name:
+                        this.extern_type_names[et.lavina_name] = et.cpp_name
+                for ref ef in functions:
+                    if ef.name != ef.cpp_name:
+                        this.extern_fn_names[ef.name] = ef.cpp_name
+                    this.extern_fn_params[ef.name] = ef.params
+            _:
+                pass
+
+    void fn emit_let(ref Token name, ref TypeNode var_type, ref Expr initializer, bool in_method, bool is_ref, bool is_mut):
+        string cpp_type = this.emit_type(var_type)
+        this.var_types[name.lexeme] = var_type
+        if this.type_contains_dynamic(var_type):
+            this.add_dynamic_var(name.lexeme)
+        string const_str = ""
+        string ref_str = ""
+        if is_ref:
+            ref_str = "&"
+            if not is_mut:
+                const_str = "const "
+        string init_str = ""
+        match initializer:
+            None():
+                init_str = this.default_init(cpp_type)
+            _:
+                string val = this.emit_expr(initializer, in_method)
+                // Use nullptr for pointer types initialized to null
+                bool is_ptr = false
+                match var_type:
+                    Ptr(inner):
+                        is_ptr = true
+                    _:
+                        pass
+                if is_ptr and val == "std::nullopt":
+                    val = "nullptr"
+                init_str = " = ${val}"
+        this.output +="${this.indent()}${const_str}${cpp_type}${ref_str} ${name.lexeme}${init_str};\n"
+
+    void fn emit_block_or_stmt(ref Stmt s, bool m):
+        match s:
+            Block(stmts):
+                this.output +="{\n"
+                this.indent_level += 1
+                for ref st in stmts:
+                    this.emit_stmt(st, m)
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n"
+            _:
+                this.output +="{\n"
+                this.indent_level += 1
+                this.emit_stmt(s, m)
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n"
+
+    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode):
+        vector[string] saved_dynamic = this.dynamic_vars
+        this.output +=this.template_prefix(type_params)
+        string ret_type = this.emit_type(return_type)
+        string param_str = this.emit_params(params, true)
+        string prefix = ""
+        if comptime_mode == 1:
+            prefix = "constexpr "
+        elif comptime_mode == 2:
+            prefix = "consteval "
+        this.output +="${this.indent()}${prefix}${ret_type} ${name.lexeme}(${param_str}) {\n"
+        this.indent_level += 1
+        for ref st in body:
+            this.emit_stmt(st, false)
+        this.indent_level -= 1
+        this.output +="${this.indent()}}\n\n"
+        this.dynamic_vars = saved_dynamic
+
+    // ── Class emission ────────────────────────────────────────
+
+    void fn emit_class_fields(ref vector[string] init_field_names, ref vector[string] init_field_types, ref vector[string] let_field_names, ref vector[string] let_field_types):
+        for fi in 0..init_field_names.len():
+            bool is_let = false
+            for ref lfn in let_field_names:
+                if lfn == init_field_names[fi]:
+                    is_let = true
+            if not is_let:
+                this.output +="${this.indent()}${init_field_types[fi]} ${init_field_names[fi]};\n"
+        for li in 0..let_field_names.len():
+            this.output +="${this.indent()}${let_field_types[li]} ${let_field_names[li]};\n"
+        if init_field_names.len() > 0 or let_field_names.len() > 0:
+            this.output +="\n"
+
+    void fn emit_constructor(ref Token name, ref vector[Param] init_params, ref vector[Stmt] init_body):
+        string param_str = this.emit_params(init_params, false)
+        vector[string] init_list = []
+        vector[Stmt] remaining_body = []
+        for ref st in init_body:
+            match st:
+                ExprStmt(expr):
+                    bool handled = false
+                    match expr:
+                        Set(object, prop, value):
+                            match object:
+                                This(kw):
+                                    match value:
+                                        Variable(tok):
+                                            init_list.push("${prop.lexeme}(${tok.lexeme})")
+                                            handled = true
+                                        _:
+                                            pass
+                                _:
+                                    pass
+                        _:
+                            pass
+                    if not handled:
+                        remaining_body.push(st)
+                _:
+                    remaining_body.push(st)
+        if init_list.len() == 0:
+            this.output +="${this.indent()}${name.lexeme}(${param_str}) {\n"
+        else:
+            this.output +="${this.indent()}${name.lexeme}(${param_str})\n"
+            this.output +="${this.indent()}    : ${init_list.join(", ")} {\n"
+        vector[string] saved_dyn = this.dynamic_vars
+        this.indent_level += 1
+        for ref st in remaining_body:
+            this.emit_stmt(st, true)
+        this.indent_level -= 1
+        this.output +="${this.indent()}}\n\n"
+        this.dynamic_vars = saved_dyn
+
+    void fn emit_class_method(ref Token class_name, ref Stmt method):
+        match method:
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp):
+                vector[string] saved_dyn = this.dynamic_vars
+                string ret_type = this.emit_type(mret)
+                string mparam_str = this.emit_params(mparams, true)
+                string ct_prefix = ""
+                if comptime_mode == 1:
+                    ct_prefix = "constexpr "
+                elif comptime_mode == 2:
+                    ct_prefix = "consteval "
+                if mname.lexeme == "destructor":
+                    this.output +="${this.indent()}~${class_name.lexeme}() {\n"
+                elif mname.lexeme == "to_string":
+                    this.output +="${this.indent()}${ct_prefix}${ret_type} ${mname.lexeme}(${mparam_str}) const {\n"
+                else:
+                    this.output +="${this.indent()}${ct_prefix}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
+                this.indent_level += 1
+                for ref st in mbody:
+                    this.emit_stmt(st, true)
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n\n"
+                this.dynamic_vars = saved_dyn
+            _:
+                pass
+
+    void fn emit_class(ref Token name, ref vector[Stmt] body, ref vector[string] type_params):
+        vector[Stmt] init_body = []
+        vector[Param] init_params = []
+        bool has_init = false
+        vector[Stmt] methods = []
+        vector[string] let_field_names = []
+        vector[string] let_field_types = []
+
+        for ref st in body:
+            match st:
+                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp):
+                    if fname.lexeme == "constructor":
+                        has_init = true
+                        init_body = fbody
+                        init_params = params
+                    else:
+                        methods.push(st)
+                Let(fname, var_type, init, visibility, is_ref, is_mut):
+                    let_field_names.push(fname.lexeme)
+                    let_field_types.push(this.emit_type(var_type))
+                _:
+                    pass
+
+        vector[string] init_field_names = []
+        vector[string] init_field_types = []
+        if has_init:
+            vector[string] param_names = []
+            vector[string] param_types = []
+            for ref p in init_params:
+                param_names.push(p.name.lexeme)
+                param_types.push(this.emit_type(p.param_type))
+            vector[string] seen = []
+            for ref st in init_body:
+                match st:
+                    ExprStmt(expr):
+                        match expr:
+                            Set(object, prop, value):
+                                match object:
+                                    This(kw):
+                                        bool already = false
+                                        for ref s in seen:
+                                            if s == prop.lexeme:
+                                                already = true
+                                        if not already:
+                                            seen.push(prop.lexeme)
+                                            string cpp_type = this.infer_expr_type(value, param_names, param_types)
+                                            init_field_names.push(prop.lexeme)
+                                            init_field_types.push(cpp_type)
+                                    _:
+                                        pass
+                            _:
+                                pass
+                    _:
+                        pass
+
+        this.output +="${this.template_prefix(type_params)}${this.indent()}struct ${name.lexeme} {\n"
+        this.indent_level += 1
+        this.emit_class_fields(init_field_names, init_field_types, let_field_names, let_field_types)
+        if has_init:
+            this.emit_constructor(name, init_params, init_body)
+        for ref m in methods:
+            this.emit_class_method(name, m)
+        this.indent_level -= 1
+        this.output +="${this.indent()}};\n\n"
+
+        // Auto-generate print/concat if to_string method exists
+        bool has_to_string = false
+        for ref m in methods:
+            match m:
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
+                    if mname.lexeme == "to_string":
+                        has_to_string = true
+                _:
+                    pass
+        if has_to_string:
+            string tmpl_line = this.template_prefix(type_params)
+            string type_suffix = ""
+            if type_params.len() > 0:
+                type_suffix = "<${type_params.join(", ")}>"
+            string full_name = "${name.lexeme}${type_suffix}"
+            this.output +="${tmpl_line}${this.indent()}void print(const ${full_name}& _v) { std::cout << _v.to_string() << std::endl; }\n"
+            this.output +="${tmpl_line}${this.indent()}std::string operator+(const std::string& _s, const ${full_name}& _v) { return _s + _v.to_string(); }\n"
+            this.output +="${tmpl_line}${this.indent()}std::string operator+(const ${full_name}& _v, const std::string& _s) { return _v.to_string() + _s; }\n\n"
+
+    string fn infer_expr_type(ref Expr e, ref vector[string] param_names, ref vector[string] param_types):
+        match e:
+            Literal(kind, value):
+                if kind == "int":
+                    return "int64_t"
+                elif kind == "float":
+                    return "double"
+                elif kind == "string":
+                    return "std::string"
+                elif kind == "bool":
+                    return "bool"
+                elif kind == "null":
+                    return "std::nullptr_t"
+                return "std::any"
+            Variable(tok):
+                for i in 0..param_names.len():
+                    if param_names[i] == tok.lexeme:
+                        if param_types[i] == "auto":
+                            return "std::any"
+                        return param_types[i]
+                return "std::any"
+            Binary(left, op, right):
+                string lt = this.infer_expr_type(left, param_names, param_types)
+                string rt = this.infer_expr_type(right, param_names, param_types)
+                if lt == rt and lt != "std::any":
+                    return lt
+                if lt == "std::string" or rt == "std::string":
+                    return "std::string"
+                return "std::any"
+            Unary(op, right):
+                return this.infer_expr_type(right, param_names, param_types)
+            Grouping(inner):
+                return this.infer_expr_type(inner, param_names, param_types)
+            Call(callee, paren, args):
+                match callee:
+                    Variable(tok):
+                        if this.is_known_enum(tok.lexeme):
+                            return tok.lexeme
+                        for ci in 0..param_names.len():
+                            if param_names[ci] == tok.lexeme:
+                                return param_types[ci]
+                        return tok.lexeme
+                    StaticGet(object, name):
+                        match object:
+                            Variable(tok):
+                                if this.is_known_enum(tok.lexeme):
+                                    return tok.lexeme
+                            _:
+                                pass
+                        return "std::any"
+                    _:
+                        return "std::any"
+            Vector(elements):
+                if elements.len() > 0:
+                    string inner = this.infer_expr_type(elements[0], param_names, param_types)
+                    if inner != "std::any":
+                        return "std::vector<${inner}>"
+                return "std::vector<std::any>"
+            Map(keys, values):
+                string kt = "std::any"
+                string vt = "std::any"
+                if keys.len() > 0:
+                    kt = this.infer_expr_type(keys[0], param_names, param_types)
+                    vt = this.infer_expr_type(values[0], param_names, param_types)
+                return "std::unordered_map<${kt}, ${vt}>"
+            Cast(expr, target_type):
+                return this.emit_type(target_type)
+            _:
+                return "std::any"
+
+    // ── Enum emission ─────────────────────────────────────────
+
+    void fn emit_enum_structs(ref string enum_name, ref vector[EnumVariantNode] variants, ref string type_suffix):
+        for ref v in variants:
+            if v.types.len() > 0:
+                this.output +="${this.indent()}struct ${v.name.lexeme} { "
+                for fi in 0..v.types.len():
+                    string cpp_type = this.emit_type(v.types[fi])
+                    string fname = v.field_names[fi]
+                    match v.types[fi]:
+                        Custom(n, _):
+                            if n == enum_name:
+                                cpp_type = "std::shared_ptr<${enum_name}${type_suffix}>"
+                        _:
+                            pass
+                    this.output +="${cpp_type} ${fname}; "
+                this.output +="};\n"
+            else:
+                this.output +="${this.indent()}struct ${v.name.lexeme} {};\n"
+        this.output +="\n"
+        this.output +="${this.indent()}std::string _tag;\n"
+        vector[string] variant_inner_types = []
+        for ref v in variants:
+            variant_inner_types.push("${enum_name}::${v.name.lexeme}")
+        this.output +="${this.indent()}std::variant<${variant_inner_types.join(", ")}> _data;\n"
+        this.output +="\n"
+
+    void fn emit_enum_makers(ref string enum_name, ref vector[EnumVariantNode] variants, ref string type_suffix):
+        for ref v in variants:
+            string vname = v.name.lexeme
+            if v.types.len() == 0:
+                this.output +="${this.indent()}static ${enum_name} make_${vname}() { return {\"${vname}\", ${vname}{}}; }\n"
+            else:
+                vector[string] params = []
+                vector[string] field_inits = []
+                for fi in 0..v.types.len():
+                    string cpp_type = this.emit_type(v.types[fi])
+                    string fname = v.field_names[fi]
+                    bool is_self_ref = false
+                    match v.types[fi]:
+                        Custom(n, _):
+                            if n == enum_name:
+                                is_self_ref = true
+                        _:
+                            pass
+                    if is_self_ref:
+                        params.push("${enum_name}${type_suffix} ${fname}")
+                        field_inits.push("std::make_shared<${enum_name}${type_suffix}>(std::move(${fname}))")
+                    else:
+                        params.push("${cpp_type} ${fname}")
+                        field_inits.push(fname)
+                this.output +="${this.indent()}static ${enum_name} make_${vname}(${params.join(", ")}) { return {\"${vname}\", ${vname}{${field_inits.join(", ")}}}; }\n"
+        this.output +="\n"
+
+    void fn emit_enum_operators(ref string enum_name, ref string type_suffix, ref string tmpl_line, bool has_to_string):
+        this.output +="${this.indent()}std::string operator[](const std::string& key) const {\n"
+        this.indent_level += 1
+        this.output +="${this.indent()}if (key == \"_tag\") return _tag;\n"
+        this.output +="${this.indent()}return \"\";\n"
+        this.indent_level -= 1
+        this.output +="${this.indent()}}\n"
+        this.indent_level -= 1
+        this.output +="${this.indent()}};\n\n"
+        if has_to_string:
+            this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << e.to_string() << std::endl; }\n"
+            this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e.to_string(); }\n"
+            this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e.to_string() + s; }\n\n"
+        else:
+            this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
+            this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e._tag; }\n"
+            this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e._tag + s; }\n\n"
+
+    void fn emit_enum(ref Token name, ref vector[EnumVariantNode] variants, ref vector[Stmt] methods, ref vector[string] type_params):
+        string enum_name = name.lexeme
+        this.known_enums[enum_name] = variants
+
+        bool has_self_ref = false
+        for ref v in variants:
+            for ref ft in v.types:
+                match ft:
+                    Custom(n, _):
+                        if n == enum_name:
+                            has_self_ref = true
+                    _:
+                        pass
+
+        string tmpl_line = this.template_prefix(type_params)
+        string type_suffix = ""
+        if type_params.len() > 0:
+            type_suffix = "<${type_params.join(", ")}>"
+
+        if has_self_ref:
+            this.output +="${tmpl_line}${this.indent()}struct ${enum_name};\n"
+
+        this.output +="${tmpl_line}${this.indent()}struct ${enum_name} {\n"
+        this.indent_level += 1
+        this.emit_enum_structs(enum_name, variants, type_suffix)
+        this.emit_enum_makers(enum_name, variants, type_suffix)
+        for ref m in methods:
+            this.emit_class_method(name, m)
+        bool has_to_string = false
+        for ref m in methods:
+            match m:
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
+                    if mname.lexeme == "to_string":
+                        has_to_string = true
+                _:
+                    pass
+        this.emit_enum_operators(enum_name, type_suffix, tmpl_line, has_to_string)
+
+    // ── Match emission ────────────────────────────────────────
+
+    void fn emit_match_impl(ref Expr expr, ref vector[MatchArm] arm_patterns, ref vector[Stmt] arm_bodies, bool in_method):
+        string match_val = this.emit_expr(expr, in_method)
+        string temp = "_match_${this.temp_counter}"
+        this.temp_counter += 1
+
+        this.output +="${this.indent()}{\n"
+        this.indent_level += 1
+        this.output +="${this.indent()}const auto& ${temp} = ${match_val};\n"
+
+        bool first = true
+        for ai in 0..arm_patterns.len():
+            auto arm = arm_patterns[ai]
+            Stmt arm_body = arm_bodies[ai]
+            if arm.pattern_name == "_":
+                if first:
+                    this.output +="${this.indent()}{\n"
+                else:
+                    this.output +="${this.indent()}else {\n"
+                this.indent_level += 1
+                this.emit_arm_body(arm_body, in_method)
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n"
+            else:
+                string keyword = "if"
+                if not first:
+                    keyword = "else if"
+                first = false
+                string ename = this.find_enum_for_variant(arm.pattern_name)
+                if ename != "":
+                    this.output +="${this.indent()}${keyword} (std::holds_alternative<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data)) {\n"
+                else:
+                    this.output +="${this.indent()}${keyword} (${temp}._tag == \"${arm.pattern_name}\") {\n"
+                this.indent_level += 1
+
+                if arm.bindings.len() > 0:
+                    if ename != "":
+                        this.output +="${this.indent()}auto& _v = std::get<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data);\n"
+                        auto vinfo = this.get_variant_info(ename, arm.pattern_name)
+                        for bi in 0..arm.bindings.len():
+                            if bi < vinfo.field_names.len():
+                                string field_name = vinfo.field_names[bi]
+                                bool is_self_ref = false
+                                if bi < vinfo.types.len():
+                                    match vinfo.types[bi]:
+                                        Custom(n, _):
+                                            if n == ename:
+                                                is_self_ref = true
+                                        _:
+                                            pass
+                                if is_self_ref:
+                                    this.output +="${this.indent()}auto& ${arm.bindings[bi]} = *_v.${field_name};\n"
+                                else:
+                                    this.output +="${this.indent()}auto& ${arm.bindings[bi]} = _v.${field_name};\n"
+
+                this.emit_arm_body(arm_body, in_method)
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n"
+
+        this.indent_level -= 1
+        this.output +="${this.indent()}}\n"
+
+    void fn emit_arm_body(ref Stmt arm_body, bool in_method):
+        match arm_body:
+            Block(stmts):
+                for ref st in stmts:
+                    this.emit_stmt(st, in_method)
+            _:
+                this.emit_stmt(arm_body, in_method)
+
+    // ── Module emission ──────────────────────────────────────
+
+    void fn emit_using_if_public(ref string ns, ref Stmt stmt):
+        match stmt:
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Class(name, body, visibility):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Struct(name, body, visibility, type_params):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Enum(name, variants, methods, visibility, type_params):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Const(name, const_type, value, visibility):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            Let(name, var_type, initializer, visibility, is_ref, is_mut):
+                if visibility != "private":
+                    this.output +="using ${ns}::${name.lexeme};\n"
+            _:
+                pass
+
+    void fn emit_module(int index):
+        string full_name = this.module_full_names[index]
+        string short_name = this.module_short_names[index]
+        string alias = this.module_aliases[index]
+
+        this.output +="namespace ${full_name} {\n"
+        this.indent_level = 1
+
+        for ref stmt in this.module_stmts[index]:
+            match stmt:
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                    if name.lexeme == "main":
+                        pass
+                    else:
+                        this.emit_stmt(stmt, false)
+                Extern(header, link_lib, types, functions):
+                    pass
+                _:
+                    this.emit_stmt(stmt, false)
+
+        this.indent_level = 0
+        this.output +="} // namespace ${full_name}\n"
+
+        if short_name != full_name:
+            this.output +="namespace ${short_name} = ${full_name};\n"
+        if alias != "":
+            this.output +="namespace ${alias} = ${full_name};\n"
+
+        for ref stmt in this.module_stmts[index]:
+            this.emit_using_if_public(full_name, stmt)
+
+        this.output +="\n"
+        this.declarations +=this.output
+        this.output = ""
+
+    // ── Main entry point ──────────────────────────────────────
+
+    string fn generate(ref vector[Stmt] stmts):
+        // First pass: collect extern declarations from modules and main
+        for mi in 0..this.module_stmts.len():
+            for ref stmt in this.module_stmts[mi]:
+                match stmt:
+                    Extern(header, link_lib, types, functions):
+                        this.emit_stmt(stmt, false)
+                        this.output = ""
+                    _:
+                        pass
+        for ref stmt in stmts:
+            match stmt:
+                Extern(header, link_lib, types, functions):
+                    this.emit_stmt(stmt, false)
+                    this.output = ""
+                _:
+                    pass
+
+        this.declarations = "#include \"lavina.h\"\n"
+        for ref inc in this.extern_includes:
+            this.declarations +="${inc}\n"
+        this.declarations +="\n"
+
+        // Emit modules in dependency order
+        for mi in 0..this.module_stmts.len():
+            this.emit_module(mi)
+
+        for ref stmt in stmts:
+            match stmt:
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                    if name.lexeme == "main":
+                        this.has_main = true
+                        this.output +="int main(int argc, char* argv[]) {\n"
+                        this.output +="    for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);\n"
+                        this.indent_level = 1
+                        for ref s in body:
+                            this.emit_stmt(s, false)
+                        this.indent_level = 0
+                        this.output +="}\n"
+                        this.declarations += this.output
+                        this.output = ""
+                    else:
+                        this.emit_stmt(stmt, false)
+                        this.declarations += this.output
+                        this.output = ""
+                Extern(header, link_lib, types, functions):
+                    pass
+                _:
+                    this.emit_stmt(stmt, false)
+                    this.declarations += this.output
+                    this.output = ""
+
+        return this.declarations

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Lavina Todo App</title>
+    <style>
+        body { font-family: system-ui; max-width: 600px; margin: 40px auto; padding: 0 20px; background: #1a1a2e; color: #eee; }
+        h1 { color: #e94560; }
+        .todo { display: flex; align-items: center; gap: 10px; padding: 8px; margin: 4px 0; background: #16213e; border-radius: 6px; }
+        .todo.done span { text-decoration: line-through; color: #666; }
+        button { background: #e94560; color: white; border: none; padding: 6px 14px; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #c73e54; }
+        button.toggle { background: #0f3460; }
+        button.delete { background: #533; }
+        input { padding: 8px; border-radius: 4px; border: 1px solid #333; background: #16213e; color: #eee; flex: 1; }
+        form { display: flex; gap: 8px; margin-bottom: 20px; }
+        .info { color: #666; font-size: 0.85em; margin-top: 30px; }
+    </style>
+</head>
+<body>
+    <h1>Lavina Todo App</h1>
+    <form onsubmit="addTodo(event)">
+        <input id="title" placeholder="What needs to be done?" />
+        <button type="submit">Add</button>
+    </form>
+    <div id="todos"></div>
+    <p class="info">Powered by Lavina &mdash; an indentation-based language compiled to C++</p>
+    <script>
+        async function load() {
+            var r = await fetch('/api/todos');
+            var todos = await r.json();
+            var h = '';
+            for (var i = 0; i < todos.length; i++) {
+                var t = todos[i];
+                var cls = t.done ? 'todo done' : 'todo';
+                var btn = t.done ? 'Undo' : 'Done';
+                h += '<div class="' + cls + '">';
+                h += '<button class="toggle" onclick="toggle(' + t.id + ')">' + btn + '</button>';
+                h += '<span>' + t.title + '</span>';
+                h += '<button class="delete" onclick="del(' + t.id + ')">x</button>';
+                h += '</div>';
+            }
+            document.getElementById('todos').innerHTML = h;
+        }
+        async function addTodo(e) {
+            e.preventDefault();
+            var title = document.getElementById('title').value;
+            if (!title) return;
+            await fetch('/api/todos', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({title: title}) });
+            document.getElementById('title').value = '';
+            load();
+        }
+        async function toggle(id) {
+            await fetch('/api/todos/' + id + '/toggle', { method: 'PUT' });
+            load();
+        }
+        async function del(id) {
+            await fetch('/api/todos/' + id, { method: 'DELETE' });
+            load();
+        }
+        load();
+    </script>
+</body>
+</html>

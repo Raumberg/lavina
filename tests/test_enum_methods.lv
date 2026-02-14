@@ -1,0 +1,26 @@
+enum Shape:
+    Circle(float radius)
+    Square(float side)
+
+    float fn area():
+        match this:
+            Circle(r):
+                return 3.14159 * r * r
+            Square(s):
+                return s * s
+
+    string fn to_string():
+        match this:
+            Circle(r):
+                return "Circle(${r})"
+            Square(s):
+                return "Square(${s})"
+
+void fn main():
+    auto c = Shape::Circle(5.0)
+    auto s = Shape::Square(3.0)
+    print(c.area())
+    print(s.area())
+    print(c)
+    print(s)
+    print("Shape: ${c}")

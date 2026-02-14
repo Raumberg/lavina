@@ -1,0 +1,44 @@
+// Test ref and own semantics
+
+void fn modify_vec(ref! vector[int] v):
+    v.push(42)
+
+void fn consume_string(string s):
+    print("consumed: " + s)
+
+void fn main():
+    // Test 1: ref parameter modifies caller's variable
+    auto items = [1, 2, 3]
+    modify_vec(ref! items)
+    lv_assert(items.len() == 4, "ref items")
+
+    // Test 2: ref variable alias
+    ref! auto alias = items
+    alias.push(99)
+    lv_assert(items.len() == 5, "ref alias")
+
+    // Test 3: own moves value
+    auto data = "hello world"
+    consume_string(own data)
+
+    // Test 4: own in expression
+    auto v1 = [10, 20, 30]
+    auto v2 = own v1
+    lv_assert(v2.len() == 3, "ref vectors")
+
+    // Test 5: for ref (read-only reference)
+    auto nums = [1, 2, 3]
+    auto sum = 0
+    for ref n in nums:
+        sum = sum + n
+    lv_assert(sum == 6, "for ref sum")
+
+    // Test 6: for ref! (mutable reference)
+    auto vals = [10, 20, 30]
+    for ref! v in vals:
+        v = v + 1
+    lv_assert(vals[0] == 11, "for ref! mutate")
+    lv_assert(vals[1] == 21, "for ref! mutate 2")
+    lv_assert(vals[2] == 31, "for ref! mutate 3")
+
+    print("All ref/own tests passed!")

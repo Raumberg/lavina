@@ -1,0 +1,45 @@
+void fn main():
+    // Basic arithmetic
+    lv_assert(2 + 3 == 5, "int addition")
+    lv_assert(10 - 4 == 6, "int subtraction")
+    lv_assert(3 * 7 == 21, "int multiplication")
+    lv_assert(15 / 3 == 5, "int division")
+    lv_assert(17 % 5 == 2, "int modulo")
+
+    // Negative numbers
+    lv_assert(-5 + 3 == -2, "negative addition")
+    lv_assert(-3 * -4 == 12, "negative multiplication")
+
+    // Precedence
+    lv_assert(2 + 3 * 4 == 14, "multiplication before addition")
+    lv_assert((2 + 3) * 4 == 20, "parentheses override precedence")
+
+    // Compound assignment
+    int x = 10
+    x += 5
+    lv_assert(x == 15, "+= operator")
+    x -= 3
+    lv_assert(x == 12, "-= operator")
+    x *= 2
+    lv_assert(x == 24, "*= operator")
+
+    // Comparisons
+    lv_assert(5 > 3, "greater than")
+    lv_assert(3 < 5, "less than")
+    lv_assert(5 >= 5, "greater or equal")
+    lv_assert(5 <= 5, "less or equal")
+    lv_assert(5 != 3, "not equal")
+
+    // Boolean logic (keyword style)
+    lv_assert(true and true, "and true")
+    lv_assert(not (true and false), "and false")
+    lv_assert(true or false, "or true")
+    lv_assert(not (false or false), "or false")
+
+    // Boolean logic (operator style)
+    lv_assert(true && true, "&& true")
+    lv_assert(!(true && false), "&& false")
+    lv_assert(true || false, "|| true")
+    lv_assert(!(false || false), "|| false")
+
+    print("test_arithmetic: ALL PASSED")

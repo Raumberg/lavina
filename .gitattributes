@@ -1,0 +1,10 @@
+# Detect .lv files as Lavina (custom language)
+# Use Python highlighting as closest match (indentation-based syntax)
+*.lv linguist-language=Python
+*.lv linguist-detectable=true
+
+# Don't count C++ bootstrap snapshot in language stats
+stages/*.cpp linguist-generated=true
+
+# Don't count runtime C++ headers in language stats
+runtime/**/*.h linguist-generated=true

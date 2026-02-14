@@ -1,0 +1,18 @@
+void fn main():
+    int a = 10
+    int b = 3
+
+    print(a + b)
+    print(a - b)
+    print(a * b)
+    print(a / b)
+
+    float x = 3.14
+    float y = 2.0
+    print(x + y)
+    print(x * y)
+
+    bool t = true
+    bool f = false
+    print(t)
+    print(f)

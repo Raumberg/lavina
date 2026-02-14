@@ -1,0 +1,11 @@
+public string fn greet(string name):
+    return "Hello, ${name}!"
+
+private string fn secret():
+    return "hidden"
+
+private int fn helper_calc():
+    return 42
+
+public int fn get_answer():
+    return helper_calc()

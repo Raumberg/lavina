@@ -1,0 +1,5 @@
+public int fn add(int a, int b):
+    return a + b
+
+public int fn multiply(int a, int b):
+    return a * b

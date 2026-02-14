@@ -1,0 +1,38 @@
+void fn main():
+    // Vector basics
+    vector[int] v = [1, 2, 3]
+    lv_assert(len(v) == 3, "vector length")
+    lv_assert(v[0] == 1, "vector index 0")
+    lv_assert(v[2] == 3, "vector index 2")
+
+    // Vector push
+    v.push_back(4)
+    lv_assert(len(v) == 4, "after push_back")
+    lv_assert(v[3] == 4, "pushed element")
+
+    // Vector pop
+    auto last = v.pop()
+    lv_assert(last == 4, "popped value")
+    lv_assert(len(v) == 3, "after pop")
+
+    // Vector contains
+    lv_assert(v.contains(2), "contains 2")
+    lv_assert(!v.contains(99), "not contains 99")
+
+    // Hashmap
+    hashmap[string, int] m = {"x": 10, "y": 20}
+    lv_assert(m["x"] == 10, "map lookup x")
+    lv_assert(m["y"] == 20, "map lookup y")
+    m["z"] = 30
+    lv_assert(m["z"] == 30, "map insert z")
+
+    // Hashset
+    hashset[string] s = []
+    s.add("a")
+    s.add("b")
+    s.add("a")
+    lv_assert(s.len() == 2, "set dedup")
+    lv_assert(s.contains("a"), "set contains a")
+    lv_assert(!s.contains("c"), "set not contains c")
+
+    print("test_collections: ALL PASSED")

@@ -1,0 +1,76 @@
+struct Point:
+    float x
+    float y
+
+    constructor(float x, float y):
+        this.x = x
+        this.y = y
+
+struct Rect:
+    Point origin
+    Point size
+
+    constructor(Point origin, Point size):
+        this.origin = origin
+        this.size = size
+
+    float fn area():
+        return this.size.x * this.size.y
+
+    float fn right():
+        return this.origin.x + this.size.x
+
+    float fn top():
+        return this.origin.y + this.size.y
+
+struct Circle:
+    Point center
+    float radius
+
+    constructor(Point center, float radius):
+        this.center = center
+        this.radius = radius
+
+struct Canvas:
+    Rect bounds
+    vector[Circle] circles
+
+    constructor(Rect bounds):
+        this.bounds = bounds
+        this.circles = []
+
+    void fn add_circle(Circle c):
+        this.circles.push(c)
+
+    int fn count():
+        return this.circles.len()
+
+void fn main():
+    // Basic struct
+    auto p = Point(3.0, 4.0)
+    lv_assert(p.x == 3.0, "point x")
+    lv_assert(p.y == 4.0, "point y")
+
+    // Struct in struct
+    auto r = Rect(Point(1.0, 2.0), Point(10.0, 5.0))
+    lv_assert(r.origin.x == 1.0, "rect origin x")
+    lv_assert(r.origin.y == 2.0, "rect origin y")
+    lv_assert(r.area() == 50.0, "rect area")
+    lv_assert(r.right() == 11.0, "rect right")
+    lv_assert(r.top() == 7.0, "rect top")
+
+    // Another nested struct
+    auto c = Circle(Point(5.0, 5.0), 3.0)
+    lv_assert(c.center.x == 5.0, "circle center x")
+    lv_assert(c.radius == 3.0, "circle radius")
+
+    // Three levels deep: Canvas contains Rect and vector[Circle]
+    auto canvas = Canvas(r)
+    canvas.add_circle(c)
+    canvas.add_circle(Circle(Point(0.0, 0.0), 1.0))
+    lv_assert(canvas.count() == 2, "canvas circle count")
+    lv_assert(canvas.bounds.area() == 50.0, "canvas bounds area")
+    lv_assert(canvas.circles[0].center.x == 5.0, "canvas first circle x")
+    lv_assert(canvas.circles[1].radius == 1.0, "canvas second circle radius")
+
+    print("test_structs: ALL PASSED")
