@@ -47,7 +47,7 @@ void fn main():
 - **Block lambdas** — `(params):` with indented body
 - **Module system** — `import a::b`, `public`/`private`, `as` aliases
 - **Compile-time evaluation** — `comptime` / `comptime!`
-- **FFI** — `extern` blocks, `cpp {}` inline C++, expanded types (`int8`/`int16`/`int32`, `float32`, `usize`, `cstring`, `ptr[T]`)
+- **FFI** — `extern` blocks with `import`/`link` for automatic `-I`/`-l` flags, `cpp {}` inline C++, expanded types (`int8`/`int16`/`int32`, `float32`, `usize`, `cstring`, `ptr[T]`)
 - **Package manager** — `lvpkg` for dependency management
 - **Self-hosting** — the compiler bootstraps from a saved C++ snapshot
 
@@ -83,6 +83,7 @@ design/        language design documents
 - `examples/complex/tree/` — file tree printer
 - `examples/complex/lvg/` — Git client
 - `examples/complex/webserver/` — HTTP todo app (uses httplib via lvpkg)
+- `examples/complex/raylib/` — Raylib window with animated graphics
 - `examples/sqlite.lv` — SQLite via FFI
 
 ## Package Manager
@@ -101,6 +102,9 @@ dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h
 
 # directory of headers
 dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/
+
+# native library (pre-built binary + headers)
+dep raylib https://github.com/raysan5/raylib 5.5 src/raylib.h
 ```
 
 Then run:
@@ -112,7 +116,7 @@ lvpkg list       # show dependency status
 lvpkg clean      # remove deps/
 ```
 
-Dependencies are cloned into `deps/` and checked out at the pinned version.
+Dependencies are cloned into `deps/` and checked out at the pinned version. Headers go to `deps/include/`, libraries to `deps/lib/`. The compiler automatically adds `-Ideps/include` and `-Ldeps/lib` when these directories exist.
 
 ## Documentation
 

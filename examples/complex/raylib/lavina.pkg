@@ -1,0 +1,8 @@
+# Raylib example
+#
+# Headers are pulled from GitHub by lvpkg.
+# The native library must be installed separately:
+#   macOS:  brew install raylib
+#   Linux:  sudo apt install libraylib-dev
+
+dep raylib https://github.com/raysan5/raylib 5.5 src/raylib.h

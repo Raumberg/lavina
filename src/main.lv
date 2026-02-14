@@ -236,6 +236,8 @@ int fn main():
                 has_deps = true
         if not has_deps:
             compile_cmd += " -Ideps/include"
+    if fs_exists("deps/lib"):
+        compile_cmd += " -Ldeps/lib"
     for ref ll in link_libs:
         if ll.indexOf("/") >= 0:
             compile_cmd += " ${ll}"

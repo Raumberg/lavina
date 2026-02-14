@@ -6621,6 +6621,9 @@ int main(int argc, char* argv[]) {
             compile_cmd = (compile_cmd + std::string(" -Ideps/include"));
         }
     }
+    if (fs_exists(std::string("deps/lib"))) {
+        compile_cmd = (compile_cmd + std::string(" -Ldeps/lib"));
+    }
     for (const auto& ll : link_libs) {
         if ((lv_index_of(ll, std::string("/")) >= INT64_C(0))) {
             compile_cmd = (compile_cmd + ((std::string(" ") + (ll)) + std::string("")));
