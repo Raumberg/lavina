@@ -1,4 +1,3 @@
-// Stage Latest
 #include "lavina.h"
 
 const std::string TK_LEFT_PAREN = std::string("LeftParen");
@@ -479,16 +478,16 @@ struct Scanner {
         : source(source) {
         this->tokens = {};
         this->errors = {};
-        this->start = 0LL;
-        this->current = 0LL;
-        this->line = 1LL;
-        this->column = 1LL;
-        this->start_line = 1LL;
-        this->start_column = 1LL;
-        this->indent_stack = std::vector{0LL};
+        this->start = INT64_C(0);
+        this->current = INT64_C(0);
+        this->line = INT64_C(1);
+        this->column = INT64_C(1);
+        this->start_line = INT64_C(1);
+        this->start_column = INT64_C(1);
+        this->indent_stack = std::vector{INT64_C(0)};
         this->at_line_start = true;
         this->in_string_interp = false;
-        this->interp_brace_depth = 0LL;
+        this->interp_brace_depth = INT64_C(0);
     }
 
     bool is_at_end() {
@@ -503,16 +502,16 @@ struct Scanner {
     }
 
     auto peek_next() {
-        if (((this->current + 1LL) >= static_cast<int64_t>(this->source.size()))) {
+        if (((this->current + INT64_C(1)) >= static_cast<int64_t>(this->source.size()))) {
             return std::string("");
         }
-        return std::string(1, this->source[(this->current + 1LL)]);
+        return std::string(1, this->source[(this->current + INT64_C(1))]);
     }
 
     auto advance() {
         auto c = std::string(1, this->source[this->current]);
-        this->current = (this->current + 1LL);
-        this->column = (this->column + 1LL);
+        this->current = (this->current + INT64_C(1));
+        this->column = (this->column + INT64_C(1));
         return c;
     }
 
@@ -523,8 +522,8 @@ struct Scanner {
         if ((std::string(1, this->source[this->current]) != expected)) {
             return false;
         }
-        this->current = (this->current + 1LL);
-        this->column = (this->column + 1LL);
+        this->current = (this->current + INT64_C(1));
+        this->column = (this->column + INT64_C(1));
         return true;
     }
 
@@ -546,14 +545,14 @@ struct Scanner {
     }
 
     void handle_indentation() {
-        int64_t indent = 0LL;
+        int64_t indent = INT64_C(0);
         while ((!(*this).is_at_end()) && (((*this).peek() == std::string(" ")) || ((*this).peek() == std::string("\t")))) {
             auto c = (*this).advance();
             if ((c == std::string(" "))) {
-                indent = (indent + 1LL);
+                indent = (indent + INT64_C(1));
             }
             else {
-                indent = (indent + 4LL);
+                indent = (indent + INT64_C(4));
             }
         }
         if ((*this).is_at_end() || ((*this).peek() == std::string("\n"))) {
@@ -562,14 +561,14 @@ struct Scanner {
             }
             return;
         }
-        auto current_indent = this->indent_stack[(static_cast<int64_t>(this->indent_stack.size()) - 1LL)];
+        auto current_indent = this->indent_stack[(static_cast<int64_t>(this->indent_stack.size()) - INT64_C(1))];
         if ((indent > current_indent)) {
             this->indent_stack.push_back(indent);
             (*this).add_token(TK_INDENT, std::string(""));
         }
         else {
             if ((indent < current_indent)) {
-                while ((indent < this->indent_stack[(static_cast<int64_t>(this->indent_stack.size()) - 1LL)])) {
+                while ((indent < this->indent_stack[(static_cast<int64_t>(this->indent_stack.size()) - INT64_C(1))])) {
                     lv_pop(this->indent_stack);
                     (*this).add_token(TK_DEDENT, std::string(""));
                 }
@@ -594,13 +593,13 @@ struct Scanner {
                     (*this).advance();
                     (*this).advance();
                     this->in_string_interp = true;
-                    this->interp_brace_depth = 1LL;
+                    this->interp_brace_depth = INT64_C(1);
                     return;
                 }
                 else {
                     if (((*this).peek() == std::string("\n"))) {
-                        this->line = (this->line + 1LL);
-                        this->column = 1LL;
+                        this->line = (this->line + INT64_C(1));
+                        this->column = INT64_C(1);
                     }
                     (*this).advance();
                 }
@@ -685,30 +684,30 @@ struct Scanner {
             return;
         }
         (*this).advance();
-        int64_t depth = 1LL;
+        int64_t depth = INT64_C(1);
         int64_t content_start = this->current;
-        while ((!(*this).is_at_end()) && (depth > 0LL)) {
+        while ((!(*this).is_at_end()) && (depth > INT64_C(0))) {
             auto c = (*this).advance();
             if ((c == std::string("{"))) {
-                depth = (depth + 1LL);
+                depth = (depth + INT64_C(1));
             }
             else {
                 if ((c == std::string("}"))) {
-                    depth = (depth - 1LL);
+                    depth = (depth - INT64_C(1));
                 }
                 else {
                     if ((c == std::string("\n"))) {
-                        this->line = (this->line + 1LL);
-                        this->column = 1LL;
+                        this->line = (this->line + INT64_C(1));
+                        this->column = INT64_C(1);
                     }
                 }
             }
         }
-        if ((depth != 0LL)) {
+        if ((depth != INT64_C(0))) {
             (*this).add_error(std::string("Unterminated cpp block"));
             return;
         }
-        auto content = this->source.substr(content_start, ((this->current - 1LL)) - (content_start));
+        auto content = this->source.substr(content_start, ((this->current - INT64_C(1))) - (content_start));
         (*this).add_token(TK_CPP, content);
     }
 
@@ -741,15 +740,15 @@ struct Scanner {
                     else {
                         if ((c == std::string("{"))) {
                             if (this->in_string_interp) {
-                                this->interp_brace_depth = (this->interp_brace_depth + 1LL);
+                                this->interp_brace_depth = (this->interp_brace_depth + INT64_C(1));
                             }
                             (*this).add_simple_token(TK_LEFT_BRACE);
                         }
                         else {
                             if ((c == std::string("}"))) {
                                 if (this->in_string_interp) {
-                                    this->interp_brace_depth = (this->interp_brace_depth - 1LL);
-                                    if ((this->interp_brace_depth == 0LL)) {
+                                    this->interp_brace_depth = (this->interp_brace_depth - INT64_C(1));
+                                    if ((this->interp_brace_depth == INT64_C(0))) {
                                         this->in_string_interp = false;
                                         (*this).add_token(TK_RIGHT_PAREN, std::string(")"));
                                         (*this).add_token(TK_PLUS, std::string("+"));
@@ -906,8 +905,8 @@ struct Scanner {
                                                                                                     else {
                                                                                                         if ((c == std::string("\n"))) {
                                                                                                             (*this).add_token(TK_NEWLINE, std::string("\n"));
-                                                                                                            this->line = (this->line + 1LL);
-                                                                                                            this->column = 1LL;
+                                                                                                            this->line = (this->line + INT64_C(1));
+                                                                                                            this->column = INT64_C(1);
                                                                                                             this->at_line_start = true;
                                                                                                         }
                                                                                                         else {
@@ -961,7 +960,7 @@ struct Scanner {
             this->start_column = this->column;
             (*this).scan_token();
         }
-        while ((static_cast<int64_t>(this->indent_stack.size()) > 1LL)) {
+        while ((static_cast<int64_t>(this->indent_stack.size()) > INT64_C(1))) {
             lv_pop(this->indent_stack);
             (*this).add_token(TK_DEDENT, std::string(""));
         }
@@ -975,7 +974,7 @@ void test_scanner() {
     auto scanner = Scanner(test_source);
     scanner.scan_tokens();
     print((std::string("Tokens: ") + static_cast<int64_t>(scanner.tokens.size())));
-    if ((static_cast<int64_t>(scanner.errors.size()) > 0LL)) {
+    if ((static_cast<int64_t>(scanner.errors.size()) > INT64_C(0))) {
         print(std::string("ERRORS:"));
         for (const auto& err : scanner.errors) {
             print(err);
@@ -1231,8 +1230,8 @@ struct CppCodegen {
     CppCodegen() {
         this->output = std::string("");
         this->declarations = std::string("");
-        this->indent_level = 0LL;
-        this->temp_counter = 0LL;
+        this->indent_level = INT64_C(0);
+        this->temp_counter = INT64_C(0);
         this->has_main = false;
         this->known_enums = {{}};
         this->dynamic_vars = {};
@@ -1258,7 +1257,7 @@ struct CppCodegen {
 
     std::string indent() {
         std::string result = std::string("");
-        for (int64_t i = 0LL; i < this->indent_level; i++) {
+        for (int64_t i = INT64_C(0); i < this->indent_level; i++) {
             result = (result + std::string("    "));
         }
         return result;
@@ -1281,20 +1280,20 @@ struct CppCodegen {
 
     std::string find_enum_for_variant(const std::string& variant_name) {
         std::string found = std::string("");
-        int64_t count = 0LL;
+        int64_t count = INT64_C(0);
         std::vector<std::string> keys = lv_keys(this->known_enums);
         for (const auto& key : keys) {
             std::vector<EnumVariantNode> variants = this->known_enums[key];
             for (const auto& v : variants) {
                 if ((v.name.lexeme == variant_name)) {
-                    if ((count == 0LL)) {
+                    if ((count == INT64_C(0))) {
                         found = key;
                     }
-                    count = (count + 1LL);
+                    count = (count + INT64_C(1));
                 }
             }
         }
-        if ((count == 1LL)) {
+        if ((count == INT64_C(1))) {
             return found;
         }
         return std::string("");
@@ -1311,7 +1310,7 @@ struct CppCodegen {
         }
         std::vector<TypeNode> empty_types = {};
         std::vector<std::string> empty_names = {};
-        return EnumVariantNode(Token(std::string(""), std::string(""), 0LL, 0LL), empty_types, empty_names);
+        return EnumVariantNode(Token(std::string(""), std::string(""), INT64_C(0), INT64_C(0)), empty_types, empty_names);
     }
 
     bool is_known_enum(const std::string& name) {
@@ -1319,8 +1318,8 @@ struct CppCodegen {
             return true;
         }
         int64_t angle = lv_index_of(name, std::string("<"));
-        if ((angle >= 0LL)) {
-            std::string base = name.substr(0LL, (angle) - (0LL));
+        if ((angle >= INT64_C(0))) {
+            std::string base = name.substr(INT64_C(0), (angle) - (INT64_C(0)));
             return (this->known_enums.count(base) > 0);
         }
         return false;
@@ -1344,7 +1343,7 @@ struct CppCodegen {
     }
 
     std::string template_prefix(const std::vector<std::string>& type_params) {
-        if ((static_cast<int64_t>(type_params.size()) == 0LL)) {
+        if ((static_cast<int64_t>(type_params.size()) == INT64_C(0))) {
             return std::string("");
         }
         std::vector<std::string> tps = {};
@@ -1548,7 +1547,7 @@ struct CppCodegen {
                 auto& _v = std::get<std::decay_t<decltype(_match_14)>::Custom>(_match_14._data);
                 auto& name = _v.name;
                 auto& type_args = _v.type_args;
-                if ((static_cast<int64_t>(type_args.size()) > 0LL)) {
+                if ((static_cast<int64_t>(type_args.size()) > INT64_C(0))) {
                     std::vector<std::string> ta = {};
                     for (const auto& a : type_args) {
                         ta.push_back((*this).emit_type(a));
@@ -1818,7 +1817,7 @@ struct CppCodegen {
             else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Vector>(_match_15._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_15)>::Vector>(_match_15._data);
                 auto& elements = _v.elements;
-                if ((static_cast<int64_t>(elements.size()) == 0LL)) {
+                if ((static_cast<int64_t>(elements.size()) == INT64_C(0))) {
                     return std::string("{}");
                 }
                 std::vector<std::string> elems = {};
@@ -1832,7 +1831,7 @@ struct CppCodegen {
                 auto& keys = _v.keys;
                 auto& values = _v.values;
                 std::vector<std::string> entries = {};
-                for (int64_t i = 0LL; i < static_cast<int64_t>(keys.size()); i++) {
+                for (int64_t i = INT64_C(0); i < static_cast<int64_t>(keys.size()); i++) {
                     entries.push_back(((((std::string("{") + ((*this).emit_expr(keys[i], m))) + std::string(", ")) + ((*this).emit_expr(values[i], m))) + std::string("}")));
                 }
                 return ((std::string("{{") + (lv_join(entries, std::string(", ")))) + std::string("}}"));
@@ -1946,7 +1945,7 @@ struct CppCodegen {
 
     std::string emit_literal(std::string kind, std::string value) {
         if ((kind == std::string("int"))) {
-            return ((std::string("") + (value)) + std::string("LL"));
+            return ((std::string("INT64_C(") + (value)) + std::string(")"));
         }
         else {
             if ((kind == std::string("float"))) {
@@ -2046,7 +2045,7 @@ struct CppCodegen {
                 }
                 if ((this->extern_fn_params.count(tok.lexeme) > 0)) {
                     std::vector<Param> eparams = this->extern_fn_params[tok.lexeme];
-                    for (int64_t i = 0LL; i < static_cast<int64_t>(arg_strs.size()); i++) {
+                    for (int64_t i = INT64_C(0); i < static_cast<int64_t>(arg_strs.size()); i++) {
                         if ((i < static_cast<int64_t>(eparams.size()))) {
                             arg_strs[i] = (*this).wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type);
                         }
@@ -2107,8 +2106,8 @@ struct CppCodegen {
                                     }
                                     else {
                                         if ((method == std::string("split"))) {
-                                            if ((static_cast<int64_t>(args.size()) > 0LL)) {
-                                                return ((((std::string("lv_split(") + (obj)) + std::string(", ")) + (args[0LL])) + std::string(")"));
+                                            if ((static_cast<int64_t>(args.size()) > INT64_C(0))) {
+                                                return ((((std::string("lv_split(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(")"));
                                             }
                                             return ((std::string("lv_split(") + (obj)) + std::string(", std::string(\" \"))"));
                                         }
@@ -2122,8 +2121,8 @@ struct CppCodegen {
                                                 }
                                                 else {
                                                     if ((method == std::string("indexOf"))) {
-                                                        if ((static_cast<int64_t>(args.size()) >= 2LL)) {
-                                                            return ((((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (args[0LL])) + std::string(", ")) + (args[1LL])) + std::string(")"));
+                                                        if ((static_cast<int64_t>(args.size()) >= INT64_C(2))) {
+                                                            return ((((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(", ")) + (args[INT64_C(1)])) + std::string(")"));
                                                         }
                                                         return ((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
                                                     }
@@ -2133,8 +2132,8 @@ struct CppCodegen {
                                                         }
                                                         else {
                                                             if ((method == std::string("substring"))) {
-                                                                if ((static_cast<int64_t>(args.size()) >= 2LL)) {
-                                                                    return ((((((((std::string("") + (obj)) + std::string(".substr(")) + (args[0LL])) + std::string(", (")) + (args[1LL])) + std::string(") - (")) + (args[0LL])) + std::string("))"));
+                                                                if ((static_cast<int64_t>(args.size()) >= INT64_C(2))) {
+                                                                    return ((((((((std::string("") + (obj)) + std::string(".substr(")) + (args[INT64_C(0)])) + std::string(", (")) + (args[INT64_C(1)])) + std::string(") - (")) + (args[INT64_C(0)])) + std::string("))"));
                                                                 }
                                                                 return ((((std::string("") + (obj)) + std::string(".substr(")) + (lv_join(args, std::string(", ")))) + std::string(")"));
                                                             }
@@ -2156,8 +2155,8 @@ struct CppCodegen {
                                                                             }
                                                                             else {
                                                                                 if ((method == std::string("join"))) {
-                                                                                    if ((static_cast<int64_t>(args.size()) > 0LL)) {
-                                                                                        return ((((std::string("lv_join(") + (obj)) + std::string(", ")) + (args[0LL])) + std::string(")"));
+                                                                                    if ((static_cast<int64_t>(args.size()) > INT64_C(0))) {
+                                                                                        return ((((std::string("lv_join(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(")"));
                                                                                     }
                                                                                     return ((std::string("lv_join(") + (obj)) + std::string(", std::string(\"\"))"));
                                                                                 }
@@ -2277,7 +2276,7 @@ struct CppCodegen {
         std::string saved_output = this->output;
         this->output = std::string("");
         int64_t saved_indent = this->indent_level;
-        this->indent_level = 2LL;
+        this->indent_level = INT64_C(2);
         std::vector<Stmt> body = this->lambda_blocks[body_id];
         for (const auto& st : body) {
             (*this).emit_stmt(st, in_method);
@@ -2406,11 +2405,11 @@ struct CppCodegen {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Block>(_match_23._data);
                 auto& statements = _v.statements;
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("{\n")));
-                this->indent_level = (this->indent_level + 1LL);
+                this->indent_level = (this->indent_level + INT64_C(1));
                 for (const auto& st : statements) {
                     (*this).emit_stmt(st, m);
                 }
-                this->indent_level = (this->indent_level - 1LL);
+                this->indent_level = (this->indent_level - INT64_C(1));
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Try>(_match_23._data)) {
@@ -2518,7 +2517,7 @@ struct CppCodegen {
                 auto& types = _v.types;
                 auto& functions = _v.functions;
                 std::string inc_line = std::string("");
-                bool has_dot = (lv_index_of(header, std::string(".")) >= 0LL);
+                bool has_dot = (lv_index_of(header, std::string(".")) >= INT64_C(0));
                 if (has_dot) {
                     inc_line = ((std::string("#include \"") + (header)) + std::string("\""));
                 }
@@ -2605,18 +2604,18 @@ struct CppCodegen {
                 auto& _v = std::get<std::decay_t<decltype(_match_30)>::Block>(_match_30._data);
                 auto& stmts = _v.statements;
                 this->output = (this->output + std::string("{\n"));
-                this->indent_level = (this->indent_level + 1LL);
+                this->indent_level = (this->indent_level + INT64_C(1));
                 for (const auto& st : stmts) {
                     (*this).emit_stmt(st, m);
                 }
-                this->indent_level = (this->indent_level - 1LL);
+                this->indent_level = (this->indent_level - INT64_C(1));
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
             }
             else {
                 this->output = (this->output + std::string("{\n"));
-                this->indent_level = (this->indent_level + 1LL);
+                this->indent_level = (this->indent_level + INT64_C(1));
                 (*this).emit_stmt(s, m);
-                this->indent_level = (this->indent_level - 1LL);
+                this->indent_level = (this->indent_level - INT64_C(1));
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
             }
         }
@@ -2628,26 +2627,26 @@ struct CppCodegen {
         std::string ret_type = (*this).emit_type(return_type);
         std::string param_str = (*this).emit_params(params, true);
         std::string prefix = std::string("");
-        if ((comptime_mode == 1LL)) {
+        if ((comptime_mode == INT64_C(1))) {
             prefix = std::string("constexpr ");
         }
         else {
-            if ((comptime_mode == 2LL)) {
+            if ((comptime_mode == INT64_C(2))) {
                 prefix = std::string("consteval ");
             }
         }
         this->output = (this->output + ((((((((((std::string("") + ((*this).indent())) + std::string("")) + (prefix)) + std::string("")) + (ret_type)) + std::string(" ")) + (name.lexeme)) + std::string("(")) + (param_str)) + std::string(") {\n")));
-        this->indent_level = (this->indent_level + 1LL);
+        this->indent_level = (this->indent_level + INT64_C(1));
         for (const auto& st : body) {
             (*this).emit_stmt(st, false);
         }
-        this->indent_level = (this->indent_level - 1LL);
+        this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n\n")));
         this->dynamic_vars = saved_dynamic;
     }
 
     void emit_class_fields(const std::vector<std::string>& init_field_names, const std::vector<std::string>& init_field_types, const std::vector<std::string>& let_field_names, const std::vector<std::string>& let_field_types) {
-        for (int64_t fi = 0LL; fi < static_cast<int64_t>(init_field_names.size()); fi++) {
+        for (int64_t fi = INT64_C(0); fi < static_cast<int64_t>(init_field_names.size()); fi++) {
             bool is_let = false;
             for (const auto& lfn : let_field_names) {
                 if ((lfn == init_field_names[fi])) {
@@ -2658,10 +2657,10 @@ struct CppCodegen {
                 this->output = (this->output + ((((((std::string("") + ((*this).indent())) + std::string("")) + (init_field_types[fi])) + std::string(" ")) + (init_field_names[fi])) + std::string(";\n")));
             }
         }
-        for (int64_t li = 0LL; li < static_cast<int64_t>(let_field_names.size()); li++) {
+        for (int64_t li = INT64_C(0); li < static_cast<int64_t>(let_field_names.size()); li++) {
             this->output = (this->output + ((((((std::string("") + ((*this).indent())) + std::string("")) + (let_field_types[li])) + std::string(" ")) + (let_field_names[li])) + std::string(";\n")));
         }
-        if ((static_cast<int64_t>(init_field_names.size()) > 0LL) || (static_cast<int64_t>(let_field_names.size()) > 0LL)) {
+        if ((static_cast<int64_t>(init_field_names.size()) > INT64_C(0)) || (static_cast<int64_t>(let_field_names.size()) > INT64_C(0))) {
             this->output = (this->output + std::string("\n"));
         }
     }
@@ -2720,7 +2719,7 @@ struct CppCodegen {
                 }
             }
         }
-        if ((static_cast<int64_t>(init_list.size()) == 0LL)) {
+        if ((static_cast<int64_t>(init_list.size()) == INT64_C(0))) {
             this->output = (this->output + ((((((std::string("") + ((*this).indent())) + std::string("")) + (name.lexeme)) + std::string("(")) + (param_str)) + std::string(") {\n")));
         }
         else {
@@ -2728,11 +2727,11 @@ struct CppCodegen {
             this->output = (this->output + ((((std::string("") + ((*this).indent())) + std::string("    : ")) + (lv_join(init_list, std::string(", ")))) + std::string(" {\n")));
         }
         std::vector<std::string> saved_dyn = this->dynamic_vars;
-        this->indent_level = (this->indent_level + 1LL);
+        this->indent_level = (this->indent_level + INT64_C(1));
         for (const auto& st : remaining_body) {
             (*this).emit_stmt(st, true);
         }
-        this->indent_level = (this->indent_level - 1LL);
+        this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n\n")));
         this->dynamic_vars = saved_dyn;
     }
@@ -2755,11 +2754,11 @@ struct CppCodegen {
                 std::string ret_type = (*this).emit_type(mret);
                 std::string mparam_str = (*this).emit_params(mparams, true);
                 std::string ct_prefix = std::string("");
-                if ((comptime_mode == 1LL)) {
+                if ((comptime_mode == INT64_C(1))) {
                     ct_prefix = std::string("constexpr ");
                 }
                 else {
-                    if ((comptime_mode == 2LL)) {
+                    if ((comptime_mode == INT64_C(2))) {
                         ct_prefix = std::string("consteval ");
                     }
                 }
@@ -2774,11 +2773,11 @@ struct CppCodegen {
                         this->output = (this->output + ((((((((((std::string("") + ((*this).indent())) + std::string("")) + (ct_prefix)) + std::string("")) + (ret_type)) + std::string(" ")) + (mname.lexeme)) + std::string("(")) + (mparam_str)) + std::string(") {\n")));
                     }
                 }
-                this->indent_level = (this->indent_level + 1LL);
+                this->indent_level = (this->indent_level + INT64_C(1));
                 for (const auto& st : mbody) {
                     (*this).emit_stmt(st, true);
                 }
-                this->indent_level = (this->indent_level - 1LL);
+                this->indent_level = (this->indent_level - INT64_C(1));
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n\n")));
                 this->dynamic_vars = saved_dyn;
             }
@@ -2892,7 +2891,7 @@ struct CppCodegen {
             }
         }
         this->output = (this->output + ((((((std::string("") + ((*this).template_prefix(type_params))) + std::string("")) + ((*this).indent())) + std::string("struct ")) + (name.lexeme)) + std::string(" {\n")));
-        this->indent_level = (this->indent_level + 1LL);
+        this->indent_level = (this->indent_level + INT64_C(1));
         (*this).emit_class_fields(init_field_names, init_field_types, let_field_names, let_field_types);
         if (has_init) {
             (*this).emit_constructor(name, init_params, init_body);
@@ -2900,7 +2899,7 @@ struct CppCodegen {
         for (const auto& m : methods) {
             (*this).emit_class_method(name, m);
         }
-        this->indent_level = (this->indent_level - 1LL);
+        this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("};\n\n")));
         bool has_to_string = false;
         for (const auto& m : methods) {
@@ -2929,7 +2928,7 @@ struct CppCodegen {
         if (has_to_string) {
             std::string tmpl_line = (*this).template_prefix(type_params);
             std::string type_suffix = std::string("");
-            if ((static_cast<int64_t>(type_params.size()) > 0LL)) {
+            if ((static_cast<int64_t>(type_params.size()) > INT64_C(0))) {
                 type_suffix = ((std::string("<") + (lv_join(type_params, std::string(", ")))) + std::string(">"));
             }
             std::string full_name = ((((std::string("") + (name.lexeme)) + std::string("")) + (type_suffix)) + std::string(""));
@@ -2974,7 +2973,7 @@ struct CppCodegen {
             else if (std::holds_alternative<std::decay_t<decltype(_match_41)>::Variable>(_match_41._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_41)>::Variable>(_match_41._data);
                 auto& tok = _v.name;
-                for (int64_t i = 0LL; i < static_cast<int64_t>(param_names.size()); i++) {
+                for (int64_t i = INT64_C(0); i < static_cast<int64_t>(param_names.size()); i++) {
                     if ((param_names[i] == tok.lexeme)) {
                         if ((param_types[i] == std::string("auto"))) {
                             return std::string("std::any");
@@ -3023,7 +3022,7 @@ struct CppCodegen {
                         if ((*this).is_known_enum(tok.lexeme)) {
                             return tok.lexeme;
                         }
-                        for (int64_t ci = 0LL; ci < static_cast<int64_t>(param_names.size()); ci++) {
+                        for (int64_t ci = INT64_C(0); ci < static_cast<int64_t>(param_names.size()); ci++) {
                             if ((param_names[ci] == tok.lexeme)) {
                                 return param_types[ci];
                             }
@@ -3057,8 +3056,8 @@ struct CppCodegen {
             else if (std::holds_alternative<std::decay_t<decltype(_match_41)>::Vector>(_match_41._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_41)>::Vector>(_match_41._data);
                 auto& elements = _v.elements;
-                if ((static_cast<int64_t>(elements.size()) > 0LL)) {
-                    std::string inner = (*this).infer_expr_type(elements[0LL], param_names, param_types);
+                if ((static_cast<int64_t>(elements.size()) > INT64_C(0))) {
+                    std::string inner = (*this).infer_expr_type(elements[INT64_C(0)], param_names, param_types);
                     if ((inner != std::string("std::any"))) {
                         return ((std::string("std::vector<") + (inner)) + std::string(">"));
                     }
@@ -3071,9 +3070,9 @@ struct CppCodegen {
                 auto& values = _v.values;
                 std::string kt = std::string("std::any");
                 std::string vt = std::string("std::any");
-                if ((static_cast<int64_t>(keys.size()) > 0LL)) {
-                    kt = (*this).infer_expr_type(keys[0LL], param_names, param_types);
-                    vt = (*this).infer_expr_type(values[0LL], param_names, param_types);
+                if ((static_cast<int64_t>(keys.size()) > INT64_C(0))) {
+                    kt = (*this).infer_expr_type(keys[INT64_C(0)], param_names, param_types);
+                    vt = (*this).infer_expr_type(values[INT64_C(0)], param_names, param_types);
                 }
                 return ((((std::string("std::unordered_map<") + (kt)) + std::string(", ")) + (vt)) + std::string(">"));
             }
@@ -3091,9 +3090,9 @@ struct CppCodegen {
 
     void emit_enum_structs(const std::string& enum_name, const std::vector<EnumVariantNode>& variants, const std::string& type_suffix) {
         for (const auto& v : variants) {
-            if ((static_cast<int64_t>(v.types.size()) > 0LL)) {
+            if ((static_cast<int64_t>(v.types.size()) > INT64_C(0))) {
                 this->output = (this->output + ((((std::string("") + ((*this).indent())) + std::string("struct ")) + (v.name.lexeme)) + std::string(" { ")));
-                for (int64_t fi = 0LL; fi < static_cast<int64_t>(v.types.size()); fi++) {
+                for (int64_t fi = INT64_C(0); fi < static_cast<int64_t>(v.types.size()); fi++) {
                     std::string cpp_type = (*this).emit_type(v.types[fi]);
                     std::string fname = v.field_names[fi];
                     {
@@ -3131,13 +3130,13 @@ struct CppCodegen {
     void emit_enum_makers(const std::string& enum_name, const std::vector<EnumVariantNode>& variants, const std::string& type_suffix) {
         for (const auto& v : variants) {
             std::string vname = v.name.lexeme;
-            if ((static_cast<int64_t>(v.types.size()) == 0LL)) {
+            if ((static_cast<int64_t>(v.types.size()) == INT64_C(0))) {
                 this->output = (this->output + ((((((((((std::string("") + ((*this).indent())) + std::string("static ")) + (enum_name)) + std::string(" make_")) + (vname)) + std::string("() { return {\"")) + (vname)) + std::string("\", ")) + (vname)) + std::string("{}}; }\n")));
             }
             else {
                 std::vector<std::string> params = {};
                 std::vector<std::string> field_inits = {};
-                for (int64_t fi = 0LL; fi < static_cast<int64_t>(v.types.size()); fi++) {
+                for (int64_t fi = INT64_C(0); fi < static_cast<int64_t>(v.types.size()); fi++) {
                     std::string cpp_type = (*this).emit_type(v.types[fi]);
                     std::string fname = v.field_names[fi];
                     bool is_self_ref = false;
@@ -3172,12 +3171,12 @@ struct CppCodegen {
 
     void emit_enum_operators(const std::string& enum_name, const std::string& type_suffix, const std::string& tmpl_line, bool has_to_string) {
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("std::string operator[](const std::string& key) const {\n")));
-        this->indent_level = (this->indent_level + 1LL);
+        this->indent_level = (this->indent_level + INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("if (key == \"_tag\") return _tag;\n")));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("return \"\";\n")));
-        this->indent_level = (this->indent_level - 1LL);
+        this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
-        this->indent_level = (this->indent_level - 1LL);
+        this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("};\n\n")));
         if (has_to_string) {
             this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("void print(const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e) { std::cout << e.to_string() << std::endl; }\n")));
@@ -3215,14 +3214,14 @@ struct CppCodegen {
         }
         std::string tmpl_line = (*this).template_prefix(type_params);
         std::string type_suffix = std::string("");
-        if ((static_cast<int64_t>(type_params.size()) > 0LL)) {
+        if ((static_cast<int64_t>(type_params.size()) > INT64_C(0))) {
             type_suffix = ((std::string("<") + (lv_join(type_params, std::string(", ")))) + std::string(">"));
         }
         if (has_self_ref) {
             this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("")) + ((*this).indent())) + std::string("struct ")) + (enum_name)) + std::string(";\n")));
         }
         this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("")) + ((*this).indent())) + std::string("struct ")) + (enum_name)) + std::string(" {\n")));
-        this->indent_level = (this->indent_level + 1LL);
+        this->indent_level = (this->indent_level + INT64_C(1));
         (*this).emit_enum_structs(enum_name, variants, type_suffix);
         (*this).emit_enum_makers(enum_name, variants, type_suffix);
         for (const auto& m : methods) {
@@ -3258,12 +3257,12 @@ struct CppCodegen {
     void emit_match_impl(const Expr& expr, const std::vector<MatchArm>& arm_patterns, const std::vector<Stmt>& arm_bodies, bool in_method) {
         std::string match_val = (*this).emit_expr(expr, in_method);
         std::string temp = ((std::string("_match_") + (this->temp_counter)) + std::string(""));
-        this->temp_counter = (this->temp_counter + 1LL);
+        this->temp_counter = (this->temp_counter + INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("{\n")));
-        this->indent_level = (this->indent_level + 1LL);
+        this->indent_level = (this->indent_level + INT64_C(1));
         this->output = (this->output + ((((((std::string("") + ((*this).indent())) + std::string("const auto& ")) + (temp)) + std::string(" = ")) + (match_val)) + std::string(";\n")));
         bool first = true;
-        for (int64_t ai = 0LL; ai < static_cast<int64_t>(arm_patterns.size()); ai++) {
+        for (int64_t ai = INT64_C(0); ai < static_cast<int64_t>(arm_patterns.size()); ai++) {
             auto arm = arm_patterns[ai];
             Stmt arm_body = arm_bodies[ai];
             if ((arm.pattern_name == std::string("_"))) {
@@ -3273,9 +3272,9 @@ struct CppCodegen {
                 else {
                     this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("else {\n")));
                 }
-                this->indent_level = (this->indent_level + 1LL);
+                this->indent_level = (this->indent_level + INT64_C(1));
                 (*this).emit_arm_body(arm_body, in_method);
-                this->indent_level = (this->indent_level - 1LL);
+                this->indent_level = (this->indent_level - INT64_C(1));
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
             }
             else {
@@ -3291,12 +3290,12 @@ struct CppCodegen {
                 else {
                     this->output = (this->output + ((((((((std::string("") + ((*this).indent())) + std::string("")) + (keyword)) + std::string(" (")) + (temp)) + std::string("._tag == \"")) + (arm.pattern_name)) + std::string("\") {\n")));
                 }
-                this->indent_level = (this->indent_level + 1LL);
-                if ((static_cast<int64_t>(arm.bindings.size()) > 0LL)) {
+                this->indent_level = (this->indent_level + INT64_C(1));
+                if ((static_cast<int64_t>(arm.bindings.size()) > INT64_C(0))) {
                     if ((ename != std::string(""))) {
                         this->output = (this->output + ((((((((std::string("") + ((*this).indent())) + std::string("auto& _v = std::get<std::decay_t<decltype(")) + (temp)) + std::string(")>::")) + (arm.pattern_name)) + std::string(">(")) + (temp)) + std::string("._data);\n")));
                         auto vinfo = (*this).get_variant_info(ename, arm.pattern_name);
-                        for (int64_t bi = 0LL; bi < static_cast<int64_t>(arm.bindings.size()); bi++) {
+                        for (int64_t bi = INT64_C(0); bi < static_cast<int64_t>(arm.bindings.size()); bi++) {
                             if ((bi < static_cast<int64_t>(vinfo.field_names.size()))) {
                                 std::string field_name = vinfo.field_names[bi];
                                 bool is_self_ref = false;
@@ -3327,11 +3326,11 @@ struct CppCodegen {
                     }
                 }
                 (*this).emit_arm_body(arm_body, in_method);
-                this->indent_level = (this->indent_level - 1LL);
+                this->indent_level = (this->indent_level - INT64_C(1));
                 this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
             }
         }
-        this->indent_level = (this->indent_level - 1LL);
+        this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
     }
 
@@ -3432,7 +3431,7 @@ struct CppCodegen {
         std::string short_name = this->module_short_names[index];
         std::string alias = this->module_aliases[index];
         this->output = (this->output + ((std::string("namespace ") + (full_name)) + std::string(" {\n")));
-        this->indent_level = 1LL;
+        this->indent_level = INT64_C(1);
         for (const auto& stmt : this->module_stmts[index]) {
             {
                 const auto& _match_51 = stmt;
@@ -3467,7 +3466,7 @@ struct CppCodegen {
                 }
             }
         }
-        this->indent_level = 0LL;
+        this->indent_level = INT64_C(0);
         this->output = (this->output + ((std::string("} // namespace ") + (full_name)) + std::string("\n")));
         if ((short_name != full_name)) {
             this->output = (this->output + ((((std::string("namespace ") + (short_name)) + std::string(" = ")) + (full_name)) + std::string(";\n")));
@@ -3484,7 +3483,7 @@ struct CppCodegen {
     }
 
     std::string generate(const std::vector<Stmt>& stmts) {
-        for (int64_t mi = 0LL; mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
+        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
             for (const auto& stmt : this->module_stmts[mi]) {
                 {
                     const auto& _match_52 = stmt;
@@ -3525,7 +3524,7 @@ struct CppCodegen {
             this->declarations = (this->declarations + ((std::string("") + (inc)) + std::string("\n")));
         }
         this->declarations = (this->declarations + std::string("\n"));
-        for (int64_t mi = 0LL; mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
+        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
             (*this).emit_module(mi);
         }
         for (const auto& stmt : stmts) {
@@ -3546,11 +3545,11 @@ struct CppCodegen {
                         this->has_main = true;
                         this->output = (this->output + std::string("int main(int argc, char* argv[]) {\n"));
                         this->output = (this->output + std::string("    for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);\n"));
-                        this->indent_level = 1LL;
+                        this->indent_level = INT64_C(1);
                         for (const auto& s : body) {
                             (*this).emit_stmt(s, false);
                         }
-                        this->indent_level = 0LL;
+                        this->indent_level = INT64_C(0);
                         this->output = (this->output + std::string("}\n"));
                         this->declarations = (this->declarations + this->output);
                         this->output = std::string("");
@@ -3642,10 +3641,10 @@ struct Checker {
     }
 
     void declare(const std::string& name, const TypeNode& t, const std::string& kind, bool is_ref, bool is_mutable, const Token& tok) {
-        if ((static_cast<int64_t>(this->scopes.size()) == 0LL)) {
+        if ((static_cast<int64_t>(this->scopes.size()) == INT64_C(0))) {
             return;
         }
-        auto& scope = this->scopes[(static_cast<int64_t>(this->scopes.size()) - 1LL)];
+        auto& scope = this->scopes[(static_cast<int64_t>(this->scopes.size()) - INT64_C(1))];
         for (const auto& n : scope.names) {
             if ((n == name)) {
                 (*this).warn(((std::string("Redefinition of '") + (name)) + std::string("' in same scope")), tok);
@@ -3657,15 +3656,15 @@ struct Checker {
     }
 
     bool resolve(const std::string& name) {
-        int64_t i = (static_cast<int64_t>(this->scopes.size()) - 1LL);
-        while ((i >= 0LL)) {
+        int64_t i = (static_cast<int64_t>(this->scopes.size()) - INT64_C(1));
+        while ((i >= INT64_C(0))) {
             auto& scope = this->scopes[i];
             for (const auto& n : scope.names) {
                 if ((n == name)) {
                     return true;
                 }
             }
-            i = (i - 1LL);
+            i = (i - INT64_C(1));
         }
         if ((this->known_funcs.count(name) > 0)) {
             return true;
@@ -3677,23 +3676,23 @@ struct Checker {
             return true;
         }
         int64_t angle = lv_index_of(name, std::string("<"));
-        if ((angle >= 0LL)) {
-            std::string base = name.substr(0LL, (angle) - (0LL));
+        if ((angle >= INT64_C(0))) {
+            std::string base = name.substr(INT64_C(0), (angle) - (INT64_C(0)));
             return (*this).resolve(base);
         }
         return false;
     }
 
     Symbol lookup(const std::string& name) {
-        int64_t i = (static_cast<int64_t>(this->scopes.size()) - 1LL);
-        while ((i >= 0LL)) {
+        int64_t i = (static_cast<int64_t>(this->scopes.size()) - INT64_C(1));
+        while ((i >= INT64_C(0))) {
             auto& scope = this->scopes[i];
-            for (int64_t j = 0LL; j < static_cast<int64_t>(scope.names.size()); j++) {
+            for (int64_t j = INT64_C(0); j < static_cast<int64_t>(scope.names.size()); j++) {
                 if ((scope.names[j] == name)) {
                     return scope.symbols[j];
                 }
             }
-            i = (i - 1LL);
+            i = (i - INT64_C(1));
         }
         return Symbol(name, TypeNode::make_Auto(), std::string("unknown"), false, false);
     }
@@ -4164,8 +4163,8 @@ struct Checker {
             else if (std::holds_alternative<std::decay_t<decltype(_match_74)>::Vector>(_match_74._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_74)>::Vector>(_match_74._data);
                 auto& elements = _v.elements;
-                if ((static_cast<int64_t>(elements.size()) > 0LL)) {
-                    auto inner = (*this).infer_type(elements[0LL]);
+                if ((static_cast<int64_t>(elements.size()) > INT64_C(0))) {
+                    auto inner = (*this).infer_type(elements[INT64_C(0)]);
                     return TypeNode::make_Array(inner);
                 }
                 return TypeNode::make_Array(TypeNode::make_Auto());
@@ -4260,7 +4259,7 @@ struct Checker {
     }
 
     void register_builtins() {
-        std::vector<std::string> builtins = std::vector{std::string("print"), std::string("println"), std::string("lv_assert"), std::string("fs_read"), std::string("fs_write"), std::string("fs_exists"), std::string("fs_append"), std::string("fs_read_lines"), std::string("fs_remove"), std::string("os_exec"), std::string("os_args"), std::string("os_env"), std::string("os_clock"), std::string("os_sleep"), std::string("os_cwd"), std::string("to_string"), std::string("to_int"), std::string("to_float"), std::string("input"), std::string("typeof"), std::string("len"), std::string("exit"), std::string("abs"), std::string("str_to_int"), std::string("str_to_float"), std::string("int_to_str"), std::string("float_to_str"), std::string("lv_abs"), std::string("lv_fabs"), std::string("lv_min"), std::string("lv_max"), std::string("lv_fmin"), std::string("lv_fmax"), std::string("lv_clamp"), std::string("lv_fclamp"), std::string("lv_floor"), std::string("lv_ceil"), std::string("lv_round"), std::string("lv_sqrt"), std::string("lv_pow"), std::string("lv_log"), std::string("lv_log2"), std::string("lv_sin"), std::string("lv_cos"), std::string("lv_random"), std::string("lv_random_float"), std::string("lv_count")};
+        std::vector<std::string> builtins = std::vector{std::string("print"), std::string("println"), std::string("lv_assert"), std::string("fs_read"), std::string("fs_write"), std::string("fs_exists"), std::string("fs_append"), std::string("fs_read_lines"), std::string("fs_remove"), std::string("fs_is_dir"), std::string("fs_listdir"), std::string("os_exec"), std::string("os_args"), std::string("os_env"), std::string("os_clock"), std::string("os_sleep"), std::string("os_cwd"), std::string("to_string"), std::string("to_int"), std::string("to_float"), std::string("input"), std::string("typeof"), std::string("len"), std::string("exit"), std::string("abs"), std::string("str_to_int"), std::string("str_to_float"), std::string("int_to_str"), std::string("float_to_str"), std::string("lv_abs"), std::string("lv_fabs"), std::string("lv_min"), std::string("lv_max"), std::string("lv_fmin"), std::string("lv_fmax"), std::string("lv_clamp"), std::string("lv_fclamp"), std::string("lv_floor"), std::string("lv_ceil"), std::string("lv_round"), std::string("lv_sqrt"), std::string("lv_pow"), std::string("lv_log"), std::string("lv_log2"), std::string("lv_sin"), std::string("lv_cos"), std::string("lv_random"), std::string("lv_random_float"), std::string("lv_count")};
         std::vector<Param> empty_params = {};
         for (const auto& name : builtins) {
             this->known_funcs[name] = ExternFn(name, name, TypeNode::make_Auto(), empty_params);
@@ -4534,7 +4533,7 @@ struct Checker {
                 (*this).pop_scope();
                 (*this).push_scope();
                 if ((exception_name != std::string(""))) {
-                    (*this).declare(exception_name, TypeNode::make_Auto(), std::string("var"), false, false, Token(TK_IDENTIFIER, exception_name, 0LL, 0LL));
+                    (*this).declare(exception_name, TypeNode::make_Auto(), std::string("var"), false, false, Token(TK_IDENTIFIER, exception_name, INT64_C(0), INT64_C(0)));
                 }
                 (*this).check_stmt(catch_body);
                 (*this).pop_scope();
@@ -4845,7 +4844,7 @@ struct Checker {
                 auto& name = _v.name;
                 if ((this->known_funcs.count(name.lexeme) > 0)) {
                     ExternFn fi = this->known_funcs[name.lexeme];
-                    if ((static_cast<int64_t>(fi.params.size()) > 0LL) && (static_cast<int64_t>(args.size()) != static_cast<int64_t>(fi.params.size()))) {
+                    if ((static_cast<int64_t>(fi.params.size()) > INT64_C(0)) && (static_cast<int64_t>(args.size()) != static_cast<int64_t>(fi.params.size()))) {
                         (*this).error(((((((std::string("Function '") + (name.lexeme)) + std::string("' expects ")) + (static_cast<int64_t>(fi.params.size()))) + std::string(" args, got ")) + (static_cast<int64_t>(args.size()))) + std::string("")), paren);
                     }
                     return;
@@ -4859,7 +4858,7 @@ struct Checker {
 
     void check_match(const Expr& expr, const std::vector<MatchArm>& arm_patterns, const std::vector<Stmt>& arm_bodies) {
         bool has_wildcard = false;
-        for (int64_t i = 0LL; i < static_cast<int64_t>(arm_patterns.size()); i++) {
+        for (int64_t i = INT64_C(0); i < static_cast<int64_t>(arm_patterns.size()); i++) {
             auto arm = arm_patterns[i];
             if ((arm.pattern_name == std::string("_"))) {
                 has_wildcard = true;
@@ -4872,7 +4871,7 @@ struct Checker {
             }
             (*this).push_scope();
             for (const auto& b : arm.bindings) {
-                (*this).declare(b, TypeNode::make_Auto(), std::string("var"), false, false, Token(TK_IDENTIFIER, b, 0LL, 0LL));
+                (*this).declare(b, TypeNode::make_Auto(), std::string("var"), false, false, Token(TK_IDENTIFIER, b, INT64_C(0), INT64_C(0)));
             }
             (*this).check_stmt(arm_bodies[i]);
             (*this).pop_scope();
@@ -4898,7 +4897,7 @@ struct Parser {
 
     Parser(std::vector<Token> tokens)
         : tokens(tokens) {
-        this->current = 0LL;
+        this->current = INT64_C(0);
         this->in_class_body = false;
         this->lambda_blocks = {};
     }
@@ -4913,18 +4912,18 @@ struct Parser {
 
     Token peek_at(int64_t offset) {
         if (((this->current + offset) >= static_cast<int64_t>(this->tokens.size()))) {
-            return this->tokens[(static_cast<int64_t>(this->tokens.size()) - 1LL)];
+            return this->tokens[(static_cast<int64_t>(this->tokens.size()) - INT64_C(1))];
         }
         return this->tokens[(this->current + offset)];
     }
 
     Token previous() {
-        return this->tokens[(this->current - 1LL)];
+        return this->tokens[(this->current - INT64_C(1))];
     }
 
     Token advance() {
         if ((!(*this).is_at_end())) {
-            this->current = (this->current + 1LL);
+            this->current = (this->current + INT64_C(1));
         }
         return (*this).previous();
     }
@@ -5028,61 +5027,61 @@ struct Parser {
     int64_t skip_type_tokens(int64_t pos) {
         auto tt = (*this).peek_at(pos).token_type;
         if ((tt == TK_PTR)) {
-            pos = (pos + 1LL);
-            pos = (pos + 1LL);
+            pos = (pos + INT64_C(1));
+            pos = (pos + INT64_C(1));
             pos = (*this).skip_type_tokens(pos);
-            pos = (pos + 1LL);
+            pos = (pos + INT64_C(1));
             return pos;
         }
         if ((tt == TK_VECTOR) || (tt == TK_HASHSET)) {
-            pos = (pos + 1LL);
-            pos = (pos + 1LL);
+            pos = (pos + INT64_C(1));
+            pos = (pos + INT64_C(1));
             pos = (*this).skip_type_tokens(pos);
-            pos = (pos + 1LL);
+            pos = (pos + INT64_C(1));
             return pos;
         }
         else {
             if ((tt == TK_HASHMAP)) {
-                pos = (pos + 1LL);
-                pos = (pos + 1LL);
+                pos = (pos + INT64_C(1));
+                pos = (pos + INT64_C(1));
                 pos = (*this).skip_type_tokens(pos);
-                pos = (pos + 1LL);
+                pos = (pos + INT64_C(1));
                 pos = (*this).skip_type_tokens(pos);
-                pos = (pos + 1LL);
+                pos = (pos + INT64_C(1));
                 return pos;
             }
         }
-        if ((tt == TK_IDENTIFIER) && ((*this).peek_at((pos + 1LL)).token_type == TK_LEFT_BRACKET)) {
-            int64_t try_pos = (pos + 2LL);
+        if ((tt == TK_IDENTIFIER) && ((*this).peek_at((pos + INT64_C(1))).token_type == TK_LEFT_BRACKET)) {
+            int64_t try_pos = (pos + INT64_C(2));
             try_pos = (*this).skip_type_tokens(try_pos);
             while (((*this).peek_at(try_pos).token_type == TK_COMMA)) {
-                try_pos = (try_pos + 1LL);
+                try_pos = (try_pos + INT64_C(1));
                 try_pos = (*this).skip_type_tokens(try_pos);
             }
             if (((*this).peek_at(try_pos).token_type == TK_RIGHT_BRACKET)) {
-                return (try_pos + 1LL);
+                return (try_pos + INT64_C(1));
             }
         }
-        return (pos + 1LL);
+        return (pos + INT64_C(1));
     }
 
     bool is_function_start() {
-        int64_t offset = 0LL;
+        int64_t offset = INT64_C(0);
         if (((*this).peek_at(offset).token_type == TK_COMPTIME) || ((*this).peek_at(offset).token_type == TK_COMPTIME_STRICT)) {
-            offset = (offset + 1LL);
+            offset = (offset + INT64_C(1));
         }
         if ((!(*this).is_type_at_pos(offset))) {
             return false;
         }
         offset = (*this).skip_type_tokens(offset);
         if (((*this).peek_at(offset).token_type == TK_QUESTION)) {
-            offset = (offset + 1LL);
+            offset = (offset + INT64_C(1));
         }
         bool still_modifiers = true;
         while ((offset < static_cast<int64_t>(this->tokens.size())) && still_modifiers) {
             auto mt = (*this).peek_at(offset).token_type;
             if ((mt == TK_INLINE) || (mt == TK_COMPTIME)) {
-                offset = (offset + 1LL);
+                offset = (offset + INT64_C(1));
             }
             else {
                 still_modifiers = false;
@@ -5273,7 +5272,7 @@ struct Parser {
                 auto& _v = std::get<std::decay_t<decltype(_match_92)>::Custom>(_match_92._data);
                 auto& name = _v.name;
                 auto& type_args = _v.type_args;
-                if ((static_cast<int64_t>(type_args.size()) > 0LL)) {
+                if ((static_cast<int64_t>(type_args.size()) > INT64_C(0))) {
                     std::vector<std::string> ta = {};
                     for (const auto& a : type_args) {
                         ta.push_back((*this).type_to_string(a));
@@ -5688,14 +5687,14 @@ struct Parser {
     bool try_parse_lambda() {
         int64_t saved = this->current;
         if ((*this).check(TK_RIGHT_PAREN)) {
-            std::string next_type = (*this).peek_at(1LL).token_type;
+            std::string next_type = (*this).peek_at(INT64_C(1)).token_type;
             if ((next_type == TK_FAT_ARROW) || (next_type == TK_COLON)) {
                 return true;
             }
         }
-        int64_t start_pos = 0LL;
-        if (((*this).peek_at(0LL).token_type == TK_REF) || ((*this).peek_at(0LL).token_type == TK_REF_MUT)) {
-            start_pos = 1LL;
+        int64_t start_pos = INT64_C(0);
+        if (((*this).peek_at(INT64_C(0)).token_type == TK_REF) || ((*this).peek_at(INT64_C(0)).token_type == TK_REF_MUT)) {
+            start_pos = INT64_C(1);
         }
         if ((*this).is_type_at_pos(start_pos)) {
             int64_t pos = start_pos;
@@ -5703,17 +5702,17 @@ struct Parser {
             while (valid) {
                 pos = (*this).skip_type_tokens(pos);
                 if (((*this).peek_at(pos).token_type == TK_QUESTION)) {
-                    pos = (pos + 1LL);
+                    pos = (pos + INT64_C(1));
                 }
                 if (((*this).peek_at(pos).token_type != TK_IDENTIFIER)) {
                     valid = false;
                 }
                 else {
-                    pos = (pos + 1LL);
+                    pos = (pos + INT64_C(1));
                     if (((*this).peek_at(pos).token_type == TK_COMMA)) {
-                        pos = (pos + 1LL);
+                        pos = (pos + INT64_C(1));
                         if (((*this).peek_at(pos).token_type == TK_REF) || ((*this).peek_at(pos).token_type == TK_REF_MUT)) {
-                            pos = (pos + 1LL);
+                            pos = (pos + INT64_C(1));
                         }
                         if ((!(*this).is_type_at_pos(pos))) {
                             valid = false;
@@ -5721,7 +5720,7 @@ struct Parser {
                     }
                     else {
                         if (((*this).peek_at(pos).token_type == TK_RIGHT_PAREN)) {
-                            std::string after_paren = (*this).peek_at((pos + 1LL)).token_type;
+                            std::string after_paren = (*this).peek_at((pos + INT64_C(1))).token_type;
                             if ((after_paren == TK_FAT_ARROW) || (after_paren == TK_COLON)) {
                                 return true;
                             }
@@ -5942,7 +5941,7 @@ struct Parser {
         while ((*this).match_any(std::vector{TK_INLINE})) {
             is_inline = true;
         }
-        Token name = Token(std::string(""), std::string(""), 0LL, 0LL);
+        Token name = Token(std::string(""), std::string(""), INT64_C(0), INT64_C(0));
         bool is_operator = false;
         if ((*this).match_any(std::vector{TK_OPERATOR})) {
             is_operator = true;
@@ -6020,20 +6019,20 @@ struct Parser {
                 if ((*this).is_function_start()) {
                     auto old = this->in_class_body;
                     this->in_class_body = true;
-                    int64_t method_ct = 0LL;
+                    int64_t method_ct = INT64_C(0);
                     if ((*this).match_any(std::vector{TK_COMPTIME_STRICT})) {
-                        method_ct = 2LL;
+                        method_ct = INT64_C(2);
                     }
                     else {
                         if ((*this).match_any(std::vector{TK_COMPTIME})) {
-                            method_ct = 1LL;
+                            method_ct = INT64_C(1);
                         }
                     }
                     methods.push_back((*this).function_declaration(std::string("public"), false, method_ct));
                     this->in_class_body = old;
                 }
                 else {
-                    if ((*this).check(TK_IDENTIFIER) && ((*this).peek_at(1LL).token_type == TK_LEFT_PAREN)) {
+                    if ((*this).check(TK_IDENTIFIER) && ((*this).peek_at(INT64_C(1)).token_type == TK_LEFT_PAREN)) {
                         auto vname = (*this).consume(TK_IDENTIFIER, std::string("Expect variant name."));
                         (*this).consume(TK_LEFT_PAREN, std::string("Expect '(' after variant name."));
                         std::vector<TypeNode> fields = {};
@@ -6051,7 +6050,7 @@ struct Parser {
                         (*this).match_any(std::vector{TK_NEWLINE});
                     }
                     else {
-                        if ((*this).check(TK_IDENTIFIER) && (((*this).peek_at(1LL).token_type == TK_NEWLINE) || ((*this).peek_at(1LL).token_type == TK_DEDENT))) {
+                        if ((*this).check(TK_IDENTIFIER) && (((*this).peek_at(INT64_C(1)).token_type == TK_NEWLINE) || ((*this).peek_at(INT64_C(1)).token_type == TK_DEDENT))) {
                             auto vname = (*this).advance();
                             std::vector<TypeNode> empty_types = {};
                             std::vector<std::string> empty_fnames = {};
@@ -6168,7 +6167,7 @@ struct Parser {
         }
         if (this->in_class_body && (*this).check(TK_IDENTIFIER)) {
             auto ctor_name = (*this).peek().lexeme;
-            if (((ctor_name == std::string("constructor")) || (ctor_name == std::string("destructor"))) && ((*this).peek_at(1LL).token_type == TK_LEFT_PAREN)) {
+            if (((ctor_name == std::string("constructor")) || (ctor_name == std::string("destructor"))) && ((*this).peek_at(INT64_C(1)).token_type == TK_LEFT_PAREN)) {
                 auto name_tok = (*this).advance();
                 (*this).consume(TK_LEFT_PAREN, ((std::string("Expect '(' after ") + (ctor_name)) + std::string(".")));
                 std::vector<Param> params = (*this).parse_param_list();
@@ -6176,16 +6175,16 @@ struct Parser {
                 (*this).consume(TK_COLON, std::string("Expect ':' before body."));
                 std::vector<Stmt> body = (*this).block();
                 std::vector<std::string> empty_tp = {};
-                return Stmt::make_Function(name_tok, params, TypeNode::make_Void(), body, false, 0LL, is_static, visibility, empty_tp);
+                return Stmt::make_Function(name_tok, params, TypeNode::make_Void(), body, false, INT64_C(0), is_static, visibility, empty_tp);
             }
         }
-        int64_t comptime_mode = 0LL;
+        int64_t comptime_mode = INT64_C(0);
         if ((*this).match_any(std::vector{TK_COMPTIME_STRICT})) {
-            comptime_mode = 2LL;
+            comptime_mode = INT64_C(2);
         }
         else {
             if ((*this).match_any(std::vector{TK_COMPTIME})) {
-                comptime_mode = 1LL;
+                comptime_mode = INT64_C(1);
             }
         }
         if ((*this).match_any(std::vector{TK_REF_MUT})) {
@@ -6194,10 +6193,10 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_REF})) {
             return (*this).var_declaration_with_ref(visibility, true, false);
         }
-        if ((*this).is_type_at_pos(0LL)) {
-            int64_t next_pos = (*this).skip_type_tokens(0LL);
+        if ((*this).is_type_at_pos(INT64_C(0))) {
+            int64_t next_pos = (*this).skip_type_tokens(INT64_C(0));
             if (((*this).peek_at(next_pos).token_type == TK_QUESTION)) {
-                next_pos = (next_pos + 1LL);
+                next_pos = (next_pos + INT64_C(1));
             }
             auto next_token = (*this).peek_at(next_pos).token_type;
             if ((next_token == TK_IDENTIFIER) || (next_token == TK_FN) || (next_token == TK_INLINE) || (next_token == TK_COMPTIME) || (next_token == TK_OPERATOR)) {
@@ -6346,12 +6345,12 @@ struct ImportResolver {
     }
 
     std::string get_directory(const std::string& path) {
-        int64_t i = (static_cast<int64_t>(path.size()) - 1LL);
-        while ((i >= 0LL)) {
+        int64_t i = (static_cast<int64_t>(path.size()) - INT64_C(1));
+        while ((i >= INT64_C(0))) {
             if ((std::string(1, path[i]) == std::string("/"))) {
-                return path.substr(0LL, ((i + 1LL)) - (0LL));
+                return path.substr(INT64_C(0), ((i + INT64_C(1))) - (INT64_C(0)));
             }
-            i = (i - 1LL);
+            i = (i - INT64_C(1));
         }
         return std::string("./");
     }
@@ -6368,19 +6367,19 @@ struct ImportResolver {
         for (const auto& line : lines) {
             std::string trimmed = lv_trim(line);
             if (trimmed.starts_with(std::string("import "))) {
-                std::string import_str = lv_trim(trimmed.substr(7LL, (static_cast<int64_t>(trimmed.size())) - (7LL)));
+                std::string import_str = lv_trim(trimmed.substr(INT64_C(7), (static_cast<int64_t>(trimmed.size())) - (INT64_C(7))));
                 std::string alias = std::string("");
                 std::string mod_path = import_str;
                 int64_t as_pos = lv_index_of(import_str, std::string(" as "));
-                if ((as_pos >= 0LL)) {
-                    alias = lv_trim(import_str.substr((as_pos + 4LL), (static_cast<int64_t>(import_str.size())) - ((as_pos + 4LL))));
-                    mod_path = lv_trim(import_str.substr(0LL, (as_pos) - (0LL)));
+                if ((as_pos >= INT64_C(0))) {
+                    alias = lv_trim(import_str.substr((as_pos + INT64_C(4)), (static_cast<int64_t>(import_str.size())) - ((as_pos + INT64_C(4)))));
+                    mod_path = lv_trim(import_str.substr(INT64_C(0), (as_pos) - (INT64_C(0))));
                 }
                 std::string file_rel = lv_replace(mod_path, std::string("::"), std::string("/"));
                 std::vector<std::string> segments = lv_split(file_rel, std::string("/"));
                 std::string module_file = ((((std::string("") + (dir)) + std::string("")) + (file_rel)) + std::string(".lv"));
-                if ((static_cast<int64_t>(segments.size()) > 1LL)) {
-                    std::string short_name = segments[(static_cast<int64_t>(segments.size()) - 1LL)];
+                if ((static_cast<int64_t>(segments.size()) > INT64_C(1))) {
+                    std::string short_name = segments[(static_cast<int64_t>(segments.size()) - INT64_C(1))];
                     std::string full_name = lv_join(segments, std::string("_"));
                     std::string mod_source = (*this).resolve(module_file);
                     if ((mod_source != std::string(""))) {
@@ -6414,14 +6413,14 @@ void cleanup(const std::string& cpp_path, const std::string& header_path, const 
 int main(int argc, char* argv[]) {
     for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);
     auto args = os_args();
-    if ((static_cast<int64_t>(args.size()) < 2LL)) {
+    if ((static_cast<int64_t>(args.size()) < INT64_C(2))) {
         print(std::string("Usage: bootstrap [--emit-cpp | compile] <file.lv>"));
-        return 1LL;
+        return INT64_C(1);
     }
     std::string mode = std::string("run");
     std::string path = std::string("");
     bool no_check = false;
-    int64_t ai = 1LL;
+    int64_t ai = INT64_C(1);
     while ((ai < static_cast<int64_t>(args.size()))) {
         if ((args[ai] == std::string("--no-check"))) {
             no_check = true;
@@ -6439,11 +6438,11 @@ int main(int argc, char* argv[]) {
                 }
             }
         }
-        ai = (ai + 1LL);
+        ai = (ai + INT64_C(1));
     }
     if ((path == std::string(""))) {
         print(std::string("Usage: bootstrap [--emit-cpp | compile] [--no-check] <file.lv>"));
-        return 1LL;
+        return INT64_C(1);
     }
     auto resolver = ImportResolver();
     std::string source = resolver.resolve(path);
@@ -6455,12 +6454,12 @@ int main(int argc, char* argv[]) {
     for (const auto& mod : resolver.modules) {
         auto mod_scanner = Scanner(mod.source);
         mod_scanner.scan_tokens();
-        if ((static_cast<int64_t>(mod_scanner.errors.size()) > 0LL)) {
+        if ((static_cast<int64_t>(mod_scanner.errors.size()) > INT64_C(0))) {
             print(((std::string("Scanner errors in module ") + (mod.full_name)) + std::string(":")));
             for (const auto& err : mod_scanner.errors) {
                 print(err);
             }
-            return 1LL;
+            return INT64_C(1);
         }
         try {
             auto mod_parser = Parser(mod_scanner.tokens);
@@ -6475,17 +6474,17 @@ int main(int argc, char* argv[]) {
         }
          catch (const std::exception& err) {
             print(((((std::string("Error in module ") + (mod.full_name)) + std::string(": ")) + (err.what())) + std::string("")));
-            return 1LL;
+            return INT64_C(1);
         }
     }
     auto scanner = Scanner(source);
     scanner.scan_tokens();
-    if ((static_cast<int64_t>(scanner.errors.size()) > 0LL)) {
+    if ((static_cast<int64_t>(scanner.errors.size()) > INT64_C(0))) {
         print(std::string("Scanner errors:"));
         for (const auto& err : scanner.errors) {
             print(err);
         }
-        return 1LL;
+        return INT64_C(1);
     }
     std::vector<Stmt> stmts = {};
     std::string cpp = std::string("");
@@ -6504,12 +6503,12 @@ int main(int argc, char* argv[]) {
                 all_stmts.push_back(s);
             }
             auto check_errors = run_checker(all_stmts);
-            if ((static_cast<int64_t>(check_errors.size()) > 0LL)) {
+            if ((static_cast<int64_t>(check_errors.size()) > INT64_C(0))) {
                 print(std::string("Type check errors:"));
                 for (const auto& cerr : check_errors) {
                     print(((std::string("  ") + (cerr)) + std::string("")));
                 }
-                return 1LL;
+                return INT64_C(1);
             }
         }
         for (const auto& lb : parser.lambda_blocks) {
@@ -6523,28 +6522,28 @@ int main(int argc, char* argv[]) {
     }
      catch (const std::exception& err) {
         print(((std::string("Error: ") + (err.what())) + std::string("")));
-        return 1LL;
+        return INT64_C(1);
     }
     if ((mode == std::string("emit-cpp"))) {
         print(cpp);
-        return 0LL;
+        return INT64_C(0);
     }
     if ((!has_main)) {
         print(std::string("Error: no main() function defined."));
-        return 1LL;
+        return INT64_C(1);
     }
     std::string dir = resolver.get_directory(path);
     std::string base = path;
-    int64_t si = (static_cast<int64_t>(path.size()) - 1LL);
-    while ((si >= 0LL)) {
+    int64_t si = (static_cast<int64_t>(path.size()) - INT64_C(1));
+    while ((si >= INT64_C(0))) {
         if ((std::string(1, path[si]) == std::string("/"))) {
-            base = path.substr((si + 1LL), (static_cast<int64_t>(path.size())) - ((si + 1LL)));
+            base = path.substr((si + INT64_C(1)), (static_cast<int64_t>(path.size())) - ((si + INT64_C(1))));
             break;
         }
-        si = (si - 1LL);
+        si = (si - INT64_C(1));
     }
     if (base.ends_with(std::string(".lv"))) {
-        base = base.substr(0LL, ((static_cast<int64_t>(base.size()) - 3LL)) - (0LL));
+        base = base.substr(INT64_C(0), ((static_cast<int64_t>(base.size()) - INT64_C(3))) - (INT64_C(0)));
     }
     std::string cpp_path = ((((std::string("") + (dir)) + std::string("")) + (base)) + std::string(".cpp"));
     std::string bin_path = ((((std::string("") + (dir)) + std::string("")) + (base)) + std::string(""));
@@ -6565,22 +6564,22 @@ int main(int argc, char* argv[]) {
     }
     std::string compile_cmd = ((((std::string("g++ -std=c++23 -o ") + (bin_path)) + std::string(" ")) + (cpp_path)) + std::string(""));
     int64_t compile_result = os_exec(compile_cmd);
-    if ((compile_result != 0LL)) {
+    if ((compile_result != INT64_C(0))) {
         print(std::string("Compilation failed"));
         cleanup(cpp_path, header_path, liblavina_path, wrote_header);
-        return 1LL;
+        return INT64_C(1);
     }
     if ((mode == std::string("compile"))) {
         cleanup(cpp_path, header_path, liblavina_path, wrote_header);
         print(((std::string("Compiled: ") + (bin_path)) + std::string("")));
-        return 0LL;
+        return INT64_C(0);
     }
     int64_t run_result = os_exec(bin_path);
     cleanup(cpp_path, header_path, liblavina_path, wrote_header);
     os_exec(((std::string("rm -f ") + (bin_path)) + std::string("")));
-    if ((run_result != 0LL)) {
-        return 1LL;
+    if ((run_result != INT64_C(0))) {
+        return INT64_C(1);
     }
-    return 0LL;
+    return INT64_C(0);
 }
 

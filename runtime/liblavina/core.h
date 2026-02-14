@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <optional>
 #include <cstdint>
+#include <cinttypes>
 #include <functional>
 #include <cmath>
 #include <stdexcept>

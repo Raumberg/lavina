@@ -411,7 +411,7 @@ class CppCodegen:
 
     string fn emit_literal(string kind, string value):
         if kind == "int":
-            return "${value}LL"
+            return "INT64_C(${value})"
         elif kind == "float":
             return value
         elif kind == "string":
