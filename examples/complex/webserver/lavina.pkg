@@ -1,4 +1,1 @@
-name = "webserver"
-deps = [
-    "https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h"
-]
+dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h

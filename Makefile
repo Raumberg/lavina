@@ -63,9 +63,9 @@ test:
 	@passed=0; failed=0; errors=""; \
 	for f in tests/test_*.lv; do \
 		name=$$(basename $$f .lv); \
-		/tmp/lavina_next --emit-cpp $$f > /tmp/$$name.cpp 2>/dev/null && \
-		g++ -std=c++23 -I/tmp -o /tmp/$$name /tmp/$$name.cpp 2>/dev/null && \
-		/tmp/$$name 2>/dev/null; \
+		dir=$$(dirname $$f); \
+		/tmp/lavina_next compile $$f 2>/dev/null && \
+		$$dir/$$name 2>/dev/null; \
 		if [ $$? -eq 0 ]; then \
 			echo "  PASS  $$name"; \
 			passed=$$((passed + 1)); \
@@ -74,6 +74,7 @@ test:
 			failed=$$((failed + 1)); \
 			errors="$$errors $$name"; \
 		fi; \
+		rm -f $$dir/$$name $$dir/$$name.cpp; \
 	done; \
 	echo ""; \
 	echo "$$passed passed, $$failed failed"; \

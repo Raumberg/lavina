@@ -457,7 +457,7 @@ class Checker:
             Namespace(name, body, visibility):
                 for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
-            Extern(header, link_lib, types, functions):
+            Extern(header, import_path, link_lib, types, functions):
                 for ref et in types:
                     vector[Stmt] empty_body = []
                     this.known_classes[et.lavina_name] = empty_body
@@ -563,7 +563,7 @@ class Checker:
                 pass
             CppBlock(code):
                 pass
-            Extern(header, link_lib, types, functions):
+            Extern(header, import_path, link_lib, types, functions):
                 pass
             _:
                 pass

@@ -989,9 +989,16 @@ class Parser:
 
     Stmt fn extern_declaration():
         auto header = this.consume(TK_STRING, "Expect header string after 'extern'.").lexeme
+        string import_path = ""
         string link_lib = ""
-        if this.match_any([TK_LINK]):
-            link_lib = this.consume(TK_STRING, "Expect library string after 'link'.").lexeme
+        bool parsing_options = true
+        while parsing_options:
+            if this.match_any([TK_IMPORT]):
+                import_path = this.consume(TK_STRING, "Expect path string after 'import'.").lexeme
+            elif this.match_any([TK_LINK]):
+                link_lib = this.consume(TK_STRING, "Expect library string after 'link'.").lexeme
+            else:
+                parsing_options = false
         this.consume(TK_COLON, "Expect ':' after extern header.")
         this.match_any([TK_NEWLINE])
         this.consume(TK_INDENT, "Expect indentation to start extern body.")
@@ -1024,7 +1031,7 @@ class Parser:
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end extern body.")
-        return Stmt::Extern(header, link_lib, types, functions)
+        return Stmt::Extern(header, import_path, link_lib, types, functions)
 
     // ── Main entry point ────────────────────────────────────
 

@@ -156,6 +156,8 @@ int fn main():
     vector[Stmt] stmts = []
     string cpp = ""
     bool has_main = false
+    vector[string] link_libs = []
+    vector[string] import_paths = []
     try:
         auto parser = Parser(scanner.tokens)
         stmts = parser.parse_program()
@@ -182,6 +184,8 @@ int fn main():
         codegen.lambda_blocks = all_lambda_blocks
         cpp = codegen.generate(stmts)
         has_main = codegen.has_main
+        link_libs = codegen.extern_link_libs
+        import_paths = codegen.extern_import_paths
     catch err:
         print("Error: ${err.what()}")
         return 1
@@ -223,6 +227,17 @@ int fn main():
             print("Warning: could not find runtime/lavina.h")
 
     string compile_cmd = "g++ -std=c++23 -o ${bin_path} ${cpp_path}"
+    for ref ip in import_paths:
+        compile_cmd += " -I${ip}"
+    if fs_exists("deps/include"):
+        bool has_deps = false
+        for ref ip in import_paths:
+            if ip == "deps/include":
+                has_deps = true
+        if not has_deps:
+            compile_cmd += " -Ideps/include"
+    for ref ll in link_libs:
+        compile_cmd += " -l${ll}"
     int compile_result = os_exec(compile_cmd)
     if compile_result != 0:
         print("Compilation failed")
