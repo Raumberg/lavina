@@ -85,6 +85,35 @@ design/        language design documents
 - `examples/complex/webserver/` — HTTP todo app (uses httplib via lvpkg)
 - `examples/sqlite.lv` — SQLite via FFI
 
+## Package Manager
+
+Lavina ships with `lvpkg` — a simple dependency manager for pulling C++ header-only libraries and Lavina modules from GitHub.
+
+```sh
+make lvpkg       # build the package manager
+```
+
+Create a `lavina.pkg` in your project:
+
+```
+# header-only C++ library
+dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h
+
+# directory of headers
+dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/
+```
+
+Then run:
+
+```sh
+lvpkg install    # install dependencies into deps/
+lvpkg update     # update to specified versions
+lvpkg list       # show dependency status
+lvpkg clean      # remove deps/
+```
+
+Dependencies are cloned into `deps/` and checked out at the pinned version.
+
 ## Documentation
 
 See [DOCUMENTATION.md](DOCUMENTATION.md) for the full language reference.
