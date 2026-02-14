@@ -1,0 +1,45 @@
+// Test 'as' keyword for type casting
+
+void fn test_int_to_float():
+    int x = 42
+    float y = x as float
+    print("int->float: " + y)
+
+void fn test_float_to_int():
+    float x = 3.14
+    int y = x as int
+    print("float->int: " + y)
+
+void fn test_int_sizes():
+    int x = 100
+    int32 y = x as int32
+    int64 z = y as int64
+    print("int->int32: " + y)
+    print("int32->int64: " + z)
+
+void fn test_float_sizes():
+    float x = 2.718
+    float32 y = x as float32
+    float64 z = y as float64
+    print("float->float32: " + y)
+    print("float32->float64: " + z)
+
+void fn test_chained():
+    int x = 42
+    int32 y = x as float as int32
+    print("chained: " + y)
+
+void fn test_expr_cast():
+    int a = 10
+    int b = 20
+    float c = (a + b) as float
+    print("expr cast: " + c)
+
+void fn main():
+    test_int_to_float()
+    test_float_to_int()
+    test_int_sizes()
+    test_float_sizes()
+    test_chained()
+    test_expr_cast()
+    print("All cast tests passed!")

@@ -438,6 +438,9 @@ class Parser:
             elif this.match_any([TK_DOUBLE_COLON]):
                 auto name = this.consume(TK_IDENTIFIER, "Expect member name after '::'.")
                 expr = Expr::StaticGet(expr, name)
+            elif this.match_any([TK_AS]):
+                TypeNode target = this.parse_type()
+                expr = Expr::Cast(expr, target)
             else:
                 more = false
         return expr

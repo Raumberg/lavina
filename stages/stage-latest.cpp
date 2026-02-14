@@ -5569,7 +5569,13 @@ struct Parser {
                             expr = Expr::make_StaticGet(expr, name);
                         }
                         else {
-                            more = false;
+                            if ((*this).match_any(std::vector{TK_AS})) {
+                                TypeNode target = (*this).parse_type();
+                                expr = Expr::make_Cast(expr, target);
+                            }
+                            else {
+                                more = false;
+                            }
                         }
                     }
                 }
