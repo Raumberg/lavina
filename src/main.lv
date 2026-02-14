@@ -60,6 +60,8 @@ class ImportResolver:
                 string file_rel = mod_path.replace("::", "/")
                 vector[string] segments = file_rel.split("/")
                 string module_file = "${dir}${file_rel}.lv"
+                if segments[0] == "std":
+                    module_file = "runtime/${file_rel}.lv"
                 if segments.len() > 1:
                     // Multi-segment: module import with namespace
                     string short_name = segments[segments.len() - 1]

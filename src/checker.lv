@@ -425,7 +425,7 @@ class Checker:
 
     void fn register_builtins():
         // Runtime functions that are always available
-        vector[string] builtins = ["print", "println", "lv_assert", "fs_read", "fs_write", "fs_exists", "fs_append", "fs_read_lines", "fs_remove", "fs_is_dir", "fs_listdir", "os_exec", "os_args", "os_env", "os_clock", "os_sleep", "os_cwd", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs", "str_to_int", "str_to_float", "int_to_str", "float_to_str", "lv_abs", "lv_fabs", "lv_min", "lv_max", "lv_fmin", "lv_fmax", "lv_clamp", "lv_fclamp", "lv_floor", "lv_ceil", "lv_round", "lv_sqrt", "lv_pow", "lv_log", "lv_log2", "lv_sin", "lv_cos", "lv_random", "lv_random_float", "lv_count"]
+        vector[string] builtins = ["print", "println", "lv_assert", "fs_read", "fs_write", "fs_exists", "fs_append", "fs_read_lines", "fs_remove", "fs_is_dir", "fs_listdir", "fs_mkdir", "fs_copy", "fs_rename", "fs_absolute", "fs_basename", "fs_dirname", "fs_size", "os_exec", "os_args", "os_env", "os_clock", "os_sleep", "os_cwd", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs", "str_to_int", "str_to_float", "int_to_str", "float_to_str", "lv_abs", "lv_fabs", "lv_min", "lv_max", "lv_fmin", "lv_fmax", "lv_clamp", "lv_fclamp", "lv_floor", "lv_ceil", "lv_round", "lv_sqrt", "lv_pow", "lv_log", "lv_log2", "lv_sin", "lv_cos", "lv_random", "lv_random_float", "lv_count"]
         vector[Param] empty_params = []
         for ref name in builtins:
             this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params)

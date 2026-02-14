@@ -58,3 +58,32 @@ inline std::vector<std::string> fs_listdir(const std::string& path) {
     std::sort(entries.begin(), entries.end());
     return entries;
 }
+
+inline bool fs_mkdir(const std::string& path) {
+    return std::filesystem::create_directories(path);
+}
+
+inline bool fs_copy(const std::string& src, const std::string& dst) {
+    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing);
+    return true;
+}
+
+inline void fs_rename(const std::string& from, const std::string& to) {
+    std::filesystem::rename(from, to);
+}
+
+inline std::string fs_absolute(const std::string& path) {
+    return std::filesystem::absolute(path).string();
+}
+
+inline std::string fs_basename(const std::string& path) {
+    return std::filesystem::path(path).filename().string();
+}
+
+inline std::string fs_dirname(const std::string& path) {
+    return std::filesystem::path(path).parent_path().string();
+}
+
+inline int64_t fs_size(const std::string& path) {
+    return static_cast<int64_t>(std::filesystem::file_size(path));
+}
