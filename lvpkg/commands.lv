@@ -3,6 +3,7 @@
 string DEPS_DIR = "deps"
 string DEPS_SRC = "deps/src"
 string DEPS_INCLUDE = "deps/include"
+string DEPS_LIB = "deps/lib"
 
 // Copy relevant files from a cloned dep into deps/include/
 void fn link_dep(ref Dep dep):
@@ -26,6 +27,34 @@ void fn link_dep(ref Dep dep):
         copy_dir_recursive(src_dir, dst)
         info("${dep.name}: copied repo → include/${dep.name}/")
 
+// Copy library files and headers from a cloned lib dep
+void fn link_lib_dep(ref Dep dep):
+    string src_dir = "${DEPS_SRC}/${dep.name}"
+
+    // Copy library file to deps/lib/
+    string lib_src = "${src_dir}/${dep.lib_path}"
+    if ends_with(dep.lib_path, "/"):
+        // directory of libs — copy all into deps/lib/
+        copy_dir_recursive(lib_src, DEPS_LIB)
+        info("${dep.name}: copied ${dep.lib_path} → lib/")
+    else:
+        // single lib file
+        string lib_filename = basename(dep.lib_path)
+        copy_file(lib_src, "${DEPS_LIB}/${lib_filename}")
+        info("${dep.name}: copied ${lib_filename} → lib/")
+
+    // Copy headers if specified
+    if dep.path != "":
+        string hdr_src = "${src_dir}/${dep.path}"
+        if ends_with(dep.path, "/"):
+            string dst = "${DEPS_INCLUDE}/${dep.name}"
+            copy_dir_recursive(hdr_src, dst)
+            info("${dep.name}: copied ${dep.path} → include/${dep.name}/")
+        else:
+            string hdr_filename = basename(dep.path)
+            copy_file(hdr_src, "${DEPS_INCLUDE}/${hdr_filename}")
+            info("${dep.name}: copied ${hdr_filename} → include/")
+
 // Install all dependencies: clone if missing, then link
 void fn cmd_install():
     auto deps = parse_pkg_file()
@@ -40,16 +69,26 @@ void fn cmd_install():
     ensure_dir(DEPS_SRC)
     ensure_dir(DEPS_INCLUDE)
 
+    bool has_libs = false
+    for ref dep in deps:
+        if dep.dep_type == "lib":
+            has_libs = true
+    if has_libs:
+        ensure_dir(DEPS_LIB)
+
     for ref dep in deps:
         string dest = "${DEPS_SRC}/${dep.name}"
         if fs_is_dir(dest):
             info("${dep.name}: already cloned, skipping (use 'update' to refresh)")
         else:
             git_clone(dep.url, dest, dep.version)
-        link_dep(dep)
+        if dep.dep_type == "lib":
+            link_lib_dep(dep)
+        else:
+            link_dep(dep)
 
     print("")
-    print("${C_GREEN}${C_BOLD}Done!${C_RESET} Use ${C_CYAN}-I deps/include${C_RESET} when compiling.")
+    print("${C_GREEN}${C_BOLD}Done!${C_RESET}")
 
 // Update all dependencies: fetch and checkout, then re-link
 void fn cmd_update():
@@ -65,13 +104,23 @@ void fn cmd_update():
     ensure_dir(DEPS_SRC)
     ensure_dir(DEPS_INCLUDE)
 
+    bool has_libs = false
+    for ref dep in deps:
+        if dep.dep_type == "lib":
+            has_libs = true
+    if has_libs:
+        ensure_dir(DEPS_LIB)
+
     for ref dep in deps:
         string dest = "${DEPS_SRC}/${dep.name}"
         if fs_is_dir(dest):
             git_update(dest, dep.version)
         else:
             git_clone(dep.url, dest, dep.version)
-        link_dep(dep)
+        if dep.dep_type == "lib":
+            link_lib_dep(dep)
+        else:
+            link_dep(dep)
 
     print("")
     print("${C_GREEN}${C_BOLD}Done!${C_RESET}")
@@ -93,6 +142,8 @@ void fn cmd_list():
         string path_info = ""
         if dep.path != "":
             path_info = " ${C_DIM}→ ${dep.path}${C_RESET}"
+        if dep.lib_path != "":
+            path_info += " ${C_DIM}lib: ${dep.lib_path}${C_RESET}"
 
         print("  ${C_CYAN}${dep.name}${C_RESET} ${dep.url} @ ${C_YELLOW}${dep.version}${C_RESET}${path_info} ${status}")
 

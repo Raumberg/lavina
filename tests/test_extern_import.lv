@@ -1,0 +1,22 @@
+// Test: extern import path — verifies -I flag is passed to g++
+extern "test_ext_lib.h" import "tests/ext":
+    int32 fn ext_add(int32 a, int32 b)
+    int32 fn ext_mul(int32 a, int32 b)
+
+void fn main():
+    int32 a = 3
+    int32 b = 4
+
+    int32 sum = ext_add(a, b)
+    if sum == 7:
+        print("PASS: ext_add(3, 4) = 7")
+    else:
+        print("FAIL: ext_add(3, 4) = " + to_string(sum))
+        exit(1)
+
+    int32 product = ext_mul(a, b)
+    if product == 12:
+        print("PASS: ext_mul(3, 4) = 12")
+    else:
+        print("FAIL: ext_mul(3, 4) = " + to_string(product))
+        exit(1)

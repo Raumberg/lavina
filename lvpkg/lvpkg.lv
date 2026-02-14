@@ -1,7 +1,7 @@
 // lvpkg — Lavina Package Manager
 //
 // A simple dependency manager for Lavina projects.
-// Pulls C++ header-only libraries and Lavina modules from GitHub.
+// Pulls C++ header-only libraries, native libraries, and Lavina modules from GitHub.
 //
 // Usage:
 //   lvpkg install    Install dependencies from lavina.pkg
@@ -10,11 +10,13 @@
 //   lvpkg clean      Remove deps/ directory
 //
 // Package file format (lavina.pkg):
-//   dep <name> <url> <version> [path]
+//   dep <name> <url> <version> [header_path]
+//   lib <name> <url> <version> <lib_path> [header_path]
 //
 // Examples:
 //   dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h
 //   dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/
+//   lib raylib https://github.com/raysan5/raylib 5.0 lib/libraylib.a include/raylib.h
 
 import colors
 import strutil
@@ -38,6 +40,8 @@ void fn print_help():
     print("  ${C_CYAN}dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h${C_RESET}")
     print("  ${C_DIM}# directory of headers${C_RESET}")
     print("  ${C_CYAN}dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/${C_RESET}")
+    print("  ${C_DIM}# native library with headers${C_RESET}")
+    print("  ${C_CYAN}dep raylib https://github.com/raysan5/raylib 5.5 src/raylib.h${C_RESET}")
 
 void fn main():
     init_colors()

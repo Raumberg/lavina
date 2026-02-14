@@ -15,6 +15,7 @@ class CppCodegen:
     vector[string] dynamic_vars
     vector[string] extern_includes
     vector[string] extern_link_libs
+    vector[string] extern_import_paths
     hashmap[string, string] extern_fn_names
     hashmap[string, string] extern_type_names
     hashmap[string, vector[Param]] extern_fn_params
@@ -35,6 +36,7 @@ class CppCodegen:
         this.dynamic_vars = []
         this.extern_includes = []
         this.extern_link_libs = []
+        this.extern_import_paths = []
         this.extern_fn_names = {}
         this.extern_type_names = {}
         this.var_types = {}
@@ -680,7 +682,7 @@ class CppCodegen:
                     auto trimmed = line.trim()
                     if trimmed != "":
                         this.output +="${this.indent()}${trimmed}\n"
-            Extern(header, link_lib, types, functions):
+            Extern(header, import_path, link_lib, types, functions):
                 // Collect includes and name mappings (deduplicate)
                 string inc_line = ""
                 bool has_dot = header.indexOf(".") >= 0
@@ -695,7 +697,19 @@ class CppCodegen:
                 if not already:
                     this.extern_includes.push(inc_line)
                 if link_lib != "":
-                    this.extern_link_libs.push(link_lib)
+                    bool link_already = false
+                    for ref existing_lib in this.extern_link_libs:
+                        if existing_lib == link_lib:
+                            link_already = true
+                    if not link_already:
+                        this.extern_link_libs.push(link_lib)
+                if import_path != "":
+                    bool path_already = false
+                    for ref existing_path in this.extern_import_paths:
+                        if existing_path == import_path:
+                            path_already = true
+                    if not path_already:
+                        this.extern_import_paths.push(import_path)
                 for ref et in types:
                     if et.lavina_name != et.cpp_name:
                         this.extern_type_names[et.lavina_name] = et.cpp_name
@@ -1224,7 +1238,7 @@ class CppCodegen:
                         pass
                     else:
                         this.emit_stmt(stmt, false)
-                Extern(header, link_lib, types, functions):
+                Extern(header, import_path, link_lib, types, functions):
                     pass
                 _:
                     this.emit_stmt(stmt, false)
@@ -1251,14 +1265,14 @@ class CppCodegen:
         for mi in 0..this.module_stmts.len():
             for ref stmt in this.module_stmts[mi]:
                 match stmt:
-                    Extern(header, link_lib, types, functions):
+                    Extern(header, import_path, link_lib, types, functions):
                         this.emit_stmt(stmt, false)
                         this.output = ""
                     _:
                         pass
         for ref stmt in stmts:
             match stmt:
-                Extern(header, link_lib, types, functions):
+                Extern(header, import_path, link_lib, types, functions):
                     this.emit_stmt(stmt, false)
                     this.output = ""
                 _:
@@ -1291,7 +1305,7 @@ class CppCodegen:
                         this.emit_stmt(stmt, false)
                         this.declarations += this.output
                         this.output = ""
-                Extern(header, link_lib, types, functions):
+                Extern(header, import_path, link_lib, types, functions):
                     pass
                 _:
                     this.emit_stmt(stmt, false)

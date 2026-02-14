@@ -1169,7 +1169,7 @@ struct Stmt {
     struct Continue { Token keyword; };
     struct Pass { Token keyword; };
     struct CppBlock { std::string code; };
-    struct Extern { std::string header; std::string link_lib; std::vector<ExternType> types; std::vector<ExternFn> functions; };
+    struct Extern { std::string header; std::string import_path; std::string link_lib; std::vector<ExternType> types; std::vector<ExternFn> functions; };
 
     std::string _tag;
     std::variant<Stmt::None, Stmt::ExprStmt, Stmt::Let, Stmt::Const, Stmt::Return, Stmt::If, Stmt::While, Stmt::For, Stmt::Block, Stmt::Try, Stmt::Function, Stmt::Class, Stmt::Struct, Stmt::Enum, Stmt::Match, Stmt::Namespace, Stmt::Import, Stmt::Break, Stmt::Continue, Stmt::Pass, Stmt::CppBlock, Stmt::Extern> _data;
@@ -1195,7 +1195,7 @@ struct Stmt {
     static Stmt make_Continue(Token keyword) { return {"Continue", Continue{keyword}}; }
     static Stmt make_Pass(Token keyword) { return {"Pass", Pass{keyword}}; }
     static Stmt make_CppBlock(std::string code) { return {"CppBlock", CppBlock{code}}; }
-    static Stmt make_Extern(std::string header, std::string link_lib, std::vector<ExternType> types, std::vector<ExternFn> functions) { return {"Extern", Extern{header, link_lib, types, functions}}; }
+    static Stmt make_Extern(std::string header, std::string import_path, std::string link_lib, std::vector<ExternType> types, std::vector<ExternFn> functions) { return {"Extern", Extern{header, import_path, link_lib, types, functions}}; }
 
     std::string operator[](const std::string& key) const {
         if (key == "_tag") return _tag;
@@ -1217,6 +1217,7 @@ struct CppCodegen {
     std::vector<std::string> dynamic_vars;
     std::vector<std::string> extern_includes;
     std::vector<std::string> extern_link_libs;
+    std::vector<std::string> extern_import_paths;
     std::unordered_map<std::string, std::string> extern_fn_names;
     std::unordered_map<std::string, std::string> extern_type_names;
     std::unordered_map<std::string, std::vector<Param>> extern_fn_params;
@@ -1237,6 +1238,7 @@ struct CppCodegen {
         this->dynamic_vars = {};
         this->extern_includes = {};
         this->extern_link_libs = {};
+        this->extern_import_paths = {};
         this->extern_fn_names = {{}};
         this->extern_type_names = {{}};
         this->var_types = {{}};
@@ -2513,6 +2515,7 @@ struct CppCodegen {
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Extern>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Extern>(_match_23._data);
                 auto& header = _v.header;
+                auto& import_path = _v.import_path;
                 auto& link_lib = _v.link_lib;
                 auto& types = _v.types;
                 auto& functions = _v.functions;
@@ -2534,7 +2537,26 @@ struct CppCodegen {
                     this->extern_includes.push_back(inc_line);
                 }
                 if ((link_lib != std::string(""))) {
-                    this->extern_link_libs.push_back(link_lib);
+                    bool link_already = false;
+                    for (const auto& existing_lib : this->extern_link_libs) {
+                        if ((existing_lib == link_lib)) {
+                            link_already = true;
+                        }
+                    }
+                    if ((!link_already)) {
+                        this->extern_link_libs.push_back(link_lib);
+                    }
+                }
+                if ((import_path != std::string(""))) {
+                    bool path_already = false;
+                    for (const auto& existing_path : this->extern_import_paths) {
+                        if ((existing_path == import_path)) {
+                            path_already = true;
+                        }
+                    }
+                    if ((!path_already)) {
+                        this->extern_import_paths.push_back(import_path);
+                    }
                 }
                 for (const auto& et : types) {
                     if ((et.lavina_name != et.cpp_name)) {
@@ -3456,6 +3478,7 @@ struct CppCodegen {
                 else if (std::holds_alternative<std::decay_t<decltype(_match_51)>::Extern>(_match_51._data)) {
                     auto& _v = std::get<std::decay_t<decltype(_match_51)>::Extern>(_match_51._data);
                     auto& header = _v.header;
+                    auto& import_path = _v.import_path;
                     auto& link_lib = _v.link_lib;
                     auto& types = _v.types;
                     auto& functions = _v.functions;
@@ -3490,6 +3513,7 @@ struct CppCodegen {
                     if (std::holds_alternative<std::decay_t<decltype(_match_52)>::Extern>(_match_52._data)) {
                         auto& _v = std::get<std::decay_t<decltype(_match_52)>::Extern>(_match_52._data);
                         auto& header = _v.header;
+                        auto& import_path = _v.import_path;
                         auto& link_lib = _v.link_lib;
                         auto& types = _v.types;
                         auto& functions = _v.functions;
@@ -3508,6 +3532,7 @@ struct CppCodegen {
                 if (std::holds_alternative<std::decay_t<decltype(_match_53)>::Extern>(_match_53._data)) {
                     auto& _v = std::get<std::decay_t<decltype(_match_53)>::Extern>(_match_53._data);
                     auto& header = _v.header;
+                    auto& import_path = _v.import_path;
                     auto& link_lib = _v.link_lib;
                     auto& types = _v.types;
                     auto& functions = _v.functions;
@@ -3563,6 +3588,7 @@ struct CppCodegen {
                 else if (std::holds_alternative<std::decay_t<decltype(_match_54)>::Extern>(_match_54._data)) {
                     auto& _v = std::get<std::decay_t<decltype(_match_54)>::Extern>(_match_54._data);
                     auto& header = _v.header;
+                    auto& import_path = _v.import_path;
                     auto& link_lib = _v.link_lib;
                     auto& types = _v.types;
                     auto& functions = _v.functions;
@@ -4339,6 +4365,7 @@ struct Checker {
             else if (std::holds_alternative<std::decay_t<decltype(_match_82)>::Extern>(_match_82._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_82)>::Extern>(_match_82._data);
                 auto& header = _v.header;
+                auto& import_path = _v.import_path;
                 auto& link_lib = _v.link_lib;
                 auto& types = _v.types;
                 auto& functions = _v.functions;
@@ -4581,6 +4608,7 @@ struct Checker {
             else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Extern>(_match_83._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_83)>::Extern>(_match_83._data);
                 auto& header = _v.header;
+                auto& import_path = _v.import_path;
                 auto& link_lib = _v.link_lib;
                 auto& types = _v.types;
                 auto& functions = _v.functions;
@@ -6211,9 +6239,21 @@ struct Parser {
 
     Stmt extern_declaration() {
         auto header = (*this).consume(TK_STRING, std::string("Expect header string after 'extern'.")).lexeme;
+        std::string import_path = std::string("");
         std::string link_lib = std::string("");
-        if ((*this).match_any(std::vector{TK_LINK})) {
-            link_lib = (*this).consume(TK_STRING, std::string("Expect library string after 'link'.")).lexeme;
+        bool parsing_options = true;
+        while (parsing_options) {
+            if ((*this).match_any(std::vector{TK_IMPORT})) {
+                import_path = (*this).consume(TK_STRING, std::string("Expect path string after 'import'.")).lexeme;
+            }
+            else {
+                if ((*this).match_any(std::vector{TK_LINK})) {
+                    link_lib = (*this).consume(TK_STRING, std::string("Expect library string after 'link'.")).lexeme;
+                }
+                else {
+                    parsing_options = false;
+                }
+            }
         }
         (*this).consume(TK_COLON, std::string("Expect ':' after extern header."));
         (*this).match_any(std::vector{TK_NEWLINE});
@@ -6252,7 +6292,7 @@ struct Parser {
             }
         }
         (*this).consume(TK_DEDENT, std::string("Expect dedent to end extern body."));
-        return Stmt::make_Extern(header, link_lib, types, functions);
+        return Stmt::make_Extern(header, import_path, link_lib, types, functions);
     }
 
     std::vector<Stmt> parse_program() {
@@ -6489,6 +6529,8 @@ int main(int argc, char* argv[]) {
     std::vector<Stmt> stmts = {};
     std::string cpp = std::string("");
     bool has_main = false;
+    std::vector<std::string> link_libs = {};
+    std::vector<std::string> import_paths = {};
     try {
         auto parser = Parser(scanner.tokens);
         stmts = parser.parse_program();
@@ -6519,6 +6561,8 @@ int main(int argc, char* argv[]) {
         codegen.lambda_blocks = all_lambda_blocks;
         cpp = codegen.generate(stmts);
         has_main = codegen.has_main;
+        link_libs = codegen.extern_link_libs;
+        import_paths = codegen.extern_import_paths;
     }
      catch (const std::exception& err) {
         print(((std::string("Error: ") + (err.what())) + std::string("")));
@@ -6563,6 +6607,31 @@ int main(int argc, char* argv[]) {
         }
     }
     std::string compile_cmd = ((((std::string("g++ -std=c++23 -o ") + (bin_path)) + std::string(" ")) + (cpp_path)) + std::string(""));
+    for (const auto& ip : import_paths) {
+        compile_cmd = (compile_cmd + ((std::string(" -I") + (ip)) + std::string("")));
+    }
+    if (fs_exists(std::string("deps/include"))) {
+        bool has_deps = false;
+        for (const auto& ip : import_paths) {
+            if ((ip == std::string("deps/include"))) {
+                has_deps = true;
+            }
+        }
+        if ((!has_deps)) {
+            compile_cmd = (compile_cmd + std::string(" -Ideps/include"));
+        }
+    }
+    if (fs_exists(std::string("deps/lib"))) {
+        compile_cmd = (compile_cmd + std::string(" -Ldeps/lib"));
+    }
+    for (const auto& ll : link_libs) {
+        if ((lv_index_of(ll, std::string("/")) >= INT64_C(0))) {
+            compile_cmd = (compile_cmd + ((std::string(" ") + (ll)) + std::string("")));
+        }
+        else {
+            compile_cmd = (compile_cmd + ((std::string(" -l") + (ll)) + std::string("")));
+        }
+    }
     int64_t compile_result = os_exec(compile_cmd);
     if ((compile_result != INT64_C(0))) {
         print(std::string("Compilation failed"));

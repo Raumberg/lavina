@@ -3,13 +3,16 @@
 string PKG_FILE = "lavina.pkg"
 
 struct Dep:
+    string dep_type
     string name
     string url
     string version
     string path
+    string lib_path
 
 // Parse lavina.pkg and return a list of dependencies
-// Format: dep <name> <url> <version> [path]
+// Format: dep <name> <url> <version> [header_path]
+//         lib <name> <url> <version> <lib_path> [header_path]
 vector[Dep] fn parse_pkg_file():
     vector[Dep] deps = []
     if not fs_exists(PKG_FILE):
@@ -35,7 +38,23 @@ vector[Dep] fn parse_pkg_file():
             if parts.len() >= 5:
                 path = parts[4]
 
-            deps.push(Dep(name, url, version, path))
+            deps.push(Dep("dep", name, url, version, path, ""))
+
+        elif starts_with(trimmed, "lib "):
+            auto parts = trimmed.split(" ")
+            if parts.len() < 5:
+                warn("Invalid lib line (need: lib <name> <url> <version> <lib_path> [header_path]): ${trimmed}")
+                continue
+
+            string name = parts[1]
+            string url = parts[2]
+            string version = parts[3]
+            string lpath = parts[4]
+            string hpath = ""
+            if parts.len() >= 6:
+                hpath = parts[5]
+
+            deps.push(Dep("lib", name, url, version, hpath, lpath))
         else:
             warn("Unknown directive: ${trimmed}")
 

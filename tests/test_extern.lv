@@ -1,12 +1,35 @@
 // Test: extern blocks for FFI
+
+// 1. Basic system header (no import, no link)
 extern "cmath":
     float fn sqrt(float x) = "std::sqrt"
     float fn fabs(float x) = "std::fabs"
 
+// 2. Duplicate extern with same header (tests include deduplication)
+extern "cmath":
+    float fn ceil_fn(float x) = "std::ceil"
+
+// 3. Extern with import only (header-only lib from a path)
+//    Note: import path not exercised via make test (g++ -I/tmp), but parsed correctly
+extern "cmath" import "/usr/include":
+    float fn floor_fn(float x) = "std::floor"
+
+// 4. Extern with link only
+extern "cmath" link "m":
+    float fn log_fn(float x) = "std::log"
+
+// 5. Extern with both import and link (import first)
+extern "cmath" import "/usr/include" link "m":
+    float fn sin_fn(float x) = "std::sin"
+
+// 6. Extern with both import and link (link first — reversed order)
+extern "cmath" link "m" import "/usr/include":
+    float fn cos_fn(float x) = "std::cos"
+
 void fn main():
+    // Test 1: basic extern
     float val = 16.0
     float result = sqrt(val)
-    // sqrt(16) should be 4.0
     if result > 3.99 and result < 4.01:
         print("PASS: sqrt(16) = 4.0")
     else:
@@ -18,4 +41,44 @@ void fn main():
         print("PASS: fabs(-42.5) = 42.5")
     else:
         print("FAIL: fabs(-42.5) = " + to_string(neg))
+        exit(1)
+
+    // Test 2: duplicate extern block
+    float c = ceil_fn(2.3)
+    if c > 2.99 and c < 3.01:
+        print("PASS: ceil(2.3) = 3.0")
+    else:
+        print("FAIL: ceil(2.3) = " + to_string(c))
+        exit(1)
+
+    // Test 3: extern with import
+    float f = floor_fn(2.7)
+    if f > 1.99 and f < 2.01:
+        print("PASS: floor(2.7) = 2.0")
+    else:
+        print("FAIL: floor(2.7) = " + to_string(f))
+        exit(1)
+
+    // Test 4: extern with link
+    float l = log_fn(1.0)
+    if l > -0.01 and l < 0.01:
+        print("PASS: log(1.0) = 0.0")
+    else:
+        print("FAIL: log(1.0) = " + to_string(l))
+        exit(1)
+
+    // Test 5: extern with import + link
+    float s = sin_fn(0.0)
+    if s > -0.01 and s < 0.01:
+        print("PASS: sin(0.0) = 0.0")
+    else:
+        print("FAIL: sin(0.0) = " + to_string(s))
+        exit(1)
+
+    // Test 6: extern with link + import (reversed order)
+    float co = cos_fn(0.0)
+    if co > 0.99 and co < 1.01:
+        print("PASS: cos(0.0) = 1.0")
+    else:
+        print("FAIL: cos(0.0) = " + to_string(co))
         exit(1)

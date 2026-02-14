@@ -1,0 +1,71 @@
+// Raylib example — basic window with animated circle
+//
+// Requires: raylib native library
+//   macOS:  brew install raylib
+//   Linux:  sudo apt install libraylib-dev
+//
+// Headers can be pulled via lvpkg (see lavina.pkg):
+//   lvpkg install
+//
+// Build:
+//   lavina compile raylavina.lv
+//
+// Note: import/link paths below are for Homebrew on macOS (arm64).
+//       Adjust paths for your platform if needed.
+
+extern "raylib.h" import "/opt/homebrew/opt/raylib/include" link "/opt/homebrew/opt/raylib/lib/libraylib.dylib":
+    type Color
+    type Vector2
+
+    void fn InitWindow(int32 width, int32 height, cstring title)
+    void fn CloseWindow()
+    bool fn WindowShouldClose()
+    void fn BeginDrawing()
+    void fn EndDrawing()
+    void fn ClearBackground(Color color)
+    void fn DrawCircle(int32 x, int32 y, float32 radius, Color color)
+    void fn DrawText(cstring text, int32 x, int32 y, int32 fontSize, Color color)
+    void fn SetTargetFPS(int32 fps)
+    int32 fn GetScreenWidth()
+    int32 fn GetScreenHeight()
+    float fn GetTime() = "GetTime"
+
+extern "cmath":
+    float fn sin_f(float x) = "std::sin"
+    float fn cos_f(float x) = "std::cos"
+    int fn lrint_f(float x) = "std::lrint"
+
+// Lavina does not yet support extern struct literals, so we init Color via cpp helper
+cpp {
+    Color make_color(unsigned char r, unsigned char g, unsigned char b, unsigned char a) {
+        Color c = {r, g, b, a};
+        return c;
+    }
+}
+
+extern "raylib.h":
+    Color fn make_color(int32 r, int32 g, int32 b, int32 a) = "make_color"
+
+void fn main():
+    int32 width = 800
+    int32 height = 450
+
+    InitWindow(width, height, "Lavina + Raylib = <3")
+    SetTargetFPS(60)
+
+    Color bg = make_color(24, 24, 24, 255)
+    Color orange = make_color(255, 102, 0, 255)
+    Color white = make_color(238, 238, 238, 255)
+
+    while not WindowShouldClose():
+        float t = GetTime()
+        int32 cx = 400 + lrint_f(sin_f(t * 2.0) * 150.0)
+        int32 cy = 225 + lrint_f(cos_f(t * 3.0) * 100.0)
+
+        BeginDrawing()
+        ClearBackground(bg)
+        DrawCircle(cx, cy, 40.0, orange)
+        DrawText("Hello from Lavina!", 260, 20, 30, white)
+        EndDrawing()
+
+    CloseWindow()
