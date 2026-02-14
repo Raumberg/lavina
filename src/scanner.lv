@@ -45,6 +45,7 @@ const string TK_AND = "And"
 const string TK_AUTO = "Auto"
 const string TK_BOOL = "Bool"
 const string TK_COMPTIME = "Comptime"
+const string TK_COMPTIME_STRICT = "ComptimeStrict"
 const string TK_DYNAMIC = "Dynamic"
 const string TK_ELSE = "Else"
 const string TK_ELIF = "Elif"
@@ -418,7 +419,10 @@ class Scanner:
 
         auto text = this.source.substring(this.start, this.current)
         auto kw = lookup_keyword(text)
-        if kw == TK_REF and this.peek() == "!":
+        if kw == TK_COMPTIME and this.peek() == "!":
+            this.advance()
+            this.add_token(TK_COMPTIME_STRICT, "comptime!")
+        elif kw == TK_REF and this.peek() == "!":
             this.advance()
             this.add_token(TK_REF_MUT, "ref!")
         elif kw == TK_CPP:

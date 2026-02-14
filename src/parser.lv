@@ -142,6 +142,8 @@ class Parser:
 
     bool fn is_function_start():
         int offset = 0
+        if this.peek_at(offset).token_type == TK_COMPTIME or this.peek_at(offset).token_type == TK_COMPTIME_STRICT:
+            offset += 1
         if not this.is_type_at_pos(offset):
             return false
         offset = this.skip_type_tokens(offset)
@@ -752,16 +754,12 @@ class Parser:
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
         return Stmt::Const(name, const_type, value, visibility)
 
-    Stmt fn function_declaration(string visibility, bool is_static):
+    Stmt fn function_declaration(string visibility, bool is_static, int comptime_mode):
         TypeNode return_type = this.parse_type()
 
         bool is_inline = false
-        bool is_comptime = false
-        while this.match_any([TK_INLINE, TK_COMPTIME]):
-            if this.previous().token_type == TK_INLINE:
-                is_inline = true
-            if this.previous().token_type == TK_COMPTIME:
-                is_comptime = true
+        while this.match_any([TK_INLINE]):
+            is_inline = true
 
         Token name = Token("", "", 0, 0)
         bool is_operator = false
@@ -786,7 +784,7 @@ class Parser:
 
         this.consume(TK_COLON, "Expect ':' before function body.")
         vector[Stmt] body = this.block()
-        return Stmt::Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params)
+        return Stmt::Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params)
 
     Stmt fn class_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect class name.")
@@ -833,7 +831,12 @@ class Parser:
             elif this.is_function_start():
                 auto old = this.in_class_body
                 this.in_class_body = true
-                methods.push(this.function_declaration("public", false))
+                int method_ct = 0
+                if this.match_any([TK_COMPTIME_STRICT]):
+                    method_ct = 2
+                elif this.match_any([TK_COMPTIME]):
+                    method_ct = 1
+                methods.push(this.function_declaration("public", false, method_ct))
                 this.in_class_body = old
             elif this.check(TK_IDENTIFIER) and this.peek_at(1).token_type == TK_LEFT_PAREN:
                 auto vname = this.consume(TK_IDENTIFIER, "Expect variant name.")
@@ -955,7 +958,13 @@ class Parser:
                 this.consume(TK_COLON, "Expect ':' before body.")
                 vector[Stmt] body = this.block()
                 vector[string] empty_tp = []
-                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, false, is_static, visibility, empty_tp)
+                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp)
+
+        int comptime_mode = 0
+        if this.match_any([TK_COMPTIME_STRICT]):
+            comptime_mode = 2
+        elif this.match_any([TK_COMPTIME]):
+            comptime_mode = 1
 
         if this.match_any([TK_REF_MUT]):
             return this.var_declaration_with_ref(visibility, true, true)
@@ -971,7 +980,7 @@ class Parser:
             auto next_token = this.peek_at(next_pos).token_type
             if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME or next_token == TK_OPERATOR:
                 if this.is_function_start():
-                    return this.function_declaration(visibility, is_static)
+                    return this.function_declaration(visibility, is_static, comptime_mode)
                 return this.var_declaration(visibility)
 
         return this.statement()

@@ -1,0 +1,22 @@
+comptime int fn factorial(int n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+comptime int fn add(int a, int b):
+    return a + b
+
+comptime! int fn square(int x):
+    return x * x
+
+void fn main():
+    lv_assert(factorial(5) == 120, "comptime factorial")
+    lv_assert(add(3, 4) == 7, "comptime add")
+
+    int x = factorial(6)
+    lv_assert(x == 720, "comptime factorial 6")
+
+    // comptime! (consteval) - compile-time only
+    lv_assert(square(5) == 25, "comptime! square")
+
+    print("test_comptime: ALL PASSED")

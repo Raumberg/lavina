@@ -1,0 +1,165 @@
+// lvg — lavina grep (colorized)
+// Usage: lvg <pattern> [path] [--ext .lv] [-i] [-c]
+
+int match_count = 0
+int file_count = 0
+
+bool flag_ignore_case = false
+bool flag_line_numbers = true
+bool flag_count_only = false
+string filter_ext = ""
+
+// ANSI color codes
+string C_RESET = ""
+string C_FILE = ""
+string C_LINE = ""
+string C_MATCH = ""
+string C_DIM = ""
+string C_BOLD = ""
+string C_SUMMARY = ""
+
+void fn init_colors():
+    cpp {
+        C_RESET   = "\033[0m";
+        C_FILE    = "\033[35m";
+        C_LINE    = "\033[32m";
+        C_MATCH   = "\033[1;31m";
+        C_DIM     = "\033[2m";
+        C_BOLD    = "\033[1m";
+        C_SUMMARY = "\033[36m";
+    }
+
+string fn to_lower(string s):
+    string result = s
+    cpp {
+        std::transform(result.begin(), result.end(), result.begin(), ::tolower);
+    }
+    return result
+
+bool fn ends_with(string s, string suffix):
+    if suffix.len() > s.len():
+        return false
+    return s.substring(s.len() - suffix.len(), s.len()) == suffix
+
+bool fn is_binary_ext(string name):
+    if ends_with(name, ".png") or ends_with(name, ".jpg") or ends_with(name, ".gif"):
+        return true
+    if ends_with(name, ".o") or ends_with(name, ".so") or ends_with(name, ".dylib"):
+        return true
+    if ends_with(name, ".zip") or ends_with(name, ".tar") or ends_with(name, ".gz"):
+        return true
+    if ends_with(name, ".exe") or ends_with(name, ".bin"):
+        return true
+    return false
+
+// Highlight all occurrences of pattern in line
+string fn highlight(string line, string pattern):
+    string result = ""
+    string haystack = line
+    string needle = pattern
+    if flag_ignore_case:
+        haystack = to_lower(line)
+        needle = to_lower(pattern)
+
+    int pos = 0
+    while pos < line.len():
+        int found = haystack.indexOf(needle, pos)
+        if found < 0:
+            result = result + line.substring(pos, line.len())
+            pos = line.len()
+        else:
+            result = result + line.substring(pos, found)
+            result = result + C_MATCH + line.substring(found, found + pattern.len()) + C_RESET
+            pos = found + pattern.len()
+    return result
+
+string last_file = ""
+
+void fn search_file(string path, string pattern):
+    auto lines = fs_read_lines(path)
+    int local_count = 0
+
+    int line_num = 1
+    for ref line in lines:
+        string haystack = line
+        string needle = pattern
+        if flag_ignore_case:
+            haystack = to_lower(haystack)
+            needle = to_lower(needle)
+
+        if haystack.indexOf(needle) >= 0:
+            match_count += 1
+            local_count += 1
+            if not flag_count_only:
+                // Print file header on first match
+                if last_file != path:
+                    if last_file != "":
+                        print("")
+                    print("${C_FILE}${path}${C_RESET}")
+                    last_file = path
+
+                string colored_line = highlight(line, pattern)
+                if flag_line_numbers:
+                    print("  ${C_LINE}${int_to_str(line_num)}${C_DIM}:${C_RESET} ${colored_line}")
+                else:
+                    print("  ${colored_line}")
+        line_num += 1
+
+    if local_count > 0:
+        file_count += 1
+        if flag_count_only:
+            print("${C_FILE}${path}${C_DIM}:${C_RESET} ${C_BOLD}${int_to_str(local_count)}${C_RESET} matches")
+
+void fn search_dir(string path, string pattern):
+    auto entries = fs_listdir(path)
+    for ref name in entries:
+        if name.substring(0, 1) == ".":
+            continue
+
+        string full = "${path}/${name}"
+        if fs_is_dir(full):
+            search_dir(full, pattern)
+        else:
+            if is_binary_ext(name):
+                continue
+            if filter_ext != "":
+                if not ends_with(name, filter_ext):
+                    continue
+            try:
+                search_file(full, pattern)
+            catch e:
+                pass
+
+void fn main():
+    init_colors()
+
+    auto args = os_args()
+    if args.len() < 2:
+        print("Usage: lvg <pattern> [path] [--ext .lv] [-i] [-c]")
+        exit(1)
+
+    string pattern = args[1]
+    string path = "."
+
+    int i = 2
+    while i < args.len():
+        if args[i] == "--ext" and i + 1 < args.len():
+            filter_ext = args[i + 1]
+            i += 2
+        elif args[i] == "-i":
+            flag_ignore_case = true
+            i += 1
+        elif args[i] == "-c":
+            flag_count_only = true
+            i += 1
+        else:
+            path = args[i]
+            i += 1
+
+    if fs_is_dir(path):
+        search_dir(path, pattern)
+    else:
+        search_file(path, pattern)
+
+    print("")
+    print("${C_SUMMARY}${int_to_str(match_count)} matches${C_RESET} in ${C_SUMMARY}${int_to_str(file_count)} files${C_RESET}")

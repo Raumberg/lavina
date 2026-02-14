@@ -652,8 +652,8 @@ class CppCodegen:
                     exc_name = exception_name
                 this.output +="${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_block_or_stmt(catch_body, m)
-            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
-                this.emit_function(name, params, return_type, body, type_params)
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                this.emit_function(name, params, return_type, body, type_params, comptime_mode)
             Class(name, body, visibility):
                 vector[string] empty_tp = []
                 this.emit_class(name, body, empty_tp)
@@ -751,12 +751,17 @@ class CppCodegen:
                 this.indent_level -= 1
                 this.output +="${this.indent()}}\n"
 
-    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params):
+    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode):
         vector[string] saved_dynamic = this.dynamic_vars
         this.output +=this.template_prefix(type_params)
         string ret_type = this.emit_type(return_type)
         string param_str = this.emit_params(params, true)
-        this.output +="${this.indent()}${ret_type} ${name.lexeme}(${param_str}) {\n"
+        string prefix = ""
+        if comptime_mode == 1:
+            prefix = "constexpr "
+        elif comptime_mode == 2:
+            prefix = "consteval "
+        this.output +="${this.indent()}${prefix}${ret_type} ${name.lexeme}(${param_str}) {\n"
         this.indent_level += 1
         for ref st in body:
             this.emit_stmt(st, false)
@@ -820,16 +825,21 @@ class CppCodegen:
 
     void fn emit_class_method(ref Token class_name, ref Stmt method):
         match method:
-            Function(mname, mparams, mret, mbody, is_inline, is_comptime, is_static, visibility, m_tp):
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp):
                 vector[string] saved_dyn = this.dynamic_vars
                 string ret_type = this.emit_type(mret)
                 string mparam_str = this.emit_params(mparams, true)
+                string ct_prefix = ""
+                if comptime_mode == 1:
+                    ct_prefix = "constexpr "
+                elif comptime_mode == 2:
+                    ct_prefix = "consteval "
                 if mname.lexeme == "destructor":
                     this.output +="${this.indent()}~${class_name.lexeme}() {\n"
                 elif mname.lexeme == "to_string":
-                    this.output +="${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) const {\n"
+                    this.output +="${this.indent()}${ct_prefix}${ret_type} ${mname.lexeme}(${mparam_str}) const {\n"
                 else:
-                    this.output +="${this.indent()}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
+                    this.output +="${this.indent()}${ct_prefix}${ret_type} ${mname.lexeme}(${mparam_str}) {\n"
                 this.indent_level += 1
                 for ref st in mbody:
                     this.emit_stmt(st, true)
@@ -849,7 +859,7 @@ class CppCodegen:
 
         for ref st in body:
             match st:
-                Function(fname, params, return_type, fbody, is_inline, is_comptime, is_static, visibility, fn_tp):
+                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp):
                     if fname.lexeme == "constructor":
                         has_init = true
                         init_body = fbody
@@ -1178,7 +1188,7 @@ class CppCodegen:
 
     void fn emit_using_if_public(ref string ns, ref Stmt stmt):
         match stmt:
-            Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
             Class(name, body, visibility):
@@ -1209,7 +1219,7 @@ class CppCodegen:
 
         for ref stmt in this.module_stmts[index]:
             match stmt:
-                Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
                     if name.lexeme == "main":
                         pass
                     else:
@@ -1265,7 +1275,7 @@ class CppCodegen:
 
         for ref stmt in stmts:
             match stmt:
-                Function(name, params, return_type, body, is_inline, is_comptime, is_static, visibility, type_params):
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
                     if name.lexeme == "main":
                         this.has_main = true
                         this.output +="int main(int argc, char* argv[]) {\n"

@@ -45,3 +45,16 @@ inline std::vector<std::string> fs_read_lines(const std::string& path) {
 inline bool fs_remove(const std::string& path) {
     return std::remove(path.c_str()) == 0;
 }
+
+inline bool fs_is_dir(const std::string& path) {
+    return std::filesystem::is_directory(path);
+}
+
+inline std::vector<std::string> fs_listdir(const std::string& path) {
+    std::vector<std::string> entries;
+    for (const auto& e : std::filesystem::directory_iterator(path)) {
+        entries.push_back(e.path().filename().string());
+    }
+    std::sort(entries.begin(), entries.end());
+    return entries;
+}
