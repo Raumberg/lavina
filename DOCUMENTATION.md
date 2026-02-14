@@ -16,9 +16,12 @@
 12. [Collections](#collections)
 13. [Strings](#strings)
 14. [Error Handling](#error-handling)
-15. [Imports](#imports)
-16. [Standard Library](#standard-library)
-17. [Compiler and Bootstrap](#compiler-and-bootstrap)
+15. [Imports and Modules](#imports-and-modules)
+16. [Operator Overloading](#operator-overloading)
+17. [Compile-Time Evaluation](#compile-time-evaluation)
+18. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
+19. [Standard Library](#standard-library)
+20. [Compiler and Bootstrap](#compiler-and-bootstrap)
 
 ---
 
@@ -515,7 +518,9 @@ auto moved = own data    // data is moved into moved
 
 ## Lambdas
 
-Lambdas are anonymous functions with `(params) => expr` syntax:
+### Expression Lambdas
+
+Single-expression lambdas use `(params) => expr` syntax:
 
 ```lavina
 auto double = (int x) => x * 2
@@ -542,6 +547,27 @@ int fn apply(auto f, int x):
 
 print(apply((int x) => x * x, 6))  // 36
 ```
+
+### Block Lambdas
+
+For multi-statement lambdas, use `(params):` followed by an indented block:
+
+```lavina
+auto process = (int x):
+    auto result = x * 2
+    print("Processing ${x} -> ${result}")
+    return result
+
+process(5)  // prints "Processing 5 -> 10"
+```
+
+Block lambdas are commonly used as callbacks:
+
+```lavina
+svr.Get("/", (ref Request req, ref! Response res):
+    auto body = build_response()
+    res.set_content(body, "text/html")
+)
 
 ---
 
@@ -674,17 +700,199 @@ Exceptions propagate up the call stack and are caught by the nearest `try/catch`
 
 ---
 
-## Imports
+## Imports and Modules
+
+### Basic Imports
 
 Import another `.lv` file by module name (relative to the current file's directory):
 
 ```lavina
 import scanner
 import parser
-import ast
 ```
 
-`import scanner` resolves to `scanner.lv` in the same directory. The imported file's contents are inlined (after recursively resolving its own imports).
+`import scanner` resolves to `scanner.lv` in the same directory.
+
+### Module Paths
+
+Use `::` for multi-segment imports. These resolve to nested directories:
+
+```lavina
+import helpers::math_helper    // helpers/math_helper.lv
+import utils::string_utils     // utils/string_utils.lv
+```
+
+Multi-segment imports are wrapped in C++ namespaces. Access exported symbols via the module name:
+
+```lavina
+import helpers::math_helper
+
+void fn main():
+    auto result = math_helper.add(1, 2)
+```
+
+### Aliases
+
+Rename imports with `as`:
+
+```lavina
+import helpers::math_helper as math
+
+void fn main():
+    auto result = math.add(1, 2)
+```
+
+### Visibility
+
+Symbols in imported modules are `private` by default. Mark them `public` to export:
+
+```lavina
+// In helpers/math_helper.lv:
+public int fn add(int a, int b):
+    return a + b
+
+int fn internal_helper():   // private, not accessible from outside
+    return 42
+```
+
+---
+
+## Operator Overloading
+
+Define custom operators on structs and classes using `Type operator OP (params):`:
+
+```lavina
+struct Vec2:
+    float x
+    float y
+
+    Vec2 operator + (ref Vec2 other):
+        return Vec2(this.x + other.x, this.y + other.y)
+
+    Vec2 operator * (float scalar):
+        return Vec2(this.x * scalar, this.y * scalar)
+
+    bool operator == (ref Vec2 other):
+        return this.x == other.x and this.y == other.y
+```
+
+If a type defines a `to_string()` method, it is automatically used for `print()` and string concatenation:
+
+```lavina
+struct Point:
+    float x
+    float y
+
+    string fn to_string():
+        return "(${this.x}, ${this.y})"
+
+void fn main():
+    auto p = Point(1.0, 2.0)
+    print(p)                    // prints "(1.0, 2.0)"
+    string s = "point: " + p   // "point: (1.0, 2.0)"
+```
+
+### Enum Methods
+
+Enums can also have methods:
+
+```lavina
+enum Color:
+    Red
+    Green
+    Blue
+
+    string fn name():
+        match this:
+            Red():
+                return "red"
+            Green():
+                return "green"
+            Blue():
+                return "blue"
+        return ""
+
+void fn main():
+    auto c = Color::Red()
+    print(c.name())  // "red"
+```
+
+---
+
+## Compile-Time Evaluation
+
+### comptime
+
+Mark a function `comptime` to make it evaluable at compile time (maps to C++ `constexpr`):
+
+```lavina
+comptime int fn factorial(int n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+```
+
+`comptime` functions can also be called at runtime.
+
+### comptime!
+
+Mark a function `comptime!` to force compile-time-only evaluation (maps to C++ `consteval`):
+
+```lavina
+comptime! int fn square(int x):
+    return x * x
+```
+
+`comptime!` functions can only be called with compile-time-known arguments.
+
+---
+
+## FFI (Foreign Function Interface)
+
+### Expanded Types
+
+Additional types for FFI interop:
+
+| Type | C++ mapping |
+|------|-------------|
+| `int8` | `int8_t` |
+| `int16` | `int16_t` |
+| `int32` | `int32_t` |
+| `int64` | `int64_t` (alias for `int`) |
+| `float32` | `float` |
+| `float64` | `double` (alias for `float`) |
+| `usize` | `size_t` |
+| `cstring` | `const char*` |
+| `ptr[T]` | `T*` |
+
+### extern Blocks
+
+Declare C/C++ functions and types from external headers:
+
+```lavina
+extern "httplib.h":
+    type Server = "httplib::Server"
+    type Request = "httplib::Request"
+    fn some_function(int32 x) = "ext_func"
+```
+
+- `type Name = "cpp_name"` declares an external type with optional C++ name mapping
+- `fn name(params) = "cpp_name"` declares an external function with optional name mapping
+- Type conversions (`string` <-> `cstring`, `int` <-> `int32`, etc.) happen automatically at the boundary
+
+### cpp {} Blocks
+
+Embed raw C++ code as an escape hatch:
+
+```lavina
+int fn str_to_int(string s):
+    cpp {
+        return std::stoll(s);
+    }
+    return 0
+```
+
+The C++ code has access to all variables in scope. The `return 0` after the `cpp` block is needed to satisfy the Lavina type checker.
 
 ---
 
@@ -703,7 +911,12 @@ import ast
 |----------|-------------|
 | `fs_read(path)` | Read file contents as string. Throws on error. |
 | `fs_write(path, content)` | Write string to file. Throws on error. |
+| `fs_append(path, content)` | Append string to file. |
 | `fs_exists(path)` | Check if file exists. Returns `bool`. |
+| `fs_remove(path)` | Delete a file. Returns `bool`. |
+| `fs_is_dir(path)` | Check if path is a directory. Returns `bool`. |
+| `fs_listdir(path)` | List directory entries. Returns `vector[string]`. |
+| `fs_read_lines(path)` | Read file as vector of lines. |
 
 ### OS
 
@@ -712,6 +925,9 @@ import ast
 | `os_exec(cmd)` | Execute shell command. Returns exit code (`int`). |
 | `os_args()` | Get command-line arguments as `vector[string]`. |
 | `os_env(name)` | Get environment variable. Returns `""` if not set. |
+| `os_clock()` | Milliseconds since epoch (`int`). |
+| `os_sleep(ms)` | Sleep for given milliseconds. |
+| `os_cwd()` | Get current working directory. |
 | `exit(code)` | Exit the process with given code. |
 
 ### Conversion
@@ -728,6 +944,22 @@ import ast
 |----------|-------------|
 | `len(value)` | Length of string or vector. |
 | `lv_assert(cond, msg)` | Assert condition, exit with message on failure. |
+
+### Math
+
+| Function | Description |
+|----------|-------------|
+| `abs(n)` | Absolute value (int). |
+| `fabs(n)` | Absolute value (float). |
+| `min(a, b)` / `max(a, b)` | Integer min/max. |
+| `fmin(a, b)` / `fmax(a, b)` | Float min/max. |
+| `clamp(val, lo, hi)` | Clamp integer to range. |
+| `floor(n)` / `ceil(n)` / `round(n)` | Rounding (float). |
+| `sqrt(n)` / `pow(base, exp)` | Square root, power. |
+| `log(n)` / `log2(n)` | Logarithms. |
+| `sin(n)` / `cos(n)` | Trigonometry. |
+| `random(min, max)` | Random integer in range. |
+| `random_float()` | Random float in [0, 1). |
 
 ---
 
@@ -776,7 +1008,7 @@ The compiler maintains C++ snapshots in `stages/`. Each snapshot is a complete s
 make bootstrap   # Build from latest stage, verify fixed point
 make snapshot    # Save new stage after codegen changes
 make evolve      # Handle codegen output format changes (2-pass)
-make test        # Run test suite (12 tests)
+make test        # Run test suite (22 tests)
 ```
 
 **Fixed point verification**: The bootstrap compiles `src/main.lv` twice — once with the previous stage and once with the newly built compiler. The outputs must be identical, proving the compiler correctly compiles itself.

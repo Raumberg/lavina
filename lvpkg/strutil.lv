@@ -1,0 +1,18 @@
+// strutil.lv — string utility functions
+
+// Check if string ends with the given suffix
+bool fn ends_with(string s, string suffix):
+    if suffix.len() > s.len():
+        return false
+    return s.substring(s.len() - suffix.len(), s.len()) == suffix
+
+// Check if string starts with the given prefix
+bool fn starts_with(string s, string prefix):
+    if prefix.len() > s.len():
+        return false
+    return s.substring(0, prefix.len()) == prefix
+
+// Extract the last component from a path split by "/"
+string fn basename(string path):
+    auto parts = path.split("/")
+    return parts[parts.len() - 1]

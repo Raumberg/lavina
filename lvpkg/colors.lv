@@ -1,0 +1,37 @@
+// colors.lv — ANSI color utilities for terminal output
+
+string C_RESET = ""
+string C_GREEN = ""
+string C_CYAN = ""
+string C_YELLOW = ""
+string C_RED = ""
+string C_DIM = ""
+string C_BOLD = ""
+
+// Initialize ANSI escape codes
+void fn init_colors():
+    cpp {
+        C_RESET  = "\033[0m";
+        C_GREEN  = "\033[32m";
+        C_CYAN   = "\033[36m";
+        C_YELLOW = "\033[33m";
+        C_RED    = "\033[31m";
+        C_DIM    = "\033[2m";
+        C_BOLD   = "\033[1m";
+    }
+
+// Print a success message with green checkmark
+void fn info(string msg):
+    print("${C_GREEN}  ✓${C_RESET} ${msg}")
+
+// Print a warning message with yellow icon
+void fn warn(string msg):
+    print("${C_YELLOW}  ⚠${C_RESET} ${msg}")
+
+// Print an error message with red cross
+void fn error(string msg):
+    print("${C_RED}  ✗${C_RESET} ${msg}")
+
+// Print a step/progress message with cyan arrow
+void fn step(string msg):
+    print("${C_CYAN}  →${C_RESET} ${msg}")

@@ -1,0 +1,61 @@
+// lvpkg — Lavina Package Manager
+//
+// A simple dependency manager for Lavina projects.
+// Pulls C++ header-only libraries and Lavina modules from GitHub.
+//
+// Usage:
+//   lvpkg install    Install dependencies from lavina.pkg
+//   lvpkg update     Update dependencies to specified versions
+//   lvpkg list       List dependencies and install status
+//   lvpkg clean      Remove deps/ directory
+//
+// Package file format (lavina.pkg):
+//   dep <name> <url> <version> [path]
+//
+// Examples:
+//   dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h
+//   dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/
+
+import colors
+import strutil
+import fsutil
+import dep
+import git
+import commands
+
+// Print usage help
+void fn print_help():
+    print("${C_BOLD}lvpkg${C_RESET} — Lavina Package Manager")
+    print("")
+    print("Usage:")
+    print("  lvpkg install   Install dependencies from ${PKG_FILE}")
+    print("  lvpkg update    Update dependencies to specified versions")
+    print("  lvpkg list      List dependencies")
+    print("  lvpkg clean     Remove deps/ directory")
+    print("")
+    print("Package file format (${PKG_FILE}):")
+    print("  ${C_DIM}# header-only C++ library${C_RESET}")
+    print("  ${C_CYAN}dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h${C_RESET}")
+    print("  ${C_DIM}# directory of headers${C_RESET}")
+    print("  ${C_CYAN}dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/${C_RESET}")
+
+void fn main():
+    init_colors()
+
+    auto args = os_args()
+    if args.len() < 2:
+        print_help()
+        exit(0)
+
+    string cmd = args[1]
+    if cmd == "install":
+        cmd_install()
+    elif cmd == "update":
+        cmd_update()
+    elif cmd == "list":
+        cmd_list()
+    elif cmd == "clean":
+        cmd_clean()
+    else:
+        error("Unknown command: ${cmd}")
+        exit(1)

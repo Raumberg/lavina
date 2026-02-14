@@ -1,1 +1,5 @@
 /tmp
+build/
+.DS_Store
+deps/
+design/

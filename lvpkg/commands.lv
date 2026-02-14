@@ -1,0 +1,106 @@
+// commands.lv — lvpkg command implementations
+
+string DEPS_DIR = "deps"
+string DEPS_SRC = "deps/src"
+string DEPS_INCLUDE = "deps/include"
+
+// Copy relevant files from a cloned dep into deps/include/
+void fn link_dep(ref Dep dep):
+    string src_dir = "${DEPS_SRC}/${dep.name}"
+
+    if dep.path != "":
+        string src_path = "${src_dir}/${dep.path}"
+        if ends_with(dep.path, "/"):
+            // path is a directory — copy into include/<name>/
+            string dst = "${DEPS_INCLUDE}/${dep.name}"
+            copy_dir_recursive(src_path, dst)
+            info("${dep.name}: copied ${dep.path} → include/${dep.name}/")
+        else:
+            // path is a single file — copy into include/
+            string filename = basename(dep.path)
+            copy_file(src_path, "${DEPS_INCLUDE}/${filename}")
+            info("${dep.name}: copied ${filename} → include/")
+    else:
+        // no path — copy entire repo into include/<name>/
+        string dst = "${DEPS_INCLUDE}/${dep.name}"
+        copy_dir_recursive(src_dir, dst)
+        info("${dep.name}: copied repo → include/${dep.name}/")
+
+// Install all dependencies: clone if missing, then link
+void fn cmd_install():
+    auto deps = parse_pkg_file()
+    if deps.len() == 0:
+        warn("No dependencies found in ${PKG_FILE}")
+        return
+
+    print("${C_BOLD}Installing ${int_to_str(deps.len())} dependencies...${C_RESET}")
+    print("")
+
+    ensure_dir(DEPS_DIR)
+    ensure_dir(DEPS_SRC)
+    ensure_dir(DEPS_INCLUDE)
+
+    for ref dep in deps:
+        string dest = "${DEPS_SRC}/${dep.name}"
+        if fs_is_dir(dest):
+            info("${dep.name}: already cloned, skipping (use 'update' to refresh)")
+        else:
+            git_clone(dep.url, dest, dep.version)
+        link_dep(dep)
+
+    print("")
+    print("${C_GREEN}${C_BOLD}Done!${C_RESET} Use ${C_CYAN}-I deps/include${C_RESET} when compiling.")
+
+// Update all dependencies: fetch and checkout, then re-link
+void fn cmd_update():
+    auto deps = parse_pkg_file()
+    if deps.len() == 0:
+        warn("No dependencies found in ${PKG_FILE}")
+        return
+
+    print("${C_BOLD}Updating ${int_to_str(deps.len())} dependencies...${C_RESET}")
+    print("")
+
+    ensure_dir(DEPS_DIR)
+    ensure_dir(DEPS_SRC)
+    ensure_dir(DEPS_INCLUDE)
+
+    for ref dep in deps:
+        string dest = "${DEPS_SRC}/${dep.name}"
+        if fs_is_dir(dest):
+            git_update(dest, dep.version)
+        else:
+            git_clone(dep.url, dest, dep.version)
+        link_dep(dep)
+
+    print("")
+    print("${C_GREEN}${C_BOLD}Done!${C_RESET}")
+
+// List all dependencies and their install status
+void fn cmd_list():
+    auto deps = parse_pkg_file()
+    if deps.len() == 0:
+        print("No dependencies found.")
+        return
+
+    print("${C_BOLD}Dependencies (${int_to_str(deps.len())}):${C_RESET}")
+    print("")
+    for ref dep in deps:
+        string status = "${C_DIM}[not installed]${C_RESET}"
+        if fs_is_dir("${DEPS_SRC}/${dep.name}"):
+            status = "${C_GREEN}[installed]${C_RESET}"
+
+        string path_info = ""
+        if dep.path != "":
+            path_info = " ${C_DIM}→ ${dep.path}${C_RESET}"
+
+        print("  ${C_CYAN}${dep.name}${C_RESET} ${dep.url} @ ${C_YELLOW}${dep.version}${C_RESET}${path_info} ${status}")
+
+// Remove the deps/ directory entirely
+void fn cmd_clean():
+    if fs_is_dir(DEPS_DIR):
+        step("Removing ${DEPS_DIR}/...")
+        os_exec("rm -rf ${DEPS_DIR}")
+        info("Cleaned.")
+    else:
+        warn("Nothing to clean — ${DEPS_DIR}/ does not exist.")

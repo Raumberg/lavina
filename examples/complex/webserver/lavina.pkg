@@ -1,0 +1,4 @@
+name = "webserver"
+deps = [
+    "https://raw.githubusercontent.com/yhirose/cpp-httplib/master/httplib.h"
+]
