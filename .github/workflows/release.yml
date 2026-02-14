@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            arch: x86_64
+            suffix: linux-x86_64
+          - os: macos-latest
+            arch: arm64
+            suffix: macos-arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install g++ (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y g++-14
+          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+
+      - name: Bootstrap
+        run: make bootstrap
+
+      - name: Test
+        run: make test
+
+      - name: Build
+        run: make build && make lvpkg
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar czf dist/lavina-${{ matrix.suffix }}.tar.gz -C build lavina lvpkg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lavina-${{ matrix.suffix }}
+          path: dist/lavina-${{ matrix.suffix }}.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true
