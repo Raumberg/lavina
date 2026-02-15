@@ -1,0 +1,36 @@
+extend vector:
+    auto fn double_all():
+        return __lv_col_map(this, (auto x) => x * 2)
+
+    int fn sum():
+        int result = 0
+        for x in this:
+            result += x
+        return result
+
+    auto fn square():
+        return __lv_col_map(this, (auto x) => x * x)
+
+extend string:
+    string fn shout():
+        return this + "!"
+
+void fn main():
+    vector[int] nums = [1, 2, 3, 4, 5]
+
+    // Test extend vector: double_all
+    auto d = nums.double_all()
+    lv_assert(d[0] == 2, "double_all [0]")
+    lv_assert(d[4] == 10, "double_all [4]")
+
+    // Test extend vector: sum
+    lv_assert(nums.sum() == 15, "sum")
+
+    // Test extend vector: square
+    auto sq = nums.square()
+    lv_assert(sq[0] == 1, "square [0]")
+    lv_assert(sq[2] == 9, "square [2]")
+
+    // Test extend string: shout
+    string greeting = "hello"
+    lv_assert(greeting.shout() == "hello!", "shout")

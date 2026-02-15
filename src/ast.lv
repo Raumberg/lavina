@@ -113,3 +113,4 @@ enum Stmt:
     Pass(Token keyword)
     CppBlock(string code)
     Extern(string header, string import_path, string link_lib, vector[ExternType] types, vector[ExternFn] functions)
+    Extend(Token target_type, vector[Stmt] methods, string visibility)

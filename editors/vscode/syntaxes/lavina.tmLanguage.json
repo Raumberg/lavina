@@ -74,7 +74,7 @@
       ]
     },
     "storage": {
-      "match": "\\b(class|struct|enum)\\b",
+      "match": "\\b(class|struct|enum|extend)\\b",
       "name": "storage.type.lavina"
     },
     "types": {
@@ -129,7 +129,7 @@
       ]
     },
     "classes": {
-      "match": "\\b(class|struct)\\s+([A-Z]\\w*)",
+      "match": "\\b(class|struct|extend)\\s+([A-Za-z]\\w*)",
       "captures": {
         "1": { "name": "storage.type.lavina" },
         "2": { "name": "entity.name.type.class.lavina" }

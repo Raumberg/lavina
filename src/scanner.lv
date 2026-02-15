@@ -76,6 +76,7 @@ const string TK_STATIC = "Static"
 const string TK_CLASS = "Class"
 const string TK_STRUCT = "Struct"
 const string TK_ENUM = "Enum"
+const string TK_EXTEND = "Extend"
 const string TK_THIS = "This"
 const string TK_TRY = "Try"
 const string TK_CATCH = "Catch"
@@ -244,6 +245,8 @@ string fn lookup_keyword(ref string w):
         return TK_LINK
     elif w == "operator":
         return TK_OPERATOR
+    elif w == "extend":
+        return TK_EXTEND
     return ""
 
 // ── Helper functions ────────────────────────────────────────────

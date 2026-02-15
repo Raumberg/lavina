@@ -885,6 +885,32 @@ class Parser:
         this.consume(TK_DEDENT, "Expect dedent to end enum body.")
         return Stmt::Enum(name, variants, methods, visibility, type_params)
 
+    Stmt fn extend_declaration(string visibility):
+        if not this.match_any([TK_IDENTIFIER, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_STRING_TYPE]):
+            throw "Expect type name after 'extend'."
+        auto target = this.previous()
+        this.consume(TK_COLON, "Expect ':' after extend target.")
+        this.match_any([TK_NEWLINE])
+        this.consume(TK_INDENT, "Expect indentation to start extend body.")
+        vector[Stmt] methods = []
+        auto old = this.in_class_body
+        this.in_class_body = true
+        while not this.check(TK_DEDENT) and not this.is_at_end():
+            if this.match_any([TK_NEWLINE]):
+                pass
+            elif this.is_function_start():
+                int method_ct = 0
+                if this.match_any([TK_COMPTIME_STRICT]):
+                    method_ct = 2
+                elif this.match_any([TK_COMPTIME]):
+                    method_ct = 1
+                methods.push(this.function_declaration("public", false, method_ct))
+            else:
+                throw "Only method declarations allowed in extend block"
+        this.consume(TK_DEDENT, "Expect dedent to end extend body.")
+        this.in_class_body = old
+        return Stmt::Extend(target, methods, visibility)
+
     Stmt fn import_statement():
         vector[Token] path = []
         path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
@@ -946,6 +972,9 @@ class Parser:
 
         if this.match_any([TK_ENUM]):
             return this.enum_declaration(visibility)
+
+        if this.match_any([TK_EXTEND]):
+            return this.extend_declaration(visibility)
 
         if this.match_any([TK_TRY]):
             return this.try_statement()

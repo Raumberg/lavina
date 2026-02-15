@@ -135,7 +135,55 @@ void fn main():
     lv_assert(diff.contains(1), "set_difference contains 1")
     lv_assert(!diff.contains(2), "set_difference not 2")
 
-    // --- chaining: map -> filter -> reduce ---
+    // --- chaining: map -> filter -> reduce (free functions) ---
     auto result = collections::reduce(collections::filter(collections::map(nums, (int x) => x * x), (int x) => x > 5), (int acc, int x) => acc + x, 0)
     // nums = [1,2,3,4,5] -> map(x*x) = [1,4,9,16,25] -> filter(>5) = [9,16,25] -> reduce(+) = 50
     lv_assert(result == 50, "chained map->filter->reduce")
+
+    // ── Dot-notation via extend ──────────────────────────
+    auto dot_doubled = nums.map((int x) => x * 2)
+    lv_assert(dot_doubled[0] == 2, "dot map [0]")
+    lv_assert(dot_doubled[4] == 10, "dot map [4]")
+
+    auto dot_evens = nums.filter((int x) => x % 2 == 0)
+    lv_assert(dot_evens.len() == 2, "dot filter length")
+    lv_assert(dot_evens[0] == 2, "dot filter [0]")
+
+    int dot_sum = nums.reduce((int acc, int x) => acc + x, 0)
+    lv_assert(dot_sum == 15, "dot reduce")
+
+    int dot_total = 0
+    nums.for_each((int x):
+        dot_total += x
+    )
+    lv_assert(dot_total == 15, "dot for_each")
+
+    auto dot_zipped = names.zip(vals)
+    lv_assert(dot_zipped.len() == 3, "dot zip length")
+    lv_assert(dot_zipped[0].first == "a", "dot zip [0].first")
+
+    auto dot_first3 = nums.take(3)
+    lv_assert(dot_first3.len() == 3, "dot take")
+
+    auto dot_last2 = nums.drop(3)
+    lv_assert(dot_last2.len() == 2, "dot drop")
+
+    auto dot_indexed = words.enumerate()
+    lv_assert(dot_indexed[0].first == 0, "dot enumerate [0].first")
+    lv_assert(dot_indexed[0].second == "hello", "dot enumerate [0].second")
+
+    // dot-notation hashset operations
+    auto dot_u = sa.union_with(sb)
+    lv_assert(dot_u.len() == 4, "dot union_with")
+
+    auto dot_inter = sa.intersect(sb)
+    lv_assert(dot_inter.len() == 2, "dot intersect")
+
+    auto dot_diff = sa.difference(sb)
+    lv_assert(dot_diff.len() == 1, "dot difference")
+
+    // dot-notation chaining via typed intermediate variables
+    vector[int] step1 = nums.map((int x) => x * x)
+    vector[int] step2 = step1.filter((int x) => x > 5)
+    int chained = step2.reduce((int acc, int x) => acc + x, 0)
+    lv_assert(chained == 50, "dot chained map->filter->reduce")

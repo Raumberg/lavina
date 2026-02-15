@@ -25,6 +25,8 @@ class CppCodegen:
     vector[string] module_aliases
     vector[vector[Stmt]] module_stmts
     vector[vector[Stmt]] lambda_blocks
+    hashmap[string, vector[Stmt]] extend_methods
+    bool in_extend
 
     constructor():
         this.output = ""
@@ -46,6 +48,8 @@ class CppCodegen:
         this.module_aliases = []
         this.module_stmts = []
         this.lambda_blocks = []
+        this.extend_methods = {}
+        this.in_extend = false
 
     void fn set_modules(ref vector[string] short_names, ref vector[string] full_names, ref vector[string] aliases, ref vector[vector[Stmt]] stmts):
         this.module_short_names = short_names
@@ -367,6 +371,12 @@ class CppCodegen:
                     entries.push("{${this.emit_expr(keys[i], m)}, ${this.emit_expr(values[i], m)}}")
                 return "{{${entries.join(", ")}}}"
             Get(object, name):
+                if this.in_extend:
+                    match object:
+                        This(kw):
+                            return "self.${name.lexeme}"
+                        _:
+                            return "${this.emit_expr(object, m)}.${name.lexeme}"
                 if m:
                     match object:
                         This(kw):
@@ -375,6 +385,12 @@ class CppCodegen:
                             return "${this.emit_expr(object, m)}.${name.lexeme}"
                 return "${this.emit_expr(object, m)}.${name.lexeme}"
             Set(object, name, value):
+                if this.in_extend:
+                    match object:
+                        This(kw):
+                            return "self.${name.lexeme} = ${this.emit_expr(value, m)}"
+                        _:
+                            return "${this.emit_expr(object, m)}.${name.lexeme} = ${this.emit_expr(value, m)}"
                 if m:
                     match object:
                         This(kw):
@@ -391,6 +407,8 @@ class CppCodegen:
                             return "${this.emit_expr(object, m)}::${name.lexeme}"
                 return "${this.emit_expr(object, m)}::${name.lexeme}"
             This(keyword):
+                if this.in_extend:
+                    return "self"
                 return "(*this)"
             Cast(expr, target_type):
                 string ex = this.emit_expr(expr, m)
@@ -443,6 +461,9 @@ class CppCodegen:
                 string remapped = this.try_remap_method(obj, name.lexeme, arg_strs)
                 if remapped != "":
                     return remapped
+                string ext_call = this.try_extend_method(object, name.lexeme, obj, arg_strs)
+                if ext_call != "":
+                    return ext_call
                 return "${obj}.${name.lexeme}(${arg_strs.join(", ")})"
             StaticGet(object, name):
                 string obj = this.emit_expr(object, in_method)
@@ -551,6 +572,65 @@ class CppCodegen:
         elif method == "flatten":
             return "lv_flatten(${obj})"
         return ""
+
+    string fn get_type_category(ref Expr object):
+        match object:
+            Variable(tok):
+                if this.var_types.has(tok.lexeme):
+                    TypeNode t = this.var_types[tok.lexeme]
+                    match t:
+                        Array(inner):
+                            return "vector"
+                        HashMap(k, v):
+                            return "hashmap"
+                        HashSet(inner):
+                            return "hashset"
+                        Str():
+                            return "string"
+                        Custom(name, type_args):
+                            return name
+                        _:
+                            return ""
+            _:
+                pass
+        return ""
+
+    string fn try_extend_method(ref Expr object, ref string method, ref string obj, ref vector[string] args):
+        string type_cat = this.get_type_category(object)
+        if type_cat != "" and this.extend_methods.has(type_cat):
+            vector[Stmt] methods = this.extend_methods[type_cat]
+            for ref ext_m in methods:
+                match ext_m:
+                    Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp):
+                        if mname.lexeme == method:
+                            if args.len() > 0:
+                                return "__ext_${type_cat}_${method}(${obj}, ${args.join(", ")})"
+                            return "__ext_${type_cat}_${method}(${obj})"
+                    _:
+                        pass
+        return ""
+
+    void fn emit_extend_method(ref string type_key, ref Stmt method):
+        match method:
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp):
+                vector[string] saved_dyn = this.dynamic_vars
+                string ret_type = this.emit_type(mret)
+                string param_str = this.emit_params(mparams, true)
+                string all_params = "auto& self"
+                if param_str != "":
+                    all_params = "auto& self, ${param_str}"
+                this.output +="${this.indent()}${ret_type} __ext_${type_key}_${mname.lexeme}(${all_params}) {\n"
+                this.indent_level += 1
+                bool saved_extend = this.in_extend
+                this.in_extend = true
+                for ref st in mbody:
+                    this.emit_stmt(st, false)
+                this.in_extend = saved_extend
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n\n"
+                this.dynamic_vars = saved_dyn
+            _:
+                pass
 
     string fn emit_params(ref vector[Param] params, bool track_dynamic):
         vector[string] strs = []
@@ -722,6 +802,8 @@ class CppCodegen:
                     if ef.name != ef.cpp_name:
                         this.extern_fn_names[ef.name] = ef.cpp_name
                     this.extern_fn_params[ef.name] = ef.params
+            Extend(target, methods, visibility):
+                pass
             _:
                 pass
 
@@ -1287,6 +1369,31 @@ class CppCodegen:
                 _:
                     pass
 
+        // Collect extend declarations from modules and main
+        for mi in 0..this.module_stmts.len():
+            for ref stmt in this.module_stmts[mi]:
+                match stmt:
+                    Extend(target, methods, visibility):
+                        string key = target.lexeme
+                        if not this.extend_methods.has(key):
+                            vector[Stmt] empty = []
+                            this.extend_methods[key] = empty
+                        for ref m in methods:
+                            this.extend_methods[key].push(m)
+                    _:
+                        pass
+        for ref stmt in stmts:
+            match stmt:
+                Extend(target, methods, visibility):
+                    string key = target.lexeme
+                    if not this.extend_methods.has(key):
+                        vector[Stmt] empty = []
+                        this.extend_methods[key] = empty
+                    for ref m in methods:
+                        this.extend_methods[key].push(m)
+                _:
+                    pass
+
         this.declarations = "#include \"lavina.h\"\n"
         for ref inc in this.extern_includes:
             this.declarations +="${inc}\n"
@@ -1295,6 +1402,15 @@ class CppCodegen:
         // Emit modules in dependency order
         for mi in 0..this.module_stmts.len():
             this.emit_module(mi)
+
+        // Emit extension methods as free functions
+        auto ext_keys = this.extend_methods.keys()
+        for ref ek in ext_keys:
+            vector[Stmt] methods = this.extend_methods[ek]
+            for ref m in methods:
+                this.emit_extend_method(ek, m)
+            this.declarations += this.output
+            this.output = ""
 
         for ref stmt in stmts:
             match stmt:
@@ -1315,6 +1431,8 @@ class CppCodegen:
                         this.declarations += this.output
                         this.output = ""
                 Extern(header, import_path, link_lib, types, functions):
+                    pass
+                Extend(target, methods, visibility):
                     pass
                 _:
                     this.emit_stmt(stmt, false)
