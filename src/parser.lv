@@ -64,47 +64,13 @@ class Parser:
 
     bool fn is_type_at_pos(int pos):
         auto t = this.peek_at(pos).token_type
-        if t == TK_INT_TYPE:
-            return true
-        if t == TK_FLOAT_TYPE:
-            return true
-        if t == TK_STRING_TYPE:
-            return true
-        if t == TK_BOOL:
-            return true
-        if t == TK_VOID:
-            return true
-        if t == TK_AUTO:
-            return true
-        if t == TK_DYNAMIC:
-            return true
-        if t == TK_VECTOR:
-            return true
-        if t == TK_HASHMAP:
-            return true
-        if t == TK_HASHSET:
-            return true
-        if t == TK_IDENTIFIER:
-            return true
-        if t == TK_INT8:
-            return true
-        if t == TK_INT16:
-            return true
-        if t == TK_INT32:
-            return true
-        if t == TK_INT64:
-            return true
-        if t == TK_FLOAT32:
-            return true
-        if t == TK_FLOAT64:
-            return true
-        if t == TK_USIZE:
-            return true
-        if t == TK_CSTRING:
-            return true
-        if t == TK_PTR:
-            return true
-        return false
+        vector[string] type_tokens = [
+            TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID,
+            TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET,
+            TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64,
+            TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR
+        ]
+        return type_tokens.contains(t)
 
     int fn skip_type_tokens(int pos):
         auto tt = this.peek_at(pos).token_type

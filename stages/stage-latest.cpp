@@ -1370,6 +1370,15 @@ struct CppCodegen {
         return ((((std::string("") + ((*this).indent())) + std::string("template<")) + (lv_join(tps, std::string(", ")))) + std::string(">\n"));
     }
 
+    void push_unique(std::vector<std::string>& vec, std::string value) {
+        for (const auto& existing : vec) {
+            if ((existing == value)) {
+                return;
+            }
+        }
+        vec.push_back(value);
+    }
+
     std::string wrap_convert(std::string expr, const TypeNode& from, const TypeNode& expected) {
         {
             const auto& _match_1 = from;
@@ -2123,6 +2132,7 @@ struct CppCodegen {
     }
 
     std::string try_remap_method(const std::string& obj, const std::string& method, const std::vector<std::string>& args) {
+        std::string a = lv_join(args, std::string(", "));
         if ((method == std::string("len"))) {
             return ((std::string("static_cast<int64_t>(") + (obj)) + std::string(".size())"));
         }
@@ -2132,127 +2142,127 @@ struct CppCodegen {
             }
             else {
                 if ((method == std::string("contains"))) {
-                    return ((((std::string("lv_contains(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                    return ((((std::string("lv_contains(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                 }
                 else {
-                    if ((method == std::string("add"))) {
-                        return ((((std::string("") + (obj)) + std::string(".insert(")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                    if ((method == std::string("has"))) {
+                        return ((((std::string("(") + (obj)) + std::string(".count(")) + (a)) + std::string(") > 0)"));
                     }
                     else {
-                        if ((method == std::string("upper"))) {
-                            return ((std::string("lv_upper(") + (obj)) + std::string(")"));
+                        if ((method == std::string("push"))) {
+                            return ((((std::string("") + (obj)) + std::string(".push_back(")) + (a)) + std::string(")"));
                         }
                         else {
-                            if ((method == std::string("lower"))) {
-                                return ((std::string("lv_lower(") + (obj)) + std::string(")"));
+                            if ((method == std::string("pop"))) {
+                                return ((std::string("lv_pop(") + (obj)) + std::string(")"));
                             }
                             else {
-                                if ((method == std::string("trim"))) {
-                                    return ((std::string("lv_trim(") + (obj)) + std::string(")"));
+                                if ((method == std::string("add"))) {
+                                    return ((((std::string("") + (obj)) + std::string(".insert(")) + (a)) + std::string(")"));
                                 }
                                 else {
-                                    if ((method == std::string("replace"))) {
-                                        return ((((std::string("lv_replace(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                    if ((method == std::string("remove"))) {
+                                        return ((((std::string("lv_remove(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                     }
                                     else {
-                                        if ((method == std::string("split"))) {
-                                            if ((static_cast<int64_t>(args.size()) > INT64_C(0))) {
-                                                return ((((std::string("lv_split(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(")"));
-                                            }
-                                            return ((std::string("lv_split(") + (obj)) + std::string(", std::string(\" \"))"));
+                                        if ((method == std::string("clear"))) {
+                                            return ((std::string("") + (obj)) + std::string(".clear()"));
                                         }
                                         else {
-                                            if ((method == std::string("starts_with"))) {
-                                                return ((((std::string("") + (obj)) + std::string(".starts_with(")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                            if ((method == std::string("sort"))) {
+                                                return ((std::string("lv_sort(") + (obj)) + std::string(")"));
                                             }
                                             else {
-                                                if ((method == std::string("ends_with"))) {
-                                                    return ((((std::string("") + (obj)) + std::string(".ends_with(")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                if ((method == std::string("reverse"))) {
+                                                    return ((std::string("lv_reverse(") + (obj)) + std::string(")"));
                                                 }
                                                 else {
-                                                    if ((method == std::string("indexOf"))) {
-                                                        if ((static_cast<int64_t>(args.size()) >= INT64_C(2))) {
-                                                            return ((((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(", ")) + (args[INT64_C(1)])) + std::string(")"));
-                                                        }
-                                                        return ((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                    if ((method == std::string("unique"))) {
+                                                        return ((std::string("lv_unique(") + (obj)) + std::string(")"));
                                                     }
                                                     else {
-                                                        if ((method == std::string("charAt"))) {
-                                                            return ((((std::string("std::string(1, ") + (obj)) + std::string("[")) + (lv_join(args, std::string(", ")))) + std::string("])"));
+                                                        if ((method == std::string("flatten"))) {
+                                                            return ((std::string("lv_flatten(") + (obj)) + std::string(")"));
                                                         }
                                                         else {
-                                                            if ((method == std::string("substring"))) {
-                                                                if ((static_cast<int64_t>(args.size()) >= INT64_C(2))) {
-                                                                    return ((((((((std::string("") + (obj)) + std::string(".substr(")) + (args[INT64_C(0)])) + std::string(", (")) + (args[INT64_C(1)])) + std::string(") - (")) + (args[INT64_C(0)])) + std::string("))"));
-                                                                }
-                                                                return ((((std::string("") + (obj)) + std::string(".substr(")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                            if ((method == std::string("slice"))) {
+                                                                return ((((std::string("lv_slice(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                                             }
                                                             else {
-                                                                if ((method == std::string("push"))) {
-                                                                    return ((((std::string("") + (obj)) + std::string(".push_back(")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                                if ((method == std::string("keys"))) {
+                                                                    return ((std::string("lv_keys(") + (obj)) + std::string(")"));
                                                                 }
                                                                 else {
-                                                                    if ((method == std::string("pop"))) {
-                                                                        return ((std::string("lv_pop(") + (obj)) + std::string(")"));
+                                                                    if ((method == std::string("values"))) {
+                                                                        return ((std::string("lv_values(") + (obj)) + std::string(")"));
                                                                     }
                                                                     else {
-                                                                        if ((method == std::string("clear"))) {
-                                                                            return ((std::string("") + (obj)) + std::string(".clear()"));
+                                                                        if ((method == std::string("upper"))) {
+                                                                            return ((std::string("lv_upper(") + (obj)) + std::string(")"));
                                                                         }
                                                                         else {
-                                                                            if ((method == std::string("remove"))) {
-                                                                                return ((((std::string("lv_remove(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                                            if ((method == std::string("lower"))) {
+                                                                                return ((std::string("lv_lower(") + (obj)) + std::string(")"));
                                                                             }
                                                                             else {
-                                                                                if ((method == std::string("join"))) {
-                                                                                    if ((static_cast<int64_t>(args.size()) > INT64_C(0))) {
-                                                                                        return ((((std::string("lv_join(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(")"));
-                                                                                    }
-                                                                                    return ((std::string("lv_join(") + (obj)) + std::string(", std::string(\"\"))"));
+                                                                                if ((method == std::string("trim"))) {
+                                                                                    return ((std::string("lv_trim(") + (obj)) + std::string(")"));
                                                                                 }
                                                                                 else {
-                                                                                    if ((method == std::string("reverse"))) {
-                                                                                        return ((std::string("lv_reverse(") + (obj)) + std::string(")"));
+                                                                                    if ((method == std::string("pad_left"))) {
+                                                                                        return ((((std::string("lv_pad_left(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                                                                     }
                                                                                     else {
-                                                                                        if ((method == std::string("keys"))) {
-                                                                                            return ((std::string("lv_keys(") + (obj)) + std::string(")"));
+                                                                                        if ((method == std::string("pad_right"))) {
+                                                                                            return ((((std::string("lv_pad_right(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                                                                         }
                                                                                         else {
-                                                                                            if ((method == std::string("values"))) {
-                                                                                                return ((std::string("lv_values(") + (obj)) + std::string(")"));
+                                                                                            if ((method == std::string("repeat"))) {
+                                                                                                return ((((std::string("lv_repeat(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                                                                             }
                                                                                             else {
-                                                                                                if ((method == std::string("has"))) {
-                                                                                                    return ((((std::string("(") + (obj)) + std::string(".count(")) + (lv_join(args, std::string(", ")))) + std::string(") > 0)"));
+                                                                                                if ((method == std::string("replace"))) {
+                                                                                                    return ((((std::string("lv_replace(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                                                                                 }
                                                                                                 else {
-                                                                                                    if ((method == std::string("repeat"))) {
-                                                                                                        return ((((std::string("lv_repeat(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                                                                    if ((method == std::string("starts_with"))) {
+                                                                                                        return ((((std::string("") + (obj)) + std::string(".starts_with(")) + (a)) + std::string(")"));
                                                                                                     }
                                                                                                     else {
-                                                                                                        if ((method == std::string("pad_left"))) {
-                                                                                                            return ((((std::string("lv_pad_left(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                                                                        if ((method == std::string("ends_with"))) {
+                                                                                                            return ((((std::string("") + (obj)) + std::string(".ends_with(")) + (a)) + std::string(")"));
                                                                                                         }
                                                                                                         else {
-                                                                                                            if ((method == std::string("pad_right"))) {
-                                                                                                                return ((((std::string("lv_pad_right(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                                                                            if ((method == std::string("charAt"))) {
+                                                                                                                return ((((std::string("std::string(1, ") + (obj)) + std::string("[")) + (a)) + std::string("])"));
                                                                                                             }
                                                                                                             else {
-                                                                                                                if ((method == std::string("sort"))) {
-                                                                                                                    return ((std::string("lv_sort(") + (obj)) + std::string(")"));
+                                                                                                                if ((method == std::string("join"))) {
+                                                                                                                    if ((static_cast<int64_t>(args.size()) > INT64_C(0))) {
+                                                                                                                        return ((((std::string("lv_join(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(")"));
+                                                                                                                    }
+                                                                                                                    return ((std::string("lv_join(") + (obj)) + std::string(", std::string(\"\"))"));
                                                                                                                 }
                                                                                                                 else {
-                                                                                                                    if ((method == std::string("unique"))) {
-                                                                                                                        return ((std::string("lv_unique(") + (obj)) + std::string(")"));
+                                                                                                                    if ((method == std::string("split"))) {
+                                                                                                                        if ((static_cast<int64_t>(args.size()) > INT64_C(0))) {
+                                                                                                                            return ((((std::string("lv_split(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(")"));
+                                                                                                                        }
+                                                                                                                        return ((std::string("lv_split(") + (obj)) + std::string(", std::string(\" \"))"));
                                                                                                                     }
                                                                                                                     else {
-                                                                                                                        if ((method == std::string("slice"))) {
-                                                                                                                            return ((((std::string("lv_slice(") + (obj)) + std::string(", ")) + (lv_join(args, std::string(", ")))) + std::string(")"));
+                                                                                                                        if ((method == std::string("indexOf"))) {
+                                                                                                                            if ((static_cast<int64_t>(args.size()) >= INT64_C(2))) {
+                                                                                                                                return ((((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (args[INT64_C(0)])) + std::string(", ")) + (args[INT64_C(1)])) + std::string(")"));
+                                                                                                                            }
+                                                                                                                            return ((((std::string("lv_index_of(") + (obj)) + std::string(", ")) + (a)) + std::string(")"));
                                                                                                                         }
                                                                                                                         else {
-                                                                                                                            if ((method == std::string("flatten"))) {
-                                                                                                                                return ((std::string("lv_flatten(") + (obj)) + std::string(")"));
+                                                                                                                            if ((method == std::string("substring"))) {
+                                                                                                                                if ((static_cast<int64_t>(args.size()) >= INT64_C(2))) {
+                                                                                                                                    return ((((((((std::string("") + (obj)) + std::string(".substr(")) + (args[INT64_C(0)])) + std::string(", (")) + (args[INT64_C(1)])) + std::string(") - (")) + (args[INT64_C(0)])) + std::string("))"));
+                                                                                                                                }
+                                                                                                                                return ((((std::string("") + (obj)) + std::string(".substr(")) + (a)) + std::string(")"));
                                                                                                                             }
                                                                                                                         }
                                                                                                                     }
@@ -2701,36 +2711,12 @@ struct CppCodegen {
                 else {
                     inc_line = ((std::string("#include <") + (header)) + std::string(">"));
                 }
-                bool already = false;
-                for (const auto& existing : this->extern_includes) {
-                    if ((existing == inc_line)) {
-                        already = true;
-                    }
-                }
-                if ((!already)) {
-                    this->extern_includes.push_back(inc_line);
-                }
+                (*this).push_unique(this->extern_includes, inc_line);
                 if ((link_lib != std::string(""))) {
-                    bool link_already = false;
-                    for (const auto& existing_lib : this->extern_link_libs) {
-                        if ((existing_lib == link_lib)) {
-                            link_already = true;
-                        }
-                    }
-                    if ((!link_already)) {
-                        this->extern_link_libs.push_back(link_lib);
-                    }
+                    (*this).push_unique(this->extern_link_libs, link_lib);
                 }
                 if ((import_path != std::string(""))) {
-                    bool path_already = false;
-                    for (const auto& existing_path : this->extern_import_paths) {
-                        if ((existing_path == import_path)) {
-                            path_already = true;
-                        }
-                    }
-                    if ((!path_already)) {
-                        this->extern_import_paths.push_back(import_path);
-                    }
+                    (*this).push_unique(this->extern_import_paths, import_path);
                 }
                 for (const auto& et : types) {
                     if ((et.lavina_name != et.cpp_name)) {
@@ -5239,67 +5225,8 @@ struct Parser {
 
     bool is_type_at_pos(int64_t pos) {
         auto t = (*this).peek_at(pos).token_type;
-        if ((t == TK_INT_TYPE)) {
-            return true;
-        }
-        if ((t == TK_FLOAT_TYPE)) {
-            return true;
-        }
-        if ((t == TK_STRING_TYPE)) {
-            return true;
-        }
-        if ((t == TK_BOOL)) {
-            return true;
-        }
-        if ((t == TK_VOID)) {
-            return true;
-        }
-        if ((t == TK_AUTO)) {
-            return true;
-        }
-        if ((t == TK_DYNAMIC)) {
-            return true;
-        }
-        if ((t == TK_VECTOR)) {
-            return true;
-        }
-        if ((t == TK_HASHMAP)) {
-            return true;
-        }
-        if ((t == TK_HASHSET)) {
-            return true;
-        }
-        if ((t == TK_IDENTIFIER)) {
-            return true;
-        }
-        if ((t == TK_INT8)) {
-            return true;
-        }
-        if ((t == TK_INT16)) {
-            return true;
-        }
-        if ((t == TK_INT32)) {
-            return true;
-        }
-        if ((t == TK_INT64)) {
-            return true;
-        }
-        if ((t == TK_FLOAT32)) {
-            return true;
-        }
-        if ((t == TK_FLOAT64)) {
-            return true;
-        }
-        if ((t == TK_USIZE)) {
-            return true;
-        }
-        if ((t == TK_CSTRING)) {
-            return true;
-        }
-        if ((t == TK_PTR)) {
-            return true;
-        }
-        return false;
+        std::vector<std::string> type_tokens = std::vector{TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID, TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64, TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR};
+        return lv_contains(type_tokens, t);
     }
 
     int64_t skip_type_tokens(int64_t pos) {

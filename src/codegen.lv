@@ -126,6 +126,12 @@ class CppCodegen:
             tps.push("typename ${tp}")
         return "${this.indent()}template<${tps.join(", ")}>\n"
 
+    void fn push_unique(ref! vector[string] vec, string value):
+        for ref existing in vec:
+            if existing == value:
+                return
+        vec.push(value)
+
     string fn wrap_convert(string expr, ref TypeNode from, ref TypeNode expected):
         match from:
             Str():
@@ -503,74 +509,75 @@ class CppCodegen:
                 return "${func}(${arg_strs.join(", ")})"
 
     string fn try_remap_method(ref string obj, ref string method, ref vector[string] args):
+        string a = args.join(", ")
         if method == "len":
             return "static_cast<int64_t>(${obj}.size())"
         elif method == "is_empty":
             return "${obj}.empty()"
         elif method == "contains":
-            return "lv_contains(${obj}, ${args.join(", ")})"
+            return "lv_contains(${obj}, ${a})"
+        elif method == "has":
+            return "(${obj}.count(${a}) > 0)"
+        elif method == "push":
+            return "${obj}.push_back(${a})"
+        elif method == "pop":
+            return "lv_pop(${obj})"
         elif method == "add":
-            return "${obj}.insert(${args.join(", ")})"
+            return "${obj}.insert(${a})"
+        elif method == "remove":
+            return "lv_remove(${obj}, ${a})"
+        elif method == "clear":
+            return "${obj}.clear()"
+        elif method == "sort":
+            return "lv_sort(${obj})"
+        elif method == "reverse":
+            return "lv_reverse(${obj})"
+        elif method == "unique":
+            return "lv_unique(${obj})"
+        elif method == "flatten":
+            return "lv_flatten(${obj})"
+        elif method == "slice":
+            return "lv_slice(${obj}, ${a})"
+        elif method == "keys":
+            return "lv_keys(${obj})"
+        elif method == "values":
+            return "lv_values(${obj})"
         elif method == "upper":
             return "lv_upper(${obj})"
         elif method == "lower":
             return "lv_lower(${obj})"
         elif method == "trim":
             return "lv_trim(${obj})"
+        elif method == "pad_left":
+            return "lv_pad_left(${obj}, ${a})"
+        elif method == "pad_right":
+            return "lv_pad_right(${obj}, ${a})"
+        elif method == "repeat":
+            return "lv_repeat(${obj}, ${a})"
         elif method == "replace":
-            return "lv_replace(${obj}, ${args.join(", ")})"
-        elif method == "split":
-            if args.len() > 0:
-                return "lv_split(${obj}, ${args[0]})"
-            return "lv_split(${obj}, std::string(\" \"))"
+            return "lv_replace(${obj}, ${a})"
         elif method == "starts_with":
-            return "${obj}.starts_with(${args.join(", ")})"
+            return "${obj}.starts_with(${a})"
         elif method == "ends_with":
-            return "${obj}.ends_with(${args.join(", ")})"
-        elif method == "indexOf":
-            if args.len() >= 2:
-                return "lv_index_of(${obj}, ${args[0]}, ${args[1]})"
-            return "lv_index_of(${obj}, ${args.join(", ")})"
+            return "${obj}.ends_with(${a})"
         elif method == "charAt":
-            return "std::string(1, ${obj}[${args.join(", ")}])"
-        elif method == "substring":
-            if args.len() >= 2:
-                return "${obj}.substr(${args[0]}, (${args[1]}) - (${args[0]}))"
-            return "${obj}.substr(${args.join(", ")})"
-        elif method == "push":
-            return "${obj}.push_back(${args.join(", ")})"
-        elif method == "pop":
-            return "lv_pop(${obj})"
-        elif method == "clear":
-            return "${obj}.clear()"
-        elif method == "remove":
-            return "lv_remove(${obj}, ${args.join(", ")})"
+            return "std::string(1, ${obj}[${a}])"
         elif method == "join":
             if args.len() > 0:
                 return "lv_join(${obj}, ${args[0]})"
             return "lv_join(${obj}, std::string(\"\"))"
-        elif method == "reverse":
-            return "lv_reverse(${obj})"
-        elif method == "keys":
-            return "lv_keys(${obj})"
-        elif method == "values":
-            return "lv_values(${obj})"
-        elif method == "has":
-            return "(${obj}.count(${args.join(", ")}) > 0)"
-        elif method == "repeat":
-            return "lv_repeat(${obj}, ${args.join(", ")})"
-        elif method == "pad_left":
-            return "lv_pad_left(${obj}, ${args.join(", ")})"
-        elif method == "pad_right":
-            return "lv_pad_right(${obj}, ${args.join(", ")})"
-        elif method == "sort":
-            return "lv_sort(${obj})"
-        elif method == "unique":
-            return "lv_unique(${obj})"
-        elif method == "slice":
-            return "lv_slice(${obj}, ${args.join(", ")})"
-        elif method == "flatten":
-            return "lv_flatten(${obj})"
+        elif method == "split":
+            if args.len() > 0:
+                return "lv_split(${obj}, ${args[0]})"
+            return "lv_split(${obj}, std::string(\" \"))"
+        elif method == "indexOf":
+            if args.len() >= 2:
+                return "lv_index_of(${obj}, ${args[0]}, ${args[1]})"
+            return "lv_index_of(${obj}, ${a})"
+        elif method == "substring":
+            if args.len() >= 2:
+                return "${obj}.substr(${args[0]}, (${args[1]}) - (${args[0]}))"
+            return "${obj}.substr(${a})"
         return ""
 
     string fn get_type_category(ref Expr object):
@@ -775,26 +782,11 @@ class CppCodegen:
                     inc_line = "#include \"${header}\""
                 else:
                     inc_line = "#include <${header}>"
-                bool already = false
-                for ref existing in this.extern_includes:
-                    if existing == inc_line:
-                        already = true
-                if not already:
-                    this.extern_includes.push(inc_line)
+                this.push_unique(this.extern_includes, inc_line)
                 if link_lib != "":
-                    bool link_already = false
-                    for ref existing_lib in this.extern_link_libs:
-                        if existing_lib == link_lib:
-                            link_already = true
-                    if not link_already:
-                        this.extern_link_libs.push(link_lib)
+                    this.push_unique(this.extern_link_libs, link_lib)
                 if import_path != "":
-                    bool path_already = false
-                    for ref existing_path in this.extern_import_paths:
-                        if existing_path == import_path:
-                            path_already = true
-                    if not path_already:
-                        this.extern_import_paths.push(import_path)
+                    this.push_unique(this.extern_import_paths, import_path)
                 for ref et in types:
                     if et.lavina_name != et.cpp_name:
                         this.extern_type_names[et.lavina_name] = et.cpp_name
