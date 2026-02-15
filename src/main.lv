@@ -42,7 +42,7 @@ class ImportResolver:
             return ""
         this.resolved_paths.push(file_path)
 
-        string source = fs_read(file_path)
+        string source = __fs_read(file_path)
         string dir = this.get_directory(file_path)
 
         string result = ""
@@ -60,6 +60,8 @@ class ImportResolver:
                 string file_rel = mod_path.replace("::", "/")
                 vector[string] segments = file_rel.split("/")
                 string module_file = "${dir}${file_rel}.lv"
+                if segments[0] == "std":
+                    module_file = "runtime/${file_rel}.lv"
                 if segments.len() > 1:
                     // Multi-segment: module import with namespace
                     string short_name = segments[segments.len() - 1]
@@ -79,15 +81,15 @@ class ImportResolver:
 // ── Helpers ──────────────────────────────────────────────────
 
 void fn cleanup(ref string cpp_path, ref string header_path, ref string liblavina_path, bool wrote_header):
-    os_exec("rm -f ${cpp_path}")
+    __os_exec("rm -f ${cpp_path}")
     if wrote_header:
-        os_exec("rm -f ${header_path}")
-        os_exec("rm -rf ${liblavina_path}")
+        __os_exec("rm -f ${header_path}")
+        __os_exec("rm -rf ${liblavina_path}")
 
 // ── Main entry point ─────────────────────────────────────────
 
 int fn main():
-    auto args = os_args()
+    auto args = __os_args()
     if args.len() < 2:
         print("Usage: bootstrap [--emit-cpp | compile] <file.lv>")
         return 1
@@ -213,15 +215,15 @@ int fn main():
     string bin_path = "${dir}${base}"
     string header_path = "${dir}lavina.h"
 
-    fs_write(cpp_path, cpp)
+    __fs_write(cpp_path, cpp)
 
     bool wrote_header = false
     string liblavina_path = "${dir}liblavina"
-    if not fs_exists(header_path):
+    if not __fs_exists(header_path):
         try:
-            string header_content = fs_read("runtime/lavina.h")
-            fs_write(header_path, header_content)
-            os_exec("cp -r runtime/liblavina ${liblavina_path}")
+            string header_content = __fs_read("runtime/lavina.h")
+            __fs_write(header_path, header_content)
+            __os_exec("cp -r runtime/liblavina ${liblavina_path}")
             wrote_header = true
         catch:
             print("Warning: could not find runtime/lavina.h")
@@ -229,21 +231,21 @@ int fn main():
     string compile_cmd = "g++ -std=c++23 -o ${bin_path} ${cpp_path}"
     for ref ip in import_paths:
         compile_cmd += " -I${ip}"
-    if fs_exists("deps/include"):
+    if __fs_exists("deps/include"):
         bool has_deps = false
         for ref ip in import_paths:
             if ip == "deps/include":
                 has_deps = true
         if not has_deps:
             compile_cmd += " -Ideps/include"
-    if fs_exists("deps/lib"):
+    if __fs_exists("deps/lib"):
         compile_cmd += " -Ldeps/lib"
     for ref ll in link_libs:
         if ll.indexOf("/") >= 0:
             compile_cmd += " ${ll}"
         else:
             compile_cmd += " -l${ll}"
-    int compile_result = os_exec(compile_cmd)
+    int compile_result = __os_exec(compile_cmd)
     if compile_result != 0:
         print("Compilation failed")
         cleanup(cpp_path, header_path, liblavina_path, wrote_header)
@@ -254,10 +256,10 @@ int fn main():
         print("Compiled: ${bin_path}")
         return 0
 
-    int run_result = os_exec(bin_path)
+    int run_result = __os_exec(bin_path)
 
     cleanup(cpp_path, header_path, liblavina_path, wrote_header)
-    os_exec("rm -f ${bin_path}")
+    __os_exec("rm -f ${bin_path}")
 
     if run_result != 0:
         return 1

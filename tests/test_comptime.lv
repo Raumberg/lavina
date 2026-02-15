@@ -9,6 +9,10 @@ comptime int fn add(int a, int b):
 comptime! int fn square(int x):
     return x * x
 
+// Comptime variables
+comptime int MAX_SIZE = 1024
+comptime float TAU = 6.28318530717958647692
+
 void fn main():
     lv_assert(factorial(5) == 120, "comptime factorial")
     lv_assert(add(3, 4) == 7, "comptime add")
@@ -18,5 +22,10 @@ void fn main():
 
     // comptime! (consteval) - compile-time only
     lv_assert(square(5) == 25, "comptime! square")
+
+    // comptime variables
+    lv_assert(MAX_SIZE == 1024, "comptime int var")
+    lv_assert(TAU > 6.28, "comptime float var")
+    lv_assert(TAU < 6.29, "comptime float var upper")
 
     print("test_comptime: ALL PASSED")

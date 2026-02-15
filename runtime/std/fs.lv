@@ -1,0 +1,46 @@
+// std::fs — filesystem operations
+
+public string fn read(string path):
+    return __fs_read(path)
+
+public void fn write(string path, string content):
+    __fs_write(path, content)
+
+public void fn append(string path, string content):
+    __fs_append(path, content)
+
+public bool fn exists(string path):
+    return __fs_exists(path)
+
+public bool fn remove(string path):
+    return __fs_remove(path)
+
+public bool fn is_dir(string path):
+    return __fs_is_dir(path)
+
+public vector[string] fn list_dir(string path):
+    return __fs_listdir(path)
+
+public vector[string] fn read_lines(string path):
+    return __fs_read_lines(path)
+
+public bool fn mkdir(string path):
+    return __fs_mkdir(path)
+
+public bool fn copy(string src, string dst):
+    return __fs_copy(src, dst)
+
+public void fn rename(string from, string to):
+    __fs_rename(from, to)
+
+public string fn absolute(string path):
+    return __fs_absolute(path)
+
+public string fn basename(string path):
+    return __fs_basename(path)
+
+public string fn dirname(string path):
+    return __fs_dirname(path)
+
+public int fn size(string path):
+    return __fs_size(path)

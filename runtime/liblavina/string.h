@@ -56,19 +56,19 @@ inline int64_t lv_index_of(const std::string& s, const std::string& sub, int64_t
 }
 
 // String ↔ number conversions
-inline int64_t str_to_int(const std::string& s) {
+inline int64_t __str_to_int(const std::string& s) {
     return std::stoll(s);
 }
 
-inline double str_to_float(const std::string& s) {
+inline double __str_to_float(const std::string& s) {
     return std::stod(s);
 }
 
-inline std::string int_to_str(int64_t n) {
+inline std::string __int_to_str(int64_t n) {
     return std::to_string(n);
 }
 
-inline std::string float_to_str(double n) {
+inline std::string __float_to_str(double n) {
     return std::to_string(n);
 }
 
@@ -96,7 +96,7 @@ inline std::string lv_pad_right(const std::string& s, int64_t width, const std::
 }
 
 // Count occurrences of substring
-inline int64_t lv_count(const std::string& s, const std::string& sub) {
+inline int64_t __lv_count(const std::string& s, const std::string& sub) {
     if (sub.empty()) return 0;
     int64_t count = 0;
     size_t pos = 0;
@@ -106,3 +106,10 @@ inline int64_t lv_count(const std::string& s, const std::string& sub) {
     }
     return count;
 }
+
+// Legacy aliases (used by test_stdlib.lv; prefer __-prefixed or std:: modules)
+inline auto str_to_int = __str_to_int;
+inline auto str_to_float = __str_to_float;
+inline auto int_to_str = __int_to_str;
+inline auto float_to_str = __float_to_str;
+inline auto lv_count = __lv_count;

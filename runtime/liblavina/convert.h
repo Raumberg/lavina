@@ -28,6 +28,8 @@ inline std::string operator+(float f, const std::string& s) { return std::to_str
 inline std::string operator+(const std::string& s, const char* c) { return s + std::string(c); }
 inline std::string operator+(const char* c, const std::string& s) { return std::string(c) + s; }
 inline std::string to_string(int32_t n) { return std::to_string(n); }
+inline std::string to_string(int16_t n) { return std::to_string(n); }
+inline std::string to_string(int8_t n) { return std::to_string(static_cast<int>(n)); }
 inline std::string to_string(size_t n) { return std::to_string(n); }
 inline std::string to_string(float f) { return std::to_string(f); }
 inline std::string to_string(const char* s) { return std::string(s); }

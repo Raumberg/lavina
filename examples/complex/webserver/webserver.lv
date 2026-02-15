@@ -65,7 +65,7 @@ int fn str_to_int(string s):
 void fn main():
     vector[Todo] todos = []
     int next_id = 1
-    string html = fs_read("index.html")
+    string html = __fs_read("index.html")
 
     Server svr
 

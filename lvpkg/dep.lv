@@ -15,11 +15,11 @@ struct Dep:
 //         lib <name> <url> <version> <lib_path> [header_path]
 vector[Dep] fn parse_pkg_file():
     vector[Dep] deps = []
-    if not fs_exists(PKG_FILE):
+    if not __fs_exists(PKG_FILE):
         error("No ${PKG_FILE} found in current directory")
         exit(1)
 
-    auto lines = fs_read_lines(PKG_FILE)
+    auto lines = __fs_read_lines(PKG_FILE)
     for ref line in lines:
         auto trimmed = line.trim()
         if trimmed == "" or starts_with(trimmed, "#"):

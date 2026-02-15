@@ -598,10 +598,13 @@ class CppCodegen:
                 this.output +="${this.indent()}${this.emit_expr(expr, m)};\n"
             Let(name, var_type, initializer, visibility, is_ref, is_mut):
                 this.emit_let(name, var_type, initializer, m, is_ref, is_mut)
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 string cpp_type = this.emit_type(const_type)
                 string val = this.emit_expr(value, m)
-                this.output +="${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
+                string prefix = "const "
+                if comptime_mode == 1 or comptime_mode == 2:
+                    prefix = "constexpr "
+                this.output +="${this.indent()}${prefix}${cpp_type} ${name.lexeme} = ${val};\n"
             Return(keyword, value):
                 match value:
                     None():
@@ -666,9 +669,11 @@ class CppCodegen:
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match_impl(expr, arm_patterns, arm_bodies, m)
             Namespace(name, body, visibility):
-                this.output +="${this.indent()}// TODO: unsupported namespace\n"
+                // Namespaces are handled via module system in main.lv
+                pass
             Import(path, alias):
-                this.output +="${this.indent()}// TODO: unsupported import\n"
+                // Imports are resolved by ImportResolver in main.lv
+                pass
             Break(keyword):
                 this.output +="${this.indent()}break;\n"
             Continue(keyword):
@@ -1214,7 +1219,7 @@ class CppCodegen:
             Enum(name, variants, methods, visibility, type_params):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
             Let(name, var_type, initializer, visibility, is_ref, is_mut):
@@ -1251,8 +1256,12 @@ class CppCodegen:
         if alias != "":
             this.output +="namespace ${alias} = ${full_name};\n"
 
-        for ref stmt in this.module_stmts[index]:
-            this.emit_using_if_public(full_name, stmt)
+        // Only emit 'using' for non-std modules
+        // std modules should be accessed via namespace (e.g. math::sin)
+        // to avoid conflicts with C standard library functions
+        if not full_name.starts_with("std_"):
+            for ref stmt in this.module_stmts[index]:
+                this.emit_using_if_public(full_name, stmt)
 
         this.output +="\n"
         this.declarations +=this.output

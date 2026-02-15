@@ -140,6 +140,8 @@ class Parser:
                 return try_pos + 1
         return pos + 1
 
+    // Note: checks for comptime at offset 0 because this is also called from
+    // enum_declaration() where comptime hasn't been consumed yet by declaration()
     bool fn is_function_start():
         int offset = 0
         if this.peek_at(offset).token_type == TK_COMPTIME or this.peek_at(offset).token_type == TK_COMPTIME_STRICT:
@@ -438,6 +440,9 @@ class Parser:
             elif this.match_any([TK_DOUBLE_COLON]):
                 auto name = this.consume(TK_IDENTIFIER, "Expect member name after '::'.")
                 expr = Expr::StaticGet(expr, name)
+            elif this.match_any([TK_AS]):
+                TypeNode target = this.parse_type()
+                expr = Expr::Cast(expr, target)
             else:
                 more = false
         return expr
@@ -746,13 +751,13 @@ class Parser:
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
         return Stmt::Let(name, var_type, initializer, visibility, is_ref, is_mut)
 
-    Stmt fn const_declaration(string visibility):
+    Stmt fn const_declaration(string visibility, int comptime_mode):
         TypeNode const_type = this.parse_type()
         auto name = this.consume(TK_IDENTIFIER, "Expect constant name after type.")
         this.consume(TK_EQUAL, "Const declaration must have an initializer.")
         Expr value = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return Stmt::Const(name, const_type, value, visibility)
+        return Stmt::Const(name, const_type, value, visibility, comptime_mode)
 
     Stmt fn function_declaration(string visibility, bool is_static, int comptime_mode):
         TypeNode return_type = this.parse_type()
@@ -945,8 +950,14 @@ class Parser:
         if this.match_any([TK_TRY]):
             return this.try_statement()
 
+        int comptime_mode = 0
+        if this.match_any([TK_COMPTIME_STRICT]):
+            comptime_mode = 2
+        elif this.match_any([TK_COMPTIME]):
+            comptime_mode = 1
+
         if this.match_any([TK_CONST]):
-            return this.const_declaration(visibility)
+            return this.const_declaration(visibility, comptime_mode)
 
         if this.in_class_body and this.check(TK_IDENTIFIER):
             auto ctor_name = this.peek().lexeme
@@ -959,12 +970,6 @@ class Parser:
                 vector[Stmt] body = this.block()
                 vector[string] empty_tp = []
                 return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp)
-
-        int comptime_mode = 0
-        if this.match_any([TK_COMPTIME_STRICT]):
-            comptime_mode = 2
-        elif this.match_any([TK_COMPTIME]):
-            comptime_mode = 1
 
         if this.match_any([TK_REF_MUT]):
             return this.var_declaration_with_ref(visibility, true, true)
@@ -981,6 +986,9 @@ class Parser:
             if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME or next_token == TK_OPERATOR:
                 if this.is_function_start():
                     return this.function_declaration(visibility, is_static, comptime_mode)
+                // comptime without const or fn → treat as comptime const
+                if comptime_mode > 0:
+                    return this.const_declaration(visibility, comptime_mode)
                 return this.var_declaration(visibility)
 
         return this.statement()
@@ -1043,34 +1051,3 @@ class Parser:
             else:
                 statements.push(this.declaration())
         return statements
-
-
-// ═══════════════════════════════════════════════════════════════
-//  Test: parse a simple expression
-// ═══════════════════════════════════════════════════════════════
-
-void fn test_parser():
-    auto parser_test_source = "1 + 2 * 3\n"
-    auto parser_test_scanner = Scanner(parser_test_source)
-    parser_test_scanner.scan_tokens()
-
-    auto parser = Parser(parser_test_scanner.tokens)
-    vector[Stmt] stmts = parser.parse_program()
-
-    print("Parsed statements: " + stmts.len())
-    for ref stmt in stmts:
-        match stmt:
-            ExprStmt(expr):
-                match expr:
-                    Binary(left, op, right):
-                        print("Binary: " + op.lexeme)
-                        match right:
-                            Binary(rl, rop, rr):
-                                print("  Right is Binary: " + rop.lexeme)
-                                print("OK: precedence correct (1 + (2 * 3))")
-                            _:
-                                pass
-                    _:
-                        pass
-            _:
-                pass

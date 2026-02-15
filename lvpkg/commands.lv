@@ -62,7 +62,7 @@ void fn cmd_install():
         warn("No dependencies found in ${PKG_FILE}")
         return
 
-    print("${C_BOLD}Installing ${int_to_str(deps.len())} dependencies...${C_RESET}")
+    print("${C_BOLD}Installing ${__int_to_str(deps.len())} dependencies...${C_RESET}")
     print("")
 
     ensure_dir(DEPS_DIR)
@@ -78,7 +78,7 @@ void fn cmd_install():
 
     for ref dep in deps:
         string dest = "${DEPS_SRC}/${dep.name}"
-        if fs_is_dir(dest):
+        if __fs_is_dir(dest):
             info("${dep.name}: already cloned, skipping (use 'update' to refresh)")
         else:
             git_clone(dep.url, dest, dep.version)
@@ -97,7 +97,7 @@ void fn cmd_update():
         warn("No dependencies found in ${PKG_FILE}")
         return
 
-    print("${C_BOLD}Updating ${int_to_str(deps.len())} dependencies...${C_RESET}")
+    print("${C_BOLD}Updating ${__int_to_str(deps.len())} dependencies...${C_RESET}")
     print("")
 
     ensure_dir(DEPS_DIR)
@@ -113,7 +113,7 @@ void fn cmd_update():
 
     for ref dep in deps:
         string dest = "${DEPS_SRC}/${dep.name}"
-        if fs_is_dir(dest):
+        if __fs_is_dir(dest):
             git_update(dest, dep.version)
         else:
             git_clone(dep.url, dest, dep.version)
@@ -132,11 +132,11 @@ void fn cmd_list():
         print("No dependencies found.")
         return
 
-    print("${C_BOLD}Dependencies (${int_to_str(deps.len())}):${C_RESET}")
+    print("${C_BOLD}Dependencies (${__int_to_str(deps.len())}):${C_RESET}")
     print("")
     for ref dep in deps:
         string status = "${C_DIM}[not installed]${C_RESET}"
-        if fs_is_dir("${DEPS_SRC}/${dep.name}"):
+        if __fs_is_dir("${DEPS_SRC}/${dep.name}"):
             status = "${C_GREEN}[installed]${C_RESET}"
 
         string path_info = ""
@@ -149,9 +149,9 @@ void fn cmd_list():
 
 // Remove the deps/ directory entirely
 void fn cmd_clean():
-    if fs_is_dir(DEPS_DIR):
+    if __fs_is_dir(DEPS_DIR):
         step("Removing ${DEPS_DIR}/...")
-        os_exec("rm -rf ${DEPS_DIR}")
+        __os_exec("rm -rf ${DEPS_DIR}")
         info("Cleaned.")
     else:
         warn("Nothing to clean — ${DEPS_DIR}/ does not exist.")

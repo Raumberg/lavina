@@ -969,24 +969,6 @@ struct Scanner {
 
 };
 
-void test_scanner() {
-    auto test_source = std::string("int fn add(int a, int b):\n    return a + b\n\nprint(add(2, 3))\n");
-    auto scanner = Scanner(test_source);
-    scanner.scan_tokens();
-    print((std::string("Tokens: ") + static_cast<int64_t>(scanner.tokens.size())));
-    if ((static_cast<int64_t>(scanner.errors.size()) > INT64_C(0))) {
-        print(std::string("ERRORS:"));
-        for (const auto& err : scanner.errors) {
-            print(err);
-        }
-    }
-    else {
-        for (auto tok : scanner.tokens) {
-            print(tok.to_string());
-        }
-    }
-}
-
 struct TypeNode;
 struct TypeNode {
     struct None {};
@@ -1151,7 +1133,7 @@ struct Stmt {
     struct None {};
     struct ExprStmt { Expr expr; };
     struct Let { Token name; TypeNode var_type; Expr initializer; std::string visibility; bool is_ref; bool is_mut; };
-    struct Const { Token name; TypeNode const_type; Expr value; std::string visibility; };
+    struct Const { Token name; TypeNode const_type; Expr value; std::string visibility; int64_t comptime_mode; };
     struct Return { Token keyword; Expr value; };
     struct If { Expr condition; std::shared_ptr<Stmt> then_branch; std::shared_ptr<Stmt> else_branch; };
     struct While { Expr condition; std::shared_ptr<Stmt> body; };
@@ -1177,7 +1159,7 @@ struct Stmt {
     static Stmt make_None() { return {"None", None{}}; }
     static Stmt make_ExprStmt(Expr expr) { return {"ExprStmt", ExprStmt{expr}}; }
     static Stmt make_Let(Token name, TypeNode var_type, Expr initializer, std::string visibility, bool is_ref, bool is_mut) { return {"Let", Let{name, var_type, initializer, visibility, is_ref, is_mut}}; }
-    static Stmt make_Const(Token name, TypeNode const_type, Expr value, std::string visibility) { return {"Const", Const{name, const_type, value, visibility}}; }
+    static Stmt make_Const(Token name, TypeNode const_type, Expr value, std::string visibility, int64_t comptime_mode) { return {"Const", Const{name, const_type, value, visibility, comptime_mode}}; }
     static Stmt make_Return(Token keyword, Expr value) { return {"Return", Return{keyword, value}}; }
     static Stmt make_If(Expr condition, Stmt then_branch, Stmt else_branch) { return {"If", If{condition, std::make_shared<Stmt>(std::move(then_branch)), std::make_shared<Stmt>(std::move(else_branch))}}; }
     static Stmt make_While(Expr condition, Stmt body) { return {"While", While{condition, std::make_shared<Stmt>(std::move(body))}}; }
@@ -2316,9 +2298,14 @@ struct CppCodegen {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 std::string cpp_type = (*this).emit_type(const_type);
                 std::string val = (*this).emit_expr(value, m);
-                this->output = (this->output + ((((((((std::string("") + ((*this).indent())) + std::string("const ")) + (cpp_type)) + std::string(" ")) + (name.lexeme)) + std::string(" = ")) + (val)) + std::string(";\n")));
+                std::string prefix = std::string("const ");
+                if ((comptime_mode == INT64_C(1)) || (comptime_mode == INT64_C(2))) {
+                    prefix = std::string("constexpr ");
+                }
+                this->output = (this->output + ((((((((((std::string("") + ((*this).indent())) + std::string("")) + (prefix)) + std::string("")) + (cpp_type)) + std::string(" ")) + (name.lexeme)) + std::string(" = ")) + (val)) + std::string(";\n")));
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Return>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Return>(_match_23._data);
@@ -2478,13 +2465,13 @@ struct CppCodegen {
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
-                this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("// TODO: unsupported namespace\n")));
+                /* pass */
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Import>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Import>(_match_23._data);
                 auto& path = _v.path;
                 auto& alias = _v.alias;
-                this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("// TODO: unsupported import\n")));
+                /* pass */
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Break>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Break>(_match_23._data);
@@ -3426,6 +3413,7 @@ struct CppCodegen {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 if ((visibility != std::string("private"))) {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
@@ -3497,8 +3485,10 @@ struct CppCodegen {
         if ((alias != std::string(""))) {
             this->output = (this->output + ((((std::string("namespace ") + (alias)) + std::string(" = ")) + (full_name)) + std::string(";\n")));
         }
-        for (const auto& stmt : this->module_stmts[index]) {
-            (*this).emit_using_if_public(full_name, stmt);
+        if ((!full_name.starts_with(std::string("std_")))) {
+            for (const auto& stmt : this->module_stmts[index]) {
+                (*this).emit_using_if_public(full_name, stmt);
+            }
         }
         this->output = (this->output + std::string("\n"));
         this->declarations = (this->declarations + this->output);
@@ -3699,6 +3689,9 @@ struct Checker {
             return true;
         }
         if ((this->known_enums.count(name) > 0)) {
+            return true;
+        }
+        if (name.starts_with(std::string("__"))) {
             return true;
         }
         int64_t angle = lv_index_of(name, std::string("<"));
@@ -4285,12 +4278,11 @@ struct Checker {
     }
 
     void register_builtins() {
-        std::vector<std::string> builtins = std::vector{std::string("print"), std::string("println"), std::string("lv_assert"), std::string("fs_read"), std::string("fs_write"), std::string("fs_exists"), std::string("fs_append"), std::string("fs_read_lines"), std::string("fs_remove"), std::string("fs_is_dir"), std::string("fs_listdir"), std::string("os_exec"), std::string("os_args"), std::string("os_env"), std::string("os_clock"), std::string("os_sleep"), std::string("os_cwd"), std::string("to_string"), std::string("to_int"), std::string("to_float"), std::string("input"), std::string("typeof"), std::string("len"), std::string("exit"), std::string("abs"), std::string("str_to_int"), std::string("str_to_float"), std::string("int_to_str"), std::string("float_to_str"), std::string("lv_abs"), std::string("lv_fabs"), std::string("lv_min"), std::string("lv_max"), std::string("lv_fmin"), std::string("lv_fmax"), std::string("lv_clamp"), std::string("lv_fclamp"), std::string("lv_floor"), std::string("lv_ceil"), std::string("lv_round"), std::string("lv_sqrt"), std::string("lv_pow"), std::string("lv_log"), std::string("lv_log2"), std::string("lv_sin"), std::string("lv_cos"), std::string("lv_random"), std::string("lv_random_float"), std::string("lv_count")};
+        std::vector<std::string> builtins = std::vector{std::string("print"), std::string("println"), std::string("lv_assert"), std::string("to_string"), std::string("to_int"), std::string("to_float"), std::string("input"), std::string("typeof"), std::string("len"), std::string("exit"), std::string("abs"), std::string("cast")};
         std::vector<Param> empty_params = {};
         for (const auto& name : builtins) {
             this->known_funcs[name] = ExternFn(name, name, TypeNode::make_Auto(), empty_params);
         }
-        /* pass */
     }
 
     void check(const std::vector<Stmt>& stmts) {
@@ -4343,6 +4335,7 @@ struct Checker {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 (*this).declare(name.lexeme, const_type, std::string("const"), false, false, name);
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_82)>::Struct>(_match_82._data)) {
@@ -4423,6 +4416,7 @@ struct Checker {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 (*this).check_expr(value);
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Return>(_match_83._data)) {
@@ -5569,7 +5563,13 @@ struct Parser {
                             expr = Expr::make_StaticGet(expr, name);
                         }
                         else {
-                            more = false;
+                            if ((*this).match_any(std::vector{TK_AS})) {
+                                TypeNode target = (*this).parse_type();
+                                expr = Expr::make_Cast(expr, target);
+                            }
+                            else {
+                                more = false;
+                            }
                         }
                     }
                 }
@@ -5954,13 +5954,13 @@ struct Parser {
         return Stmt::make_Let(name, var_type, initializer, visibility, is_ref, is_mut);
     }
 
-    Stmt const_declaration(std::string visibility) {
+    Stmt const_declaration(std::string visibility, int64_t comptime_mode) {
         TypeNode const_type = (*this).parse_type();
         auto name = (*this).consume(TK_IDENTIFIER, std::string("Expect constant name after type."));
         (*this).consume(TK_EQUAL, std::string("Const declaration must have an initializer."));
         Expr value = (*this).expression();
         (*this).match_any(std::vector{TK_SEMICOLON, TK_NEWLINE});
-        return Stmt::make_Const(name, const_type, value, visibility);
+        return Stmt::make_Const(name, const_type, value, visibility, comptime_mode);
     }
 
     Stmt function_declaration(std::string visibility, bool is_static, int64_t comptime_mode) {
@@ -6190,8 +6190,17 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_TRY})) {
             return (*this).try_statement();
         }
+        int64_t comptime_mode = INT64_C(0);
+        if ((*this).match_any(std::vector{TK_COMPTIME_STRICT})) {
+            comptime_mode = INT64_C(2);
+        }
+        else {
+            if ((*this).match_any(std::vector{TK_COMPTIME})) {
+                comptime_mode = INT64_C(1);
+            }
+        }
         if ((*this).match_any(std::vector{TK_CONST})) {
-            return (*this).const_declaration(visibility);
+            return (*this).const_declaration(visibility, comptime_mode);
         }
         if (this->in_class_body && (*this).check(TK_IDENTIFIER)) {
             auto ctor_name = (*this).peek().lexeme;
@@ -6204,15 +6213,6 @@ struct Parser {
                 std::vector<Stmt> body = (*this).block();
                 std::vector<std::string> empty_tp = {};
                 return Stmt::make_Function(name_tok, params, TypeNode::make_Void(), body, false, INT64_C(0), is_static, visibility, empty_tp);
-            }
-        }
-        int64_t comptime_mode = INT64_C(0);
-        if ((*this).match_any(std::vector{TK_COMPTIME_STRICT})) {
-            comptime_mode = INT64_C(2);
-        }
-        else {
-            if ((*this).match_any(std::vector{TK_COMPTIME})) {
-                comptime_mode = INT64_C(1);
             }
         }
         if ((*this).match_any(std::vector{TK_REF_MUT})) {
@@ -6230,6 +6230,9 @@ struct Parser {
             if ((next_token == TK_IDENTIFIER) || (next_token == TK_FN) || (next_token == TK_INLINE) || (next_token == TK_COMPTIME) || (next_token == TK_OPERATOR)) {
                 if ((*this).is_function_start()) {
                     return (*this).function_declaration(visibility, is_static, comptime_mode);
+                }
+                if ((comptime_mode > INT64_C(0))) {
+                    return (*this).const_declaration(visibility, comptime_mode);
                 }
                 return (*this).var_declaration(visibility);
             }
@@ -6310,54 +6313,6 @@ struct Parser {
 
 };
 
-void test_parser() {
-    auto parser_test_source = std::string("1 + 2 * 3\n");
-    auto parser_test_scanner = Scanner(parser_test_source);
-    parser_test_scanner.scan_tokens();
-    auto parser = Parser(parser_test_scanner.tokens);
-    std::vector<Stmt> stmts = parser.parse_program();
-    print((std::string("Parsed statements: ") + static_cast<int64_t>(stmts.size())));
-    for (const auto& stmt : stmts) {
-        {
-            const auto& _match_98 = stmt;
-            if (std::holds_alternative<std::decay_t<decltype(_match_98)>::ExprStmt>(_match_98._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_98)>::ExprStmt>(_match_98._data);
-                auto& expr = _v.expr;
-                {
-                    const auto& _match_99 = expr;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_99)>::Binary>(_match_99._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_99)>::Binary>(_match_99._data);
-                        auto& left = *_v.left;
-                        auto& op = _v.op;
-                        auto& right = *_v.right;
-                        print((std::string("Binary: ") + op.lexeme));
-                        {
-                            const auto& _match_100 = right;
-                            if (std::holds_alternative<std::decay_t<decltype(_match_100)>::Binary>(_match_100._data)) {
-                                auto& _v = std::get<std::decay_t<decltype(_match_100)>::Binary>(_match_100._data);
-                                auto& rl = *_v.left;
-                                auto& rop = _v.op;
-                                auto& rr = *_v.right;
-                                print((std::string("  Right is Binary: ") + rop.lexeme));
-                                print(std::string("OK: precedence correct (1 + (2 * 3))"));
-                            }
-                            else {
-                                /* pass */
-                            }
-                        }
-                    }
-                    else {
-                        /* pass */
-                    }
-                }
-            }
-            else {
-                /* pass */
-            }
-        }
-    }
-}
-
 struct ModuleInfo {
     std::string short_name;
     std::string full_name;
@@ -6400,7 +6355,7 @@ struct ImportResolver {
             return std::string("");
         }
         this->resolved_paths.push_back(file_path);
-        std::string source = fs_read(file_path);
+        std::string source = __fs_read(file_path);
         std::string dir = (*this).get_directory(file_path);
         std::string result = std::string("");
         std::vector<std::string> lines = lv_split(source, std::string("\n"));
@@ -6418,6 +6373,9 @@ struct ImportResolver {
                 std::string file_rel = lv_replace(mod_path, std::string("::"), std::string("/"));
                 std::vector<std::string> segments = lv_split(file_rel, std::string("/"));
                 std::string module_file = ((((std::string("") + (dir)) + std::string("")) + (file_rel)) + std::string(".lv"));
+                if ((segments[INT64_C(0)] == std::string("std"))) {
+                    module_file = ((std::string("runtime/") + (file_rel)) + std::string(".lv"));
+                }
                 if ((static_cast<int64_t>(segments.size()) > INT64_C(1))) {
                     std::string short_name = segments[(static_cast<int64_t>(segments.size()) - INT64_C(1))];
                     std::string full_name = lv_join(segments, std::string("_"));
@@ -6443,16 +6401,16 @@ struct ImportResolver {
 };
 
 void cleanup(const std::string& cpp_path, const std::string& header_path, const std::string& liblavina_path, bool wrote_header) {
-    os_exec(((std::string("rm -f ") + (cpp_path)) + std::string("")));
+    __os_exec(((std::string("rm -f ") + (cpp_path)) + std::string("")));
     if (wrote_header) {
-        os_exec(((std::string("rm -f ") + (header_path)) + std::string("")));
-        os_exec(((std::string("rm -rf ") + (liblavina_path)) + std::string("")));
+        __os_exec(((std::string("rm -f ") + (header_path)) + std::string("")));
+        __os_exec(((std::string("rm -rf ") + (liblavina_path)) + std::string("")));
     }
 }
 
 int main(int argc, char* argv[]) {
     for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);
-    auto args = os_args();
+    auto args = __os_args();
     if ((static_cast<int64_t>(args.size()) < INT64_C(2))) {
         print(std::string("Usage: bootstrap [--emit-cpp | compile] <file.lv>"));
         return INT64_C(1);
@@ -6592,14 +6550,14 @@ int main(int argc, char* argv[]) {
     std::string cpp_path = ((((std::string("") + (dir)) + std::string("")) + (base)) + std::string(".cpp"));
     std::string bin_path = ((((std::string("") + (dir)) + std::string("")) + (base)) + std::string(""));
     std::string header_path = ((std::string("") + (dir)) + std::string("lavina.h"));
-    fs_write(cpp_path, cpp);
+    __fs_write(cpp_path, cpp);
     bool wrote_header = false;
     std::string liblavina_path = ((std::string("") + (dir)) + std::string("liblavina"));
-    if ((!fs_exists(header_path))) {
+    if ((!__fs_exists(header_path))) {
         try {
-            std::string header_content = fs_read(std::string("runtime/lavina.h"));
-            fs_write(header_path, header_content);
-            os_exec(((std::string("cp -r runtime/liblavina ") + (liblavina_path)) + std::string("")));
+            std::string header_content = __fs_read(std::string("runtime/lavina.h"));
+            __fs_write(header_path, header_content);
+            __os_exec(((std::string("cp -r runtime/liblavina ") + (liblavina_path)) + std::string("")));
             wrote_header = true;
         }
          catch (const std::exception& e) {
@@ -6610,7 +6568,7 @@ int main(int argc, char* argv[]) {
     for (const auto& ip : import_paths) {
         compile_cmd = (compile_cmd + ((std::string(" -I") + (ip)) + std::string("")));
     }
-    if (fs_exists(std::string("deps/include"))) {
+    if (__fs_exists(std::string("deps/include"))) {
         bool has_deps = false;
         for (const auto& ip : import_paths) {
             if ((ip == std::string("deps/include"))) {
@@ -6621,7 +6579,7 @@ int main(int argc, char* argv[]) {
             compile_cmd = (compile_cmd + std::string(" -Ideps/include"));
         }
     }
-    if (fs_exists(std::string("deps/lib"))) {
+    if (__fs_exists(std::string("deps/lib"))) {
         compile_cmd = (compile_cmd + std::string(" -Ldeps/lib"));
     }
     for (const auto& ll : link_libs) {
@@ -6632,7 +6590,7 @@ int main(int argc, char* argv[]) {
             compile_cmd = (compile_cmd + ((std::string(" -l") + (ll)) + std::string("")));
         }
     }
-    int64_t compile_result = os_exec(compile_cmd);
+    int64_t compile_result = __os_exec(compile_cmd);
     if ((compile_result != INT64_C(0))) {
         print(std::string("Compilation failed"));
         cleanup(cpp_path, header_path, liblavina_path, wrote_header);
@@ -6643,9 +6601,9 @@ int main(int argc, char* argv[]) {
         print(((std::string("Compiled: ") + (bin_path)) + std::string("")));
         return INT64_C(0);
     }
-    int64_t run_result = os_exec(bin_path);
+    int64_t run_result = __os_exec(bin_path);
     cleanup(cpp_path, header_path, liblavina_path, wrote_header);
-    os_exec(((std::string("rm -f ") + (bin_path)) + std::string("")));
+    __os_exec(((std::string("rm -f ") + (bin_path)) + std::string("")));
     if ((run_result != INT64_C(0))) {
         return INT64_C(1);
     }

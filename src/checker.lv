@@ -92,6 +92,9 @@ class Checker:
             return true
         if this.known_enums.has(name):
             return true
+        // Runtime builtins with __ prefix are always valid
+        if name.starts_with("__"):
+            return true
         // Check if this is a generic instantiation like "Pair<int64_t, std::string>"
         int angle = name.indexOf("<")
         if angle >= 0:
@@ -425,11 +428,12 @@ class Checker:
 
     void fn register_builtins():
         // Runtime functions that are always available
-        vector[string] builtins = ["print", "println", "lv_assert", "fs_read", "fs_write", "fs_exists", "fs_append", "fs_read_lines", "fs_remove", "fs_is_dir", "fs_listdir", "os_exec", "os_args", "os_env", "os_clock", "os_sleep", "os_cwd", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs", "str_to_int", "str_to_float", "int_to_str", "float_to_str", "lv_abs", "lv_fabs", "lv_min", "lv_max", "lv_fmin", "lv_fmax", "lv_clamp", "lv_fclamp", "lv_floor", "lv_ceil", "lv_round", "lv_sqrt", "lv_pow", "lv_log", "lv_log2", "lv_sin", "lv_cos", "lv_random", "lv_random_float", "lv_count"]
+        // Public API: functions users call directly (no __ prefix)
+        // All __ prefixed runtime functions are auto-resolved by resolve()
+        vector[string] builtins = ["print", "println", "lv_assert", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs", "cast"]
         vector[Param] empty_params = []
         for ref name in builtins:
             this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params)
-        pass
 
     void fn check(ref vector[Stmt] stmts):
         this.register_builtins()
@@ -450,7 +454,7 @@ class Checker:
                 this.known_classes[name.lexeme] = body
             Enum(name, variants, methods, visibility, enum_tp):
                 this.known_enums[name.lexeme] = variants
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 this.declare(name.lexeme, const_type, "const", false, false, name)
             Struct(name, body, visibility, struct_tp):
                 this.known_classes[name.lexeme] = body
@@ -483,7 +487,7 @@ class Checker:
                         if not this.types_compatible(var_type, init_type):
                             this.error("Cannot assign ${this.type_name(init_type)} to ${this.type_name(var_type)}", name)
                 this.declare(name.lexeme, var_type, "var", is_ref, true, name)
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 this.check_expr(value)
             Return(keyword, value):
                 this.check_expr(value)
