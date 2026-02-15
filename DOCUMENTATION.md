@@ -21,7 +21,8 @@
 17. [Compile-Time Evaluation](#compile-time-evaluation)
 18. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
 19. [Standard Library](#standard-library)
-20. [Compiler and Bootstrap](#compiler-and-bootstrap)
+20. [Extension Methods](#extension-methods)
+21. [Compiler and Bootstrap](#compiler-and-bootstrap)
 
 ---
 
@@ -961,6 +962,76 @@ The C++ code has access to all variables in scope. The `return 0` after the `cpp
 | `random(min, max)` | Random integer in range. |
 | `random_float()` | Random float in [0, 1). |
 
+### Standard Library Modules
+
+The standard library is organized into importable modules:
+
+```lavina
+import std::fs           // fs::read(), fs::write(), ...
+import std::os           // os::args(), os::exec(), ...
+import std::math         // math::PI, math::sqrt(), ...
+import std::collections  // vector/hashset dot-methods + free functions
+```
+
+**std::collections** provides higher-order functions both as free functions and as dot-notation methods via `extend`:
+
+```lavina
+import std::collections
+
+vector[int] nums = [1, 2, 3, 4, 5]
+
+// Dot-notation (via extend)
+auto doubled = nums.map((int x) => x * 2)
+auto evens = nums.filter((int x) => x % 2 == 0)
+int sum = nums.reduce((int acc, int x) => acc + x, 0)
+
+// Free function style
+auto doubled2 = collections::map(nums, (int x) => x * 2)
+
+// Generators (free functions only)
+auto r = collections::range(0, 10)
+```
+
+Available dot-methods on vectors: `map`, `filter`, `reduce`, `for_each`, `zip`, `take`, `drop`, `enumerate`.
+Available dot-methods on hashsets: `union_with`, `intersect`, `difference`.
+
+---
+
+## Extension Methods
+
+The `extend` keyword adds methods to existing types:
+
+```lavina
+extend vector:
+    auto fn double_all():
+        return __lv_col_map(this, (auto x) => x * 2)
+
+    int fn sum():
+        int result = 0
+        for x in this:
+            result += x
+        return result
+
+extend string:
+    string fn shout():
+        return this + "!"
+```
+
+Usage:
+
+```lavina
+vector[int] nums = [1, 2, 3]
+auto d = nums.double_all()    // [2, 4, 6]
+int s = nums.sum()            // 6
+
+string greeting = "hello"
+print(greeting.shout())       // hello!
+```
+
+Extend methods work on: `vector`, `hashmap`, `hashset`, `string`, and custom types (structs/enums by name).
+
+Use `this` inside extend methods to refer to the object. Built-in methods (`.push()`, `.sort()`, etc.) take priority over extend methods.
+
 ---
 
 ## Compiler and Bootstrap
@@ -1008,7 +1079,7 @@ The compiler maintains C++ snapshots in `stages/`. Each snapshot is a complete s
 make bootstrap   # Build from latest stage, verify fixed point
 make snapshot    # Save new stage after codegen changes
 make evolve      # Handle codegen output format changes (2-pass)
-make test        # Run test suite (22 tests)
+make test        # Run test suite (37 tests)
 ```
 
 **Fixed point verification**: The bootstrap compiles `src/main.lv` twice — once with the previous stage and once with the newly built compiler. The outputs must be identical, proving the compiler correctly compiles itself.
