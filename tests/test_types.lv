@@ -29,9 +29,43 @@ void fn test_cross_type():
     print("int32->int: " + b)
     print("float32->float: " + d)
 
+void fn test_print_all_types():
+    // print() with each type directly
+    int8 a = 8
+    int16 b = 16
+    int32 c = 32
+    int64 d = 64
+    float32 e = 3.2
+    float64 f = 6.4
+    usize g = 99
+    print(a)
+    print(b)
+    print(c)
+    print(d)
+    print(e)
+    print(f)
+    print(g)
+    print(true)
+    // println
+    println(42)
+    println("hello")
+    println()
+
+void fn test_to_string_all_types():
+    lv_assert(to_string(42) == "42", "to_string int")
+    lv_assert(to_string(true) == "true", "to_string bool")
+    int32 x32 = 32
+    lv_assert(to_string(x32) == "32", "to_string int32")
+    int16 x16 = 16
+    lv_assert(to_string(x16) == "16", "to_string int16")
+    int8 x8 = 8
+    lv_assert(to_string(x8) == "8", "to_string int8")
+
 void fn main():
     test_int_types()
     test_float_types()
     test_usize()
     test_cross_type()
+    test_print_all_types()
+    test_to_string_all_types()
     print("All type tests passed!")
