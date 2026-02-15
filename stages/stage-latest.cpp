@@ -479,6 +479,7 @@ struct Scanner {
     bool at_line_start;
     bool in_string_interp;
     int64_t interp_brace_depth;
+    int64_t bracket_depth;
 
     Scanner(std::string source)
         : source(source) {
@@ -494,6 +495,7 @@ struct Scanner {
         this->at_line_start = true;
         this->in_string_interp = false;
         this->interp_brace_depth = INT64_C(0);
+        this->bracket_depth = INT64_C(0);
     }
 
     bool is_at_end() {
@@ -551,6 +553,13 @@ struct Scanner {
     }
 
     void handle_indentation() {
+        if ((this->bracket_depth > INT64_C(0))) {
+            while ((!(*this).is_at_end()) && (((*this).peek() == std::string(" ")) || ((*this).peek() == std::string("\t")))) {
+                (*this).advance();
+            }
+            this->at_line_start = false;
+            return;
+        }
         int64_t indent = INT64_C(0);
         while ((!(*this).is_at_end()) && (((*this).peek() == std::string(" ")) || ((*this).peek() == std::string("\t")))) {
             auto c = (*this).advance();
@@ -737,14 +746,19 @@ struct Scanner {
             }
             else {
                 if ((c == std::string("["))) {
+                    this->bracket_depth = (this->bracket_depth + INT64_C(1));
                     (*this).add_simple_token(TK_LEFT_BRACKET);
                 }
                 else {
                     if ((c == std::string("]"))) {
+                        if ((this->bracket_depth > INT64_C(0))) {
+                            this->bracket_depth = (this->bracket_depth - INT64_C(1));
+                        }
                         (*this).add_simple_token(TK_RIGHT_BRACKET);
                     }
                     else {
                         if ((c == std::string("{"))) {
+                            this->bracket_depth = (this->bracket_depth + INT64_C(1));
                             if (this->in_string_interp) {
                                 this->interp_brace_depth = (this->interp_brace_depth + INT64_C(1));
                             }
@@ -761,6 +775,9 @@ struct Scanner {
                                         (*this).scan_string();
                                         return;
                                     }
+                                }
+                                if ((this->bracket_depth > INT64_C(0))) {
+                                    this->bracket_depth = (this->bracket_depth - INT64_C(1));
                                 }
                                 (*this).add_simple_token(TK_RIGHT_BRACE);
                             }
@@ -910,10 +927,14 @@ struct Scanner {
                                                                                                     }
                                                                                                     else {
                                                                                                         if ((c == std::string("\n"))) {
-                                                                                                            (*this).add_token(TK_NEWLINE, std::string("\n"));
+                                                                                                            if ((this->bracket_depth == INT64_C(0))) {
+                                                                                                                (*this).add_token(TK_NEWLINE, std::string("\n"));
+                                                                                                            }
                                                                                                             this->line = (this->line + INT64_C(1));
                                                                                                             this->column = INT64_C(1);
-                                                                                                            this->at_line_start = true;
+                                                                                                            if ((this->bracket_depth == INT64_C(0))) {
+                                                                                                                this->at_line_start = true;
+                                                                                                            }
                                                                                                         }
                                                                                                         else {
                                                                                                             if ((c == std::string("\""))) {
@@ -5832,14 +5853,19 @@ struct Parser {
             }
         }
         std::vector<Expr> args = {};
+        (*this).skip_formatting();
         if ((!(*this).check(TK_RIGHT_PAREN))) {
             (*this).match_any(std::vector{TK_REF, TK_REF_MUT});
             args.push_back((*this).expression());
+            (*this).skip_formatting();
             while ((*this).match_any(std::vector{TK_COMMA})) {
+                (*this).skip_formatting();
                 (*this).match_any(std::vector{TK_REF, TK_REF_MUT});
                 args.push_back((*this).expression());
+                (*this).skip_formatting();
             }
         }
+        (*this).skip_formatting();
         auto paren = (*this).consume(TK_RIGHT_PAREN, std::string("Expect ')' after arguments."));
         return Expr::make_Call(callee, paren, args);
     }
@@ -5873,7 +5899,9 @@ struct Parser {
             if ((*this).try_parse_lambda()) {
                 return (*this).parse_lambda();
             }
+            (*this).skip_formatting();
             Expr expr = (*this).expression();
+            (*this).skip_formatting();
             (*this).consume(TK_RIGHT_PAREN, std::string("Expect ')' after expression."));
             return Expr::make_Grouping(expr);
         }
@@ -5930,20 +5958,25 @@ struct Parser {
 
     std::vector<Param> parse_param_list() {
         std::vector<Param> params = {};
+        (*this).skip_formatting();
         if ((!(*this).check(TK_RIGHT_PAREN))) {
             bool p_mut = (*this).match_any(std::vector{TK_REF_MUT});
             bool p_ref = p_mut || (*this).match_any(std::vector{TK_REF});
             TypeNode param_type = (*this).parse_type();
             auto param_name = (*this).consume(TK_IDENTIFIER, std::string("Expect parameter name."));
             params.push_back(Param(param_name, param_type, p_ref, p_mut));
+            (*this).skip_formatting();
             while ((*this).match_any(std::vector{TK_COMMA})) {
+                (*this).skip_formatting();
                 p_mut = (*this).match_any(std::vector{TK_REF_MUT});
                 p_ref = p_mut || (*this).match_any(std::vector{TK_REF});
                 param_type = (*this).parse_type();
                 param_name = (*this).consume(TK_IDENTIFIER, std::string("Expect parameter name."));
                 params.push_back(Param(param_name, param_type, p_ref, p_mut));
+                (*this).skip_formatting();
             }
         }
+        (*this).skip_formatting();
         return params;
     }
 

@@ -288,6 +288,7 @@ class Scanner:
     bool at_line_start
     bool in_string_interp
     int interp_brace_depth
+    int bracket_depth
 
     constructor(string source):
         this.source = source
@@ -303,6 +304,7 @@ class Scanner:
         this.at_line_start = true
         this.in_string_interp = false
         this.interp_brace_depth = 0
+        this.bracket_depth = 0
 
     bool fn is_at_end():
         return this.current >= this.source.len()
@@ -349,6 +351,11 @@ class Scanner:
     // ── Indentation handling ────────────────────────────────────
 
     void fn handle_indentation():
+        if this.bracket_depth > 0:
+            while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
+                this.advance()
+            this.at_line_start = false
+            return
         int indent = 0
         while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
             auto c = this.advance()
@@ -489,10 +496,14 @@ class Scanner:
         elif c == ")":
             this.add_simple_token(TK_RIGHT_PAREN)
         elif c == "[":
+            this.bracket_depth += 1
             this.add_simple_token(TK_LEFT_BRACKET)
         elif c == "]":
+            if this.bracket_depth > 0:
+                this.bracket_depth -= 1
             this.add_simple_token(TK_RIGHT_BRACKET)
         elif c == "{":
+            this.bracket_depth += 1
             if this.in_string_interp:
                 this.interp_brace_depth += 1
             this.add_simple_token(TK_LEFT_BRACE)
@@ -505,6 +516,8 @@ class Scanner:
                     this.add_token(TK_PLUS, "+")
                     this.scan_string()
                     return
+            if this.bracket_depth > 0:
+                this.bracket_depth -= 1
             this.add_simple_token(TK_RIGHT_BRACE)
         elif c == ",":
             this.add_simple_token(TK_COMMA)
@@ -584,10 +597,12 @@ class Scanner:
         elif c == " " or c == "\r" or c == "\t":
             pass
         elif c == "\n":
-            this.add_token(TK_NEWLINE, "\n")
+            if this.bracket_depth == 0:
+                this.add_token(TK_NEWLINE, "\n")
             this.line += 1
             this.column = 1
-            this.at_line_start = true
+            if this.bracket_depth == 0:
+                this.at_line_start = true
         elif c == "\"":
             this.scan_string()
         elif is_digit(c):

@@ -6,6 +6,13 @@ int fn apply(int x, auto f):
 void fn run_callback(auto f):
     f()
 
+int fn apply2(int x, int y, auto f):
+    return f(x, y)
+
+void fn for_each_int(vector[int] v, auto f):
+    for x in v:
+        f(x)
+
 void fn main():
     // Block lambda with return
     auto double_it = (int x):
@@ -39,3 +46,86 @@ void fn main():
     auto add_base = (int x):
         return x + base
     lv_assert(add_base(42) == 142, "block lambda closure")
+
+    // Block lambda mutating closure
+    int sum = 0
+    auto add_to_sum = (int x):
+        sum += x
+    add_to_sum(10)
+    add_to_sum(20)
+    add_to_sum(30)
+    lv_assert(sum == 60, "block lambda mutating closure")
+
+    // Block lambda with local variables
+    auto complex_calc = (int x):
+        int a = x * 2
+        int b = a + 3
+        int c = b * b
+        return c - a
+    lv_assert(complex_calc(5) == 159, "block lambda local vars")
+
+    // Block lambda with if/else
+    auto abs_val = (int x):
+        if x < 0:
+            return 0 - x
+        return x
+    lv_assert(abs_val(-5) == 5, "block lambda if negative")
+    lv_assert(abs_val(3) == 3, "block lambda if positive")
+
+    // Block lambda with loop
+    auto factorial = (int n):
+        int result = 1
+        int i = 1
+        while i <= n:
+            result *= i
+            i += 1
+        return result
+    lv_assert(factorial(5) == 120, "block lambda with loop")
+
+    // Block lambda as argument in multiline call
+    lv_assert(
+        apply(
+            10,
+            (int x):
+                return x * x + 1
+        ) == 101,
+        "block lambda multiline arg"
+    )
+
+    // Two-param block lambda as argument
+    lv_assert(apply2(3, 4, (int x, int y):
+        int sum = x + y
+        int product = x * y
+        return sum + product
+    ) == 19, "2-param block lambda as arg")
+
+    // Block lambda with for_each pattern
+    int total = 0
+    vector[int] nums = [1, 2, 3, 4, 5]
+    for_each_int(nums, (int x):
+        total += x
+    )
+    lv_assert(total == 15, "block lambda for_each")
+
+    // Void block lambda as callback
+    int flag = 0
+    run_callback(():
+        flag = 42
+    )
+    lv_assert(flag == 42, "void block lambda callback")
+
+    // Nested block lambda calls
+    auto outer = (int x):
+        auto inner = (int y):
+            return y * 2
+        return inner(x) + 1
+    lv_assert(outer(5) == 11, "nested block lambdas")
+
+    // Block lambda capturing multiple variables
+    int a = 10
+    int b = 20
+    string prefix = "result"
+    auto multi_capture = (int x):
+        int val = a + b + x
+        return val
+    lv_assert(multi_capture(30) == 60, "block lambda multi capture")
