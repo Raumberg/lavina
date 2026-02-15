@@ -1,10 +1,11 @@
 # Lavina
 
-**Lavina** is a statically typed, indentation-based programming language that compiles to C++. The compiler is self-hosting — written in Lavina itself.  
+**Lavina** is a statically typed, indentation-based programming language that compiles to C++. The compiler is self-hosting — written in Lavina itself.
 
-With a power of C++ and Python-style syntax, you can unlock capabilities of Lavina!  
+With the power of C++ and Python-style syntax, you can unlock the capabilities of Lavina!
+
 > [!NOTE]
-> The language is in beta, I'm by no means a chad-programmer, but I welcome all the contributors if you find Lavina interesting enough!
+> The language is in beta. I'm by no means a chad-programmer, but I welcome all contributors if you find Lavina interesting enough!
 
 ## Quick Example
 
@@ -35,6 +36,98 @@ void fn main():
         print("${s.describe()}: area=${area(s)}")
 ```
 
+## Get Started
+
+### Prerequisites
+
+You need a C++ compiler with C++23 support:
+
+| Platform | Compiler |
+|----------|----------|
+| **macOS** | Xcode Command Line Tools (`xcode-select --install`) |
+| **Linux** | GCC 14+ (`sudo apt install g++-14` on Ubuntu/Debian) |
+| **Windows** | [MSYS2](https://www.msys2.org/) with MinGW (`pacman -S mingw-w64-ucrt-x86_64-gcc`) |
+
+### Option 1: Download a release (recommended)
+
+Download the latest release from [GitHub Releases](https://github.com/Raumberg/lavina/releases):
+
+```sh
+# macOS (Apple Silicon)
+curl -L https://github.com/Raumberg/lavina/releases/latest/download/lavina-macos-arm64.tar.gz | tar xz
+
+# Linux (x86_64)
+curl -L https://github.com/Raumberg/lavina/releases/latest/download/lavina-linux-x86_64.tar.gz | tar xz
+```
+
+This extracts a `bin/` and `lib/` directory. Add `bin/` to your `PATH`:
+
+```sh
+export PATH="$PWD/bin:$PATH"
+```
+
+Or install system-wide:
+
+```sh
+sudo cp -r bin/* /usr/local/bin/
+sudo cp -r lib/* /usr/local/lib/
+```
+
+### Option 2: Build from source
+
+```sh
+git clone https://github.com/Raumberg/lavina.git
+cd lavina
+make bootstrap    # compile compiler from saved C++ snapshot
+make test         # run the test suite (27 tests)
+make build        # optimized binary → build/
+make install      # install to /usr/local/ (or: make install PREFIX=~/.local)
+```
+
+### Your first program
+
+Create `hello.lv`:
+
+```lavina
+void fn main():
+    print("Hello, Lavina!")
+```
+
+Compile and run:
+
+```sh
+lavina compile hello.lv
+./hello
+```
+
+Or compile and run in one step:
+
+```sh
+lavina hello.lv
+```
+
+### Using the standard library
+
+Lavina ships with a standard library:
+
+```lavina
+import std::fs
+import std::os
+import std::math
+
+void fn main():
+    // File I/O
+    fs::write("greeting.txt", "Hello!")
+    print(fs::read("greeting.txt"))
+
+    // OS interaction
+    print("cwd: ${os::cwd()}")
+
+    // Math
+    print("pi = ${math::PI}")
+    print("sqrt(2) = ${math::sqrt(2.0)}")
+```
+
 ## Features
 
 - **Indentation-based syntax** — no braces or semicolons
@@ -51,23 +144,14 @@ void fn main():
 - **Package manager** — `lvpkg` for dependency management
 - **Self-hosting** — the compiler bootstraps from a saved C++ snapshot
 
-## Building
-
-Requires `g++` with C++23 support.
-
-```sh
-make bootstrap   # compile from saved stage, verify fixed point
-make test        # run test suite (22 tests)
-make build       # optimized binary in build/
-make install     # copy to /usr/local/bin
-```
-
 ## Project Structure
 
 ```
 src/           compiler source (.lv): scanner, parser, checker, codegen, main
 stages/        C++ snapshot for bootstrapping (stage-latest.cpp)
 runtime/       C++ runtime header and support libraries
+  liblavina/   C++ runtime modules (12 headers)
+  std/         standard library modules (fs, os, math)
 tests/         test suite (.lv files)
 examples/      example programs
 lvpkg/         package manager (written in Lavina)
@@ -81,18 +165,14 @@ design/        language design documents
 - `examples/match.lv` — enums and pattern matching
 - `examples/collections.lv` — vectors, hashmaps, hashsets
 - `examples/complex/tree/` — file tree printer
-- `examples/complex/lvg/` — Git client
+- `examples/complex/lvg/` — grep utility with colorized output
 - `examples/complex/webserver/` — HTTP todo app (uses httplib via lvpkg)
 - `examples/complex/raylib/` — Raylib window with animated graphics
 - `examples/sqlite.lv` — SQLite via FFI
 
 ## Package Manager
 
-Lavina ships with `lvpkg` — a simple dependency manager for pulling C++ header-only libraries and Lavina modules from GitHub.
-
-```sh
-make lvpkg       # build the package manager
-```
+Lavina ships with `lvpkg` — a dependency manager for C++ header libraries and native libraries from GitHub.
 
 Create a `lavina.pkg` in your project:
 
@@ -104,13 +184,13 @@ dep httplib https://github.com/yhirose/cpp-httplib v0.18.3 httplib.h
 dep json https://github.com/nlohmann/json v3.11.3 single_include/nlohmann/
 
 # native library (pre-built binary + headers)
-dep raylib https://github.com/raysan5/raylib 5.5 src/raylib.h
+lib raylib https://github.com/raysan5/raylib 5.5 lib/libraylib.a include/raylib.h
 ```
 
 Then run:
 
 ```sh
-lvpkg install    # install dependencies into deps/
+lvpkg install    # clone and install dependencies into deps/
 lvpkg update     # update to specified versions
 lvpkg list       # show dependency status
 lvpkg clean      # remove deps/

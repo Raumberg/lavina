@@ -18,10 +18,12 @@ struct ModuleInfo:
 class ImportResolver:
     vector[string] resolved_paths
     vector[ModuleInfo] modules
+    string runtime_dir
 
-    constructor():
+    constructor(string runtime_dir):
         this.resolved_paths = []
         this.modules = []
+        this.runtime_dir = runtime_dir
 
     bool fn already_resolved(ref string path):
         for ref p in this.resolved_paths:
@@ -61,7 +63,7 @@ class ImportResolver:
                 vector[string] segments = file_rel.split("/")
                 string module_file = "${dir}${file_rel}.lv"
                 if segments[0] == "std":
-                    module_file = "runtime/${file_rel}.lv"
+                    module_file = "${this.runtime_dir}${file_rel}.lv"
                 if segments.len() > 1:
                     // Multi-segment: module import with namespace
                     string short_name = segments[segments.len() - 1]
@@ -85,6 +87,27 @@ void fn cleanup(ref string cpp_path, ref string header_path, ref string liblavin
     if wrote_header:
         __os_exec("rm -f ${header_path}")
         __os_exec("rm -rf ${liblavina_path}")
+
+// ── Runtime directory resolution ─────────────────────────────
+
+string fn find_runtime_dir():
+    // 1. LAVINA_HOME environment variable
+    string home = __os_env("LAVINA_HOME")
+    if home != "":
+        string candidate = "${home}/runtime"
+        if __fs_is_dir(candidate):
+            return "${candidate}/"
+
+    // 2. Relative to binary: <exe_dir>/../lib/lavina/runtime
+    string exe = __os_exe_path()
+    if exe != "":
+        string exe_dir = __fs_dirname(exe)
+        string candidate = "${exe_dir}/../lib/lavina/runtime"
+        if __fs_is_dir(candidate):
+            return "${candidate}/"
+
+    // 3. Fallback: cwd-relative (dev mode)
+    return "runtime/"
 
 // ── Main entry point ─────────────────────────────────────────
 
@@ -115,7 +138,8 @@ int fn main():
         print("Usage: bootstrap [--emit-cpp | compile] [--no-check] <file.lv>")
         return 1
 
-    auto resolver = ImportResolver()
+    string runtime_dir = find_runtime_dir()
+    auto resolver = ImportResolver(runtime_dir)
     string source = resolver.resolve(path)
 
     // Parse each module
@@ -221,12 +245,12 @@ int fn main():
     string liblavina_path = "${dir}liblavina"
     if not __fs_exists(header_path):
         try:
-            string header_content = __fs_read("runtime/lavina.h")
+            string header_content = __fs_read("${runtime_dir}lavina.h")
             __fs_write(header_path, header_content)
-            __os_exec("cp -r runtime/liblavina ${liblavina_path}")
+            __os_exec("cp -r ${runtime_dir}liblavina ${liblavina_path}")
             wrote_header = true
         catch:
-            print("Warning: could not find runtime/lavina.h")
+            print("Warning: could not find ${runtime_dir}lavina.h")
 
     string compile_cmd = "g++ -std=c++23 -o ${bin_path} ${cpp_path}"
     for ref ip in import_paths:

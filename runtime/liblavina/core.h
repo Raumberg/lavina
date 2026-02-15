@@ -22,4 +22,12 @@
 #include <filesystem>
 #if defined(__unix__) || defined(__APPLE__)
 #include <sys/wait.h>
+#include <unistd.h>
+#include <climits>
+#endif
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+#if defined(_WIN32)
+#include <windows.h>
 #endif

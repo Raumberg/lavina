@@ -6324,8 +6324,10 @@ struct ModuleInfo {
 struct ImportResolver {
     std::vector<std::string> resolved_paths;
     std::vector<ModuleInfo> modules;
+    std::string runtime_dir;
 
-    ImportResolver() {
+    ImportResolver(std::string runtime_dir)
+        : runtime_dir(runtime_dir) {
         this->resolved_paths = {};
         this->modules = {};
     }
@@ -6374,7 +6376,7 @@ struct ImportResolver {
                 std::vector<std::string> segments = lv_split(file_rel, std::string("/"));
                 std::string module_file = ((((std::string("") + (dir)) + std::string("")) + (file_rel)) + std::string(".lv"));
                 if ((segments[INT64_C(0)] == std::string("std"))) {
-                    module_file = ((std::string("runtime/") + (file_rel)) + std::string(".lv"));
+                    module_file = ((((std::string("") + (this->runtime_dir)) + std::string("")) + (file_rel)) + std::string(".lv"));
                 }
                 if ((static_cast<int64_t>(segments.size()) > INT64_C(1))) {
                     std::string short_name = segments[(static_cast<int64_t>(segments.size()) - INT64_C(1))];
@@ -6406,6 +6408,25 @@ void cleanup(const std::string& cpp_path, const std::string& header_path, const 
         __os_exec(((std::string("rm -f ") + (header_path)) + std::string("")));
         __os_exec(((std::string("rm -rf ") + (liblavina_path)) + std::string("")));
     }
+}
+
+std::string find_runtime_dir() {
+    std::string home = __os_env(std::string("LAVINA_HOME"));
+    if ((home != std::string(""))) {
+        std::string candidate = ((std::string("") + (home)) + std::string("/runtime"));
+        if (__fs_is_dir(candidate)) {
+            return ((std::string("") + (candidate)) + std::string("/"));
+        }
+    }
+    std::string exe = __os_exe_path();
+    if ((exe != std::string(""))) {
+        std::string exe_dir = __fs_dirname(exe);
+        std::string candidate = ((std::string("") + (exe_dir)) + std::string("/../lib/lavina/runtime"));
+        if (__fs_is_dir(candidate)) {
+            return ((std::string("") + (candidate)) + std::string("/"));
+        }
+    }
+    return std::string("runtime/");
 }
 
 int main(int argc, char* argv[]) {
@@ -6442,7 +6463,8 @@ int main(int argc, char* argv[]) {
         print(std::string("Usage: bootstrap [--emit-cpp | compile] [--no-check] <file.lv>"));
         return INT64_C(1);
     }
-    auto resolver = ImportResolver();
+    std::string runtime_dir = find_runtime_dir();
+    auto resolver = ImportResolver(runtime_dir);
     std::string source = resolver.resolve(path);
     std::vector<std::string> mod_short_names = {};
     std::vector<std::string> mod_full_names = {};
@@ -6555,13 +6577,13 @@ int main(int argc, char* argv[]) {
     std::string liblavina_path = ((std::string("") + (dir)) + std::string("liblavina"));
     if ((!__fs_exists(header_path))) {
         try {
-            std::string header_content = __fs_read(std::string("runtime/lavina.h"));
+            std::string header_content = __fs_read(((std::string("") + (runtime_dir)) + std::string("lavina.h")));
             __fs_write(header_path, header_content);
-            __os_exec(((std::string("cp -r runtime/liblavina ") + (liblavina_path)) + std::string("")));
+            __os_exec(((((std::string("cp -r ") + (runtime_dir)) + std::string("liblavina ")) + (liblavina_path)) + std::string("")));
             wrote_header = true;
         }
          catch (const std::exception& e) {
-            print(std::string("Warning: could not find runtime/lavina.h"));
+            print(((std::string("Warning: could not find ") + (runtime_dir)) + std::string("lavina.h")));
         }
     }
     std::string compile_cmd = ((((std::string("g++ -std=c++23 -o ") + (bin_path)) + std::string(" ")) + (cpp_path)) + std::string(""));

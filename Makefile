@@ -7,7 +7,7 @@ LATEST_STAGE = stages/stage-latest.cpp
 bootstrap: $(BOOTSTRAP_SRC)
 	@echo "Bootstrapping from $(LATEST_STAGE)"
 	cp runtime/lavina.h /tmp/lavina.h
-	cp -r runtime/liblavina /tmp/liblavina
+	rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_prev $(LATEST_STAGE)
 	/tmp/lavina_prev --emit-cpp src/main.lv > /tmp/lavina_next.cpp
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
@@ -30,7 +30,7 @@ snapshot: bootstrap
 evolve: $(BOOTSTRAP_SRC)
 	@echo "Bootstrapping from $(LATEST_STAGE)"
 	cp runtime/lavina.h /tmp/lavina.h
-	cp -r runtime/liblavina /tmp/liblavina
+	rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_prev $(LATEST_STAGE)
 	/tmp/lavina_prev --emit-cpp src/main.lv > /tmp/lavina_next.cpp
 	g++ -std=c++23 -I/tmp -o /tmp/lavina_next /tmp/lavina_next.cpp
@@ -86,7 +86,7 @@ build:
 	@echo "Building from $(LATEST_STAGE)"
 	@mkdir -p build
 	cp runtime/lavina.h /tmp/lavina.h
-	cp -r runtime/liblavina /tmp/liblavina
+	rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
 	g++ -std=c++23 -O2 -I/tmp -o build/lavina $(LATEST_STAGE)
 	@echo "Built build/lavina"
 
@@ -96,21 +96,34 @@ lvpkg:
 	@if [ ! -f /tmp/lavina_next ]; then echo "Run 'make bootstrap' first"; exit 1; fi
 	@mkdir -p build
 	cp runtime/lavina.h /tmp/lavina.h
-	cp -r runtime/liblavina /tmp/liblavina
+	rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
 	/tmp/lavina_next --emit-cpp lvpkg/lvpkg.lv > /tmp/lvpkg.cpp
 	g++ -std=c++23 -O2 -I/tmp -o build/lvpkg /tmp/lvpkg.cpp
 	@echo "Built build/lvpkg"
 
 # ── Install ──────────────────────────────────────────────────
 
+PREFIX ?= /usr/local
+
 install: build lvpkg
-	cp build/lavina /usr/local/bin/lavina
-	cp build/lvpkg /usr/local/bin/lvpkg
-	@echo "Installed lavina and lvpkg to /usr/local/bin/"
+	mkdir -p $(PREFIX)/bin
+	cp build/lavina $(PREFIX)/bin/lavina
+	cp build/lvpkg $(PREFIX)/bin/lvpkg
+	mkdir -p $(PREFIX)/lib/lavina/runtime/liblavina
+	mkdir -p $(PREFIX)/lib/lavina/runtime/std
+	cp runtime/lavina.h $(PREFIX)/lib/lavina/runtime/
+	cp runtime/liblavina/*.h $(PREFIX)/lib/lavina/runtime/liblavina/
+	cp runtime/std/*.lv $(PREFIX)/lib/lavina/runtime/std/
+	@echo "Installed lavina to $(PREFIX)/"
+
+uninstall:
+	rm -f $(PREFIX)/bin/lavina $(PREFIX)/bin/lvpkg
+	rm -rf $(PREFIX)/lib/lavina
+	@echo "Uninstalled lavina from $(PREFIX)/"
 
 clean:
 	rm -f /tmp/lavina_prev /tmp/lavina_next /tmp/lavina_next.cpp /tmp/lavina_verify.cpp
 	rm -f /tmp/lavina.h
 	rm -rf /tmp/liblavina
 
-.PHONY: bootstrap snapshot evolve clean test build lvpkg install
+.PHONY: bootstrap snapshot evolve clean test build lvpkg install uninstall

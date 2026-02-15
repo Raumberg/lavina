@@ -20,3 +20,6 @@ public void fn sleep(int ms):
 
 public string fn cwd():
     return __os_cwd()
+
+public string fn exe_path():
+    return __os_exe_path()

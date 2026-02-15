@@ -41,8 +41,13 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p dist
-          tar czf dist/lavina-${{ matrix.suffix }}.tar.gz -C build lavina lvpkg
+          mkdir -p dist/staging/bin dist/staging/lib/lavina/runtime
+          cp build/lavina dist/staging/bin/
+          cp build/lvpkg dist/staging/bin/
+          cp -r runtime/lavina.h dist/staging/lib/lavina/runtime/
+          cp -r runtime/liblavina dist/staging/lib/lavina/runtime/
+          cp -r runtime/std dist/staging/lib/lavina/runtime/
+          tar czf dist/lavina-${{ matrix.suffix }}.tar.gz -C dist/staging .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -75,8 +80,13 @@ jobs:
 
       - name: Package
         run: |
-          mkdir -p dist
-          cd build && zip ../dist/lavina-windows-x86_64.zip lavina.exe lvpkg.exe
+          mkdir -p dist/staging/bin dist/staging/lib/lavina/runtime
+          cp build/lavina.exe dist/staging/bin/
+          cp build/lvpkg.exe dist/staging/bin/
+          cp -r runtime/lavina.h dist/staging/lib/lavina/runtime/
+          cp -r runtime/liblavina dist/staging/lib/lavina/runtime/
+          cp -r runtime/std dist/staging/lib/lavina/runtime/
+          cd dist/staging && zip -r ../lavina-windows-x86_64.zip .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
