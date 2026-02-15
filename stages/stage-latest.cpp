@@ -969,24 +969,6 @@ struct Scanner {
 
 };
 
-void test_scanner() {
-    auto test_source = std::string("int fn add(int a, int b):\n    return a + b\n\nprint(add(2, 3))\n");
-    auto scanner = Scanner(test_source);
-    scanner.scan_tokens();
-    print((std::string("Tokens: ") + static_cast<int64_t>(scanner.tokens.size())));
-    if ((static_cast<int64_t>(scanner.errors.size()) > INT64_C(0))) {
-        print(std::string("ERRORS:"));
-        for (const auto& err : scanner.errors) {
-            print(err);
-        }
-    }
-    else {
-        for (auto tok : scanner.tokens) {
-            print(tok.to_string());
-        }
-    }
-}
-
 struct TypeNode;
 struct TypeNode {
     struct None {};
@@ -2483,13 +2465,13 @@ struct CppCodegen {
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
-                this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("// TODO: unsupported namespace\n")));
+                /* pass */
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Import>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Import>(_match_23._data);
                 auto& path = _v.path;
                 auto& alias = _v.alias;
-                this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("// TODO: unsupported import\n")));
+                /* pass */
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Break>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Break>(_match_23._data);
@@ -4301,7 +4283,6 @@ struct Checker {
         for (const auto& name : builtins) {
             this->known_funcs[name] = ExternFn(name, name, TypeNode::make_Auto(), empty_params);
         }
-        /* pass */
     }
 
     void check(const std::vector<Stmt>& stmts) {
@@ -6331,54 +6312,6 @@ struct Parser {
     }
 
 };
-
-void test_parser() {
-    auto parser_test_source = std::string("1 + 2 * 3\n");
-    auto parser_test_scanner = Scanner(parser_test_source);
-    parser_test_scanner.scan_tokens();
-    auto parser = Parser(parser_test_scanner.tokens);
-    std::vector<Stmt> stmts = parser.parse_program();
-    print((std::string("Parsed statements: ") + static_cast<int64_t>(stmts.size())));
-    for (const auto& stmt : stmts) {
-        {
-            const auto& _match_98 = stmt;
-            if (std::holds_alternative<std::decay_t<decltype(_match_98)>::ExprStmt>(_match_98._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_98)>::ExprStmt>(_match_98._data);
-                auto& expr = _v.expr;
-                {
-                    const auto& _match_99 = expr;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_99)>::Binary>(_match_99._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_99)>::Binary>(_match_99._data);
-                        auto& left = *_v.left;
-                        auto& op = _v.op;
-                        auto& right = *_v.right;
-                        print((std::string("Binary: ") + op.lexeme));
-                        {
-                            const auto& _match_100 = right;
-                            if (std::holds_alternative<std::decay_t<decltype(_match_100)>::Binary>(_match_100._data)) {
-                                auto& _v = std::get<std::decay_t<decltype(_match_100)>::Binary>(_match_100._data);
-                                auto& rl = *_v.left;
-                                auto& rop = _v.op;
-                                auto& rr = *_v.right;
-                                print((std::string("  Right is Binary: ") + rop.lexeme));
-                                print(std::string("OK: precedence correct (1 + (2 * 3))"));
-                            }
-                            else {
-                                /* pass */
-                            }
-                        }
-                    }
-                    else {
-                        /* pass */
-                    }
-                }
-            }
-            else {
-                /* pass */
-            }
-        }
-    }
-}
 
 struct ModuleInfo {
     std::string short_name;

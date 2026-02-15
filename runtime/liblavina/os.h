@@ -40,7 +40,7 @@ inline std::string __os_cwd() {
     return std::filesystem::current_path().string();
 }
 
-// Bootstrap compat aliases
+// Legacy aliases (used by test_stdlib.lv; prefer __-prefixed or std::os module)
 inline auto os_args = __os_args;
 inline auto os_exec = __os_exec;
 inline auto os_env = __os_env;

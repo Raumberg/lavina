@@ -434,7 +434,6 @@ class Checker:
         vector[Param] empty_params = []
         for ref name in builtins:
             this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params)
-        pass
 
     void fn check(ref vector[Stmt] stmts):
         this.register_builtins()

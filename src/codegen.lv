@@ -669,9 +669,11 @@ class CppCodegen:
             Match(expr, arm_patterns, arm_bodies):
                 this.emit_match_impl(expr, arm_patterns, arm_bodies, m)
             Namespace(name, body, visibility):
-                this.output +="${this.indent()}// TODO: unsupported namespace\n"
+                // Namespaces are handled via module system in main.lv
+                pass
             Import(path, alias):
-                this.output +="${this.indent()}// TODO: unsupported import\n"
+                // Imports are resolved by ImportResolver in main.lv
+                pass
             Break(keyword):
                 this.output +="${this.indent()}break;\n"
             Continue(keyword):

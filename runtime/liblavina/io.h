@@ -88,7 +88,7 @@ inline int64_t __fs_size(const std::string& path) {
     return static_cast<int64_t>(std::filesystem::file_size(path));
 }
 
-// Bootstrap compat aliases
+// Legacy aliases (used by test_stdlib.lv; prefer __-prefixed or std::fs module)
 inline auto fs_read = __fs_read;
 inline auto fs_write = __fs_write;
 inline auto fs_exists = __fs_exists;

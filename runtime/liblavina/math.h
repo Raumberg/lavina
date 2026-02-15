@@ -47,7 +47,7 @@ inline double __lv_random_float() {
     return dist(rng);
 }
 
-// Bootstrap compat aliases
+// Legacy aliases (used by test_stdlib.lv; prefer __-prefixed or std::math module)
 inline auto lv_abs = __lv_abs;
 inline auto lv_fabs = __lv_fabs;
 inline auto lv_min = __lv_min;

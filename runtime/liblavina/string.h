@@ -107,7 +107,7 @@ inline int64_t __lv_count(const std::string& s, const std::string& sub) {
     return count;
 }
 
-// Bootstrap compat aliases
+// Legacy aliases (used by test_stdlib.lv; prefer __-prefixed or std:: modules)
 inline auto str_to_int = __str_to_int;
 inline auto str_to_float = __str_to_float;
 inline auto int_to_str = __int_to_str;

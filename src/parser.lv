@@ -140,6 +140,8 @@ class Parser:
                 return try_pos + 1
         return pos + 1
 
+    // Note: checks for comptime at offset 0 because this is also called from
+    // enum_declaration() where comptime hasn't been consumed yet by declaration()
     bool fn is_function_start():
         int offset = 0
         if this.peek_at(offset).token_type == TK_COMPTIME or this.peek_at(offset).token_type == TK_COMPTIME_STRICT:
@@ -1049,34 +1051,3 @@ class Parser:
             else:
                 statements.push(this.declaration())
         return statements
-
-
-// ═══════════════════════════════════════════════════════════════
-//  Test: parse a simple expression
-// ═══════════════════════════════════════════════════════════════
-
-void fn test_parser():
-    auto parser_test_source = "1 + 2 * 3\n"
-    auto parser_test_scanner = Scanner(parser_test_source)
-    parser_test_scanner.scan_tokens()
-
-    auto parser = Parser(parser_test_scanner.tokens)
-    vector[Stmt] stmts = parser.parse_program()
-
-    print("Parsed statements: " + stmts.len())
-    for ref stmt in stmts:
-        match stmt:
-            ExprStmt(expr):
-                match expr:
-                    Binary(left, op, right):
-                        print("Binary: " + op.lexeme)
-                        match right:
-                            Binary(rl, rop, rr):
-                                print("  Right is Binary: " + rop.lexeme)
-                                print("OK: precedence correct (1 + (2 * 3))")
-                            _:
-                                pass
-                    _:
-                        pass
-            _:
-                pass
