@@ -1,0 +1,5 @@
+// Negative test: assigning vector[int] to vector[string] should fail
+
+void fn main():
+    vector[int] nums = [1, 2, 3]
+    vector[string] strs = nums

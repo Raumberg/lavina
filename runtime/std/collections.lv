@@ -1,0 +1,48 @@
+// std::collections — higher-order functions, utilities, and set operations
+
+// Higher-order functions
+
+public auto fn map(auto v, auto f):
+    return __lv_col_map(v, f)
+
+public auto fn filter(auto v, auto f):
+    return __lv_col_filter(v, f)
+
+public auto fn reduce(auto v, auto f, auto init):
+    return __lv_col_reduce(v, f, init)
+
+public void fn for_each(auto v, auto f):
+    __lv_col_for_each(v, f)
+
+// Utilities
+
+public auto fn zip(auto a, auto b):
+    return __lv_col_zip(a, b)
+
+public auto fn take(auto v, int n):
+    return __lv_col_take(v, n)
+
+public auto fn drop(auto v, int n):
+    return __lv_col_drop(v, n)
+
+public auto fn enumerate(auto v):
+    return __lv_col_enumerate(v)
+
+// Generators
+
+public vector[int] fn range(int start, int end):
+    return __lv_col_range(start, end)
+
+public vector[int] fn range_step(int start, int end, int step):
+    return __lv_col_range_step(start, end, step)
+
+// Set operations
+
+public auto fn set_union(auto a, auto b):
+    return __lv_col_set_union(a, b)
+
+public auto fn set_intersection(auto a, auto b):
+    return __lv_col_set_intersection(a, b)
+
+public auto fn set_difference(auto a, auto b):
+    return __lv_col_set_difference(a, b)

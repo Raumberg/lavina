@@ -1,0 +1,141 @@
+import std::collections
+
+void fn main():
+    // --- map ---
+    vector[int] nums = [1, 2, 3, 4, 5]
+    auto doubled = collections::map(nums, (int x) => x * 2)
+    lv_assert(len(doubled) == 5, "map length")
+    lv_assert(doubled[0] == 2, "map [0]")
+    lv_assert(doubled[4] == 10, "map [4]")
+
+    // map with type transform
+    auto strs = collections::map(nums, (int x) => to_string(x))
+    lv_assert(strs[0] == "1", "map to_string [0]")
+    lv_assert(strs[2] == "3", "map to_string [2]")
+
+    // map empty vector
+    vector[int] empty = []
+    auto mapped_empty = collections::map(empty, (int x) => x * 2)
+    lv_assert(len(mapped_empty) == 0, "map empty")
+
+    // --- filter ---
+    auto evens = collections::filter(nums, (int x) => x % 2 == 0)
+    lv_assert(len(evens) == 2, "filter length")
+    lv_assert(evens[0] == 2, "filter [0]")
+    lv_assert(evens[1] == 4, "filter [1]")
+
+    // filter none match
+    auto none = collections::filter(nums, (int x) => x > 100)
+    lv_assert(len(none) == 0, "filter none match")
+
+    // --- reduce ---
+    int sum = collections::reduce(nums, (int acc, int x) => acc + x, 0)
+    lv_assert(sum == 15, "reduce sum")
+
+    int product = collections::reduce(nums, (int acc, int x) => acc * x, 1)
+    lv_assert(product == 120, "reduce product")
+
+    // --- for_each ---
+    int total = 0
+    collections::for_each(nums, (int x):
+        total += x
+    )
+    lv_assert(total == 15, "for_each sum")
+
+    // --- zip ---
+    vector[string] names = ["a", "b", "c"]
+    vector[int] vals = [1, 2, 3]
+    auto zipped = collections::zip(names, vals)
+    lv_assert(len(zipped) == 3, "zip length")
+    lv_assert(zipped[0].first == "a", "zip [0].first")
+    lv_assert(zipped[0].second == 1, "zip [0].second")
+    lv_assert(zipped[2].first == "c", "zip [2].first")
+
+    // zip different lengths — truncates to shorter
+    vector[int] short_v = [10, 20]
+    auto zipped2 = collections::zip(nums, short_v)
+    lv_assert(len(zipped2) == 2, "zip truncate length")
+    lv_assert(zipped2[1].first == 2, "zip truncate [1].first")
+
+    // --- take ---
+    auto first3 = collections::take(nums, 3)
+    lv_assert(len(first3) == 3, "take length")
+    lv_assert(first3[0] == 1, "take [0]")
+    lv_assert(first3[2] == 3, "take [2]")
+
+    // take overflow
+    auto take_all = collections::take(nums, 100)
+    lv_assert(len(take_all) == 5, "take overflow")
+
+    // --- drop ---
+    auto last2 = collections::drop(nums, 3)
+    lv_assert(len(last2) == 2, "drop length")
+    lv_assert(last2[0] == 4, "drop [0]")
+    lv_assert(last2[1] == 5, "drop [1]")
+
+    // drop overflow
+    auto drop_all = collections::drop(nums, 100)
+    lv_assert(len(drop_all) == 0, "drop overflow")
+
+    // --- enumerate ---
+    vector[string] words = ["hello", "world"]
+    auto indexed = collections::enumerate(words)
+    lv_assert(len(indexed) == 2, "enumerate length")
+    lv_assert(indexed[0].first == 0, "enumerate [0].first")
+    lv_assert(indexed[0].second == "hello", "enumerate [0].second")
+    lv_assert(indexed[1].first == 1, "enumerate [1].first")
+
+    // --- range ---
+    auto r = collections::range(0, 5)
+    lv_assert(len(r) == 5, "range length")
+    lv_assert(r[0] == 0, "range [0]")
+    lv_assert(r[4] == 4, "range [4]")
+
+    // range empty
+    auto r_empty = collections::range(5, 5)
+    lv_assert(len(r_empty) == 0, "range empty")
+
+    // --- range_step ---
+    auto r_step = collections::range_step(0, 10, 3)
+    lv_assert(len(r_step) == 4, "range_step length")
+    lv_assert(r_step[0] == 0, "range_step [0]")
+    lv_assert(r_step[1] == 3, "range_step [1]")
+    lv_assert(r_step[3] == 9, "range_step [3]")
+
+    // range_step negative
+    auto r_neg = collections::range_step(10, 0, -2)
+    lv_assert(len(r_neg) == 5, "range_step neg length")
+    lv_assert(r_neg[0] == 10, "range_step neg [0]")
+    lv_assert(r_neg[4] == 2, "range_step neg [4]")
+
+    // --- set operations ---
+    hashset[int] sa = []
+    sa.add(1)
+    sa.add(2)
+    sa.add(3)
+
+    hashset[int] sb = []
+    sb.add(2)
+    sb.add(3)
+    sb.add(4)
+
+    auto u = collections::set_union(sa, sb)
+    lv_assert(u.len() == 4, "set_union size")
+    lv_assert(u.contains(1), "set_union contains 1")
+    lv_assert(u.contains(4), "set_union contains 4")
+
+    auto inter = collections::set_intersection(sa, sb)
+    lv_assert(inter.len() == 2, "set_intersection size")
+    lv_assert(inter.contains(2), "set_intersection contains 2")
+    lv_assert(inter.contains(3), "set_intersection contains 3")
+    lv_assert(!inter.contains(1), "set_intersection not 1")
+
+    auto diff = collections::set_difference(sa, sb)
+    lv_assert(diff.len() == 1, "set_difference size")
+    lv_assert(diff.contains(1), "set_difference contains 1")
+    lv_assert(!diff.contains(2), "set_difference not 2")
+
+    // --- chaining: map -> filter -> reduce ---
+    auto result = collections::reduce(collections::filter(collections::map(nums, (int x) => x * x), (int x) => x > 5), (int acc, int x) => acc + x, 0)
+    // nums = [1,2,3,4,5] -> map(x*x) = [1,4,9,16,25] -> filter(>5) = [9,16,25] -> reduce(+) = 50
+    lv_assert(result == 50, "chained map->filter->reduce")
