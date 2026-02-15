@@ -1,0 +1,22 @@
+// std::os — operating system interaction
+
+public vector[string] fn args():
+    return __os_args()
+
+public string fn env(string name):
+    return __os_env(name)
+
+public int fn exec(string cmd):
+    return __os_exec(cmd)
+
+public void fn exit(int code):
+    __lv_exit(code)
+
+public int fn time_ms():
+    return __os_clock()
+
+public void fn sleep(int ms):
+    __os_sleep(ms)
+
+public string fn cwd():
+    return __os_cwd()

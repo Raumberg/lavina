@@ -3701,6 +3701,9 @@ struct Checker {
         if ((this->known_enums.count(name) > 0)) {
             return true;
         }
+        if (name.starts_with(std::string("__"))) {
+            return true;
+        }
         int64_t angle = lv_index_of(name, std::string("<"));
         if ((angle >= INT64_C(0))) {
             std::string base = name.substr(INT64_C(0), (angle) - (INT64_C(0)));
@@ -4285,7 +4288,7 @@ struct Checker {
     }
 
     void register_builtins() {
-        std::vector<std::string> builtins = std::vector{std::string("print"), std::string("println"), std::string("lv_assert"), std::string("fs_read"), std::string("fs_write"), std::string("fs_exists"), std::string("fs_append"), std::string("fs_read_lines"), std::string("fs_remove"), std::string("fs_is_dir"), std::string("fs_listdir"), std::string("fs_mkdir"), std::string("fs_copy"), std::string("fs_rename"), std::string("fs_absolute"), std::string("fs_basename"), std::string("fs_dirname"), std::string("fs_size"), std::string("os_exec"), std::string("os_args"), std::string("os_env"), std::string("os_clock"), std::string("os_sleep"), std::string("os_cwd"), std::string("to_string"), std::string("to_int"), std::string("to_float"), std::string("input"), std::string("typeof"), std::string("len"), std::string("exit"), std::string("abs"), std::string("str_to_int"), std::string("str_to_float"), std::string("int_to_str"), std::string("float_to_str"), std::string("lv_abs"), std::string("lv_fabs"), std::string("lv_min"), std::string("lv_max"), std::string("lv_fmin"), std::string("lv_fmax"), std::string("lv_clamp"), std::string("lv_fclamp"), std::string("lv_floor"), std::string("lv_ceil"), std::string("lv_round"), std::string("lv_sqrt"), std::string("lv_pow"), std::string("lv_log"), std::string("lv_log2"), std::string("lv_sin"), std::string("lv_cos"), std::string("lv_random"), std::string("lv_random_float"), std::string("lv_count")};
+        std::vector<std::string> builtins = std::vector{std::string("print"), std::string("println"), std::string("lv_assert"), std::string("to_string"), std::string("to_int"), std::string("to_float"), std::string("input"), std::string("typeof"), std::string("len"), std::string("exit"), std::string("abs"), std::string("cast")};
         std::vector<Param> empty_params = {};
         for (const auto& name : builtins) {
             this->known_funcs[name] = ExternFn(name, name, TypeNode::make_Auto(), empty_params);
@@ -6406,7 +6409,7 @@ struct ImportResolver {
             return std::string("");
         }
         this->resolved_paths.push_back(file_path);
-        std::string source = fs_read(file_path);
+        std::string source = __fs_read(file_path);
         std::string dir = (*this).get_directory(file_path);
         std::string result = std::string("");
         std::vector<std::string> lines = lv_split(source, std::string("\n"));
@@ -6452,16 +6455,16 @@ struct ImportResolver {
 };
 
 void cleanup(const std::string& cpp_path, const std::string& header_path, const std::string& liblavina_path, bool wrote_header) {
-    os_exec(((std::string("rm -f ") + (cpp_path)) + std::string("")));
+    __os_exec(((std::string("rm -f ") + (cpp_path)) + std::string("")));
     if (wrote_header) {
-        os_exec(((std::string("rm -f ") + (header_path)) + std::string("")));
-        os_exec(((std::string("rm -rf ") + (liblavina_path)) + std::string("")));
+        __os_exec(((std::string("rm -f ") + (header_path)) + std::string("")));
+        __os_exec(((std::string("rm -rf ") + (liblavina_path)) + std::string("")));
     }
 }
 
 int main(int argc, char* argv[]) {
     for (int i = 0; i < argc; i++) _lv_args.push_back(argv[i]);
-    auto args = os_args();
+    auto args = __os_args();
     if ((static_cast<int64_t>(args.size()) < INT64_C(2))) {
         print(std::string("Usage: bootstrap [--emit-cpp | compile] <file.lv>"));
         return INT64_C(1);
@@ -6601,14 +6604,14 @@ int main(int argc, char* argv[]) {
     std::string cpp_path = ((((std::string("") + (dir)) + std::string("")) + (base)) + std::string(".cpp"));
     std::string bin_path = ((((std::string("") + (dir)) + std::string("")) + (base)) + std::string(""));
     std::string header_path = ((std::string("") + (dir)) + std::string("lavina.h"));
-    fs_write(cpp_path, cpp);
+    __fs_write(cpp_path, cpp);
     bool wrote_header = false;
     std::string liblavina_path = ((std::string("") + (dir)) + std::string("liblavina"));
-    if ((!fs_exists(header_path))) {
+    if ((!__fs_exists(header_path))) {
         try {
-            std::string header_content = fs_read(std::string("runtime/lavina.h"));
-            fs_write(header_path, header_content);
-            os_exec(((std::string("cp -r runtime/liblavina ") + (liblavina_path)) + std::string("")));
+            std::string header_content = __fs_read(std::string("runtime/lavina.h"));
+            __fs_write(header_path, header_content);
+            __os_exec(((std::string("cp -r runtime/liblavina ") + (liblavina_path)) + std::string("")));
             wrote_header = true;
         }
          catch (const std::exception& e) {
@@ -6619,7 +6622,7 @@ int main(int argc, char* argv[]) {
     for (const auto& ip : import_paths) {
         compile_cmd = (compile_cmd + ((std::string(" -I") + (ip)) + std::string("")));
     }
-    if (fs_exists(std::string("deps/include"))) {
+    if (__fs_exists(std::string("deps/include"))) {
         bool has_deps = false;
         for (const auto& ip : import_paths) {
             if ((ip == std::string("deps/include"))) {
@@ -6630,7 +6633,7 @@ int main(int argc, char* argv[]) {
             compile_cmd = (compile_cmd + std::string(" -Ideps/include"));
         }
     }
-    if (fs_exists(std::string("deps/lib"))) {
+    if (__fs_exists(std::string("deps/lib"))) {
         compile_cmd = (compile_cmd + std::string(" -Ldeps/lib"));
     }
     for (const auto& ll : link_libs) {
@@ -6641,7 +6644,7 @@ int main(int argc, char* argv[]) {
             compile_cmd = (compile_cmd + ((std::string(" -l") + (ll)) + std::string("")));
         }
     }
-    int64_t compile_result = os_exec(compile_cmd);
+    int64_t compile_result = __os_exec(compile_cmd);
     if ((compile_result != INT64_C(0))) {
         print(std::string("Compilation failed"));
         cleanup(cpp_path, header_path, liblavina_path, wrote_header);
@@ -6652,9 +6655,9 @@ int main(int argc, char* argv[]) {
         print(((std::string("Compiled: ") + (bin_path)) + std::string("")));
         return INT64_C(0);
     }
-    int64_t run_result = os_exec(bin_path);
+    int64_t run_result = __os_exec(bin_path);
     cleanup(cpp_path, header_path, liblavina_path, wrote_header);
-    os_exec(((std::string("rm -f ") + (bin_path)) + std::string("")));
+    __os_exec(((std::string("rm -f ") + (bin_path)) + std::string("")));
     if ((run_result != INT64_C(0))) {
         return INT64_C(1);
     }

@@ -1,13 +1,13 @@
 void fn main():
     // ── String conversions ──────────────────────────────
-    lv_assert(str_to_int("42") == 42, "str_to_int")
-    lv_assert(str_to_int("-7") == -7, "str_to_int negative")
-    lv_assert(str_to_float("3.14") > 3.13, "str_to_float")
-    lv_assert(int_to_str(123) == "123", "int_to_str")
+    lv_assert(__str_to_int("42") == 42, "str_to_int")
+    lv_assert(__str_to_int("-7") == -7, "str_to_int negative")
+    lv_assert(__str_to_float("3.14") > 3.13, "str_to_float")
+    lv_assert(__int_to_str(123) == "123", "int_to_str")
 
     // ── String utilities ────────────────────────────────
     string s = "hello world hello"
-    lv_assert(lv_count(s, "hello") == 2, "string count")
+    lv_assert(__lv_count(s, "hello") == 2, "string count")
     lv_assert("abc".repeat(3) == "abcabcabc", "string repeat")
     lv_assert("42".pad_left(5, "0") == "00042", "pad_left")
     lv_assert("hi".pad_right(5) == "hi   ", "pad_right")
@@ -16,19 +16,19 @@ void fn main():
     lv_assert(s.indexOf("hello", 1) == 12, "indexOf with offset")
 
     // ── Math ────────────────────────────────────────────
-    lv_assert(lv_abs(-5) == 5, "abs")
-    lv_assert(lv_min(3, 7) == 3, "min")
-    lv_assert(lv_max(3, 7) == 7, "max")
-    lv_assert(lv_clamp(10, 0, 5) == 5, "clamp high")
-    lv_assert(lv_clamp(-1, 0, 5) == 0, "clamp low")
-    lv_assert(lv_sqrt(16.0) == 4.0, "sqrt")
-    lv_assert(lv_pow(2.0, 10.0) == 1024.0, "pow")
-    lv_assert(lv_floor(3.7) == 3.0, "floor")
-    lv_assert(lv_ceil(3.2) == 4.0, "ceil")
-    lv_assert(lv_round(3.5) == 4.0, "round")
+    lv_assert(__lv_abs(-5) == 5, "abs")
+    lv_assert(__lv_min(3, 7) == 3, "min")
+    lv_assert(__lv_max(3, 7) == 7, "max")
+    lv_assert(__lv_clamp(10, 0, 5) == 5, "clamp high")
+    lv_assert(__lv_clamp(-1, 0, 5) == 0, "clamp low")
+    lv_assert(__lv_sqrt(16.0) == 4.0, "sqrt")
+    lv_assert(__lv_pow(2.0, 10.0) == 1024.0, "pow")
+    lv_assert(__lv_floor(3.7) == 3.0, "floor")
+    lv_assert(__lv_ceil(3.2) == 4.0, "ceil")
+    lv_assert(__lv_round(3.5) == 4.0, "round")
 
     // Random (just verify it doesn't crash and is in range)
-    int r = lv_random(1, 100)
+    int r = __lv_random(1, 100)
     lv_assert(r >= 1 and r <= 100, "random range")
 
     // ── Vector utilities ────────────────────────────────
@@ -51,25 +51,25 @@ void fn main():
     lv_assert(flat.len() == 5 and flat[0] == 1 and flat[4] == 5, "flatten")
 
     // ── File I/O ────────────────────────────────────────
-    fs_write("/tmp/lv_test_stdlib.txt", "line1\nline2\nline3")
-    auto lines = fs_read_lines("/tmp/lv_test_stdlib.txt")
+    __fs_write("/tmp/lv_test_stdlib.txt", "line1\nline2\nline3")
+    auto lines = __fs_read_lines("/tmp/lv_test_stdlib.txt")
     lv_assert(lines.len() == 3, "fs_read_lines count")
     lv_assert(lines[0] == "line1", "fs_read_lines first")
 
-    fs_append("/tmp/lv_test_stdlib.txt", "\nline4")
-    auto lines2 = fs_read_lines("/tmp/lv_test_stdlib.txt")
+    __fs_append("/tmp/lv_test_stdlib.txt", "\nline4")
+    auto lines2 = __fs_read_lines("/tmp/lv_test_stdlib.txt")
     lv_assert(lines2.len() == 4, "fs_append")
 
-    fs_remove("/tmp/lv_test_stdlib.txt")
-    lv_assert(not fs_exists("/tmp/lv_test_stdlib.txt"), "fs_remove")
+    __fs_remove("/tmp/lv_test_stdlib.txt")
+    lv_assert(not __fs_exists("/tmp/lv_test_stdlib.txt"), "fs_remove")
 
     // ── OS utilities ────────────────────────────────────
-    int t1 = os_clock()
-    os_sleep(10)
-    int t2 = os_clock()
+    int t1 = __os_clock()
+    __os_sleep(10)
+    int t2 = __os_clock()
     lv_assert(t2 >= t1 + 10, "os_clock + os_sleep")
 
-    string cwd = os_cwd()
+    string cwd = __os_cwd()
     lv_assert(cwd.len() > 0, "os_cwd")
 
     print("test_stdlib: ALL PASSED")

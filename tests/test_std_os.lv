@@ -1,0 +1,38 @@
+import std::os
+
+void fn test_args():
+    vector[string] a = os::args()
+    lv_assert(a.len() >= 1, "args should have at least 1 element")
+    print("PASS: args, count = " + a.len())
+
+void fn test_env():
+    string home = os::env("HOME")
+    lv_assert(home.len() > 0, "HOME should not be empty")
+    string empty = os::env("LV_NONEXISTENT_VAR_XYZ")
+    lv_assert(empty == "", "nonexistent env should be empty")
+    print("PASS: env, HOME = " + home)
+
+void fn test_exec():
+    int result = os::exec("echo hello > /dev/null")
+    lv_assert(result == 0, "exec echo failed")
+    print("PASS: exec")
+
+void fn test_cwd():
+    string dir = os::cwd()
+    lv_assert(dir.len() > 0, "cwd should not be empty")
+    print("PASS: cwd = " + dir)
+
+void fn test_clock_and_sleep():
+    int t1 = os::time_ms()
+    os::sleep(20)
+    int t2 = os::time_ms()
+    lv_assert(t2 >= t1 + 10, "clock/sleep failed")
+    print("PASS: clock/sleep, delta = " + (t2 - t1) + "ms")
+
+void fn main():
+    test_args()
+    test_env()
+    test_exec()
+    test_cwd()
+    test_clock_and_sleep()
+    print("All std::os tests passed!")
