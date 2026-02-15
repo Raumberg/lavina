@@ -2,26 +2,26 @@
 
 // Create a directory (and parents) if it doesn't exist
 void fn ensure_dir(string path):
-    if not fs_is_dir(path):
+    if not __fs_is_dir(path):
         cpp {
             std::filesystem::create_directories(path);
         }
 
 // Copy a single file from src to dst
 void fn copy_file(string src, string dst):
-    auto content = fs_read(src)
-    fs_write(dst, content)
+    auto content = __fs_read(src)
+    __fs_write(dst, content)
 
 // Recursively copy a directory, skipping hidden files
 void fn copy_dir_recursive(string src, string dst):
     ensure_dir(dst)
-    auto entries = fs_listdir(src)
+    auto entries = __fs_listdir(src)
     for ref name in entries:
         if starts_with(name, "."):
             continue
         string src_path = "${src}/${name}"
         string dst_path = "${dst}/${name}"
-        if fs_is_dir(src_path):
+        if __fs_is_dir(src_path):
             copy_dir_recursive(src_path, dst_path)
         else:
             copy_file(src_path, dst_path)
