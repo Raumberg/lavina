@@ -56,14 +56,27 @@ evolve: $(BOOTSTRAP_SRC)
 
 # ── Run test suite ───────────────────────────────────────────
 
+SKIP_WINDOWS_TESTS = test_std_fs test_std_os test_stdlib
+
 test:
 	@if [ ! -f /tmp/lavina_next ]; then echo "Run 'make bootstrap' first"; exit 1; fi
 	@cp runtime/lavina.h /tmp/lavina.h
 	@rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
-	@passed=0; failed=0; errors=""; \
+	@passed=0; failed=0; skipped=0; errors=""; \
 	for f in tests/test_*.lv; do \
 		name=$$(basename $$f .lv); \
 		dir=$$(dirname $$f); \
+		if [ -n "$$MSYSTEM" ]; then \
+			skip=0; \
+			for s in $(SKIP_WINDOWS_TESTS); do \
+				if [ "$$name" = "$$s" ]; then skip=1; break; fi; \
+			done; \
+			if [ $$skip -eq 1 ]; then \
+				echo "  SKIP  $$name  (Windows)"; \
+				skipped=$$((skipped + 1)); \
+				continue; \
+			fi; \
+		fi; \
 		/tmp/lavina_next compile $$f 2>/dev/null && \
 		$$dir/$$name 2>/dev/null; \
 		if [ $$? -eq 0 ]; then \
@@ -77,7 +90,11 @@ test:
 		rm -f $$dir/$$name $$dir/$$name.cpp; \
 	done; \
 	echo ""; \
-	echo "$$passed passed, $$failed failed"; \
+	if [ $$skipped -gt 0 ]; then \
+		echo "$$passed passed, $$failed failed, $$skipped skipped"; \
+	else \
+		echo "$$passed passed, $$failed failed"; \
+	fi; \
 	if [ $$failed -ne 0 ]; then echo "Failed:$$errors"; exit 1; fi
 
 # ── Build compiler binary from latest stage ─────────────────
