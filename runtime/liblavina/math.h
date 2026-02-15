@@ -26,6 +26,15 @@ inline double __lv_log(double n) { return std::log(n); }
 inline double __lv_log2(double n) { return std::log2(n); }
 inline double __lv_sin(double n) { return std::sin(n); }
 inline double __lv_cos(double n) { return std::cos(n); }
+inline double __lv_tan(double n) { return std::tan(n); }
+inline double __lv_asin(double n) { return std::asin(n); }
+inline double __lv_acos(double n) { return std::acos(n); }
+inline double __lv_atan(double n) { return std::atan(n); }
+inline double __lv_atan2(double y, double x) { return std::atan2(y, x); }
+inline double __lv_exp(double n) { return std::exp(n); }
+inline double __lv_log10(double n) { return std::log10(n); }
+inline double __lv_pi() { return M_PI; }
+inline double __lv_e() { return M_E; }
 
 // Random number generation
 inline int64_t __lv_random(int64_t min, int64_t max) {

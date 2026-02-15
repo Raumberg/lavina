@@ -1,0 +1,75 @@
+import std::math
+
+int fn main():
+    // Constants
+    lv_assert(math::pi() > 3.14, "pi > 3.14")
+    lv_assert(math::pi() < 3.15, "pi < 3.15")
+    lv_assert(math::e() > 2.71, "e > 2.71")
+    lv_assert(math::e() < 2.72, "e < 2.72")
+
+    // abs, min, max
+    lv_assert(math::abs(-5) == 5, "abs(-5)")
+    lv_assert(math::fabs(-3.14) > 3.13, "fabs(-3.14)")
+    lv_assert(math::min(3, 7) == 3, "min(3,7)")
+    lv_assert(math::max(3, 7) == 7, "max(3,7)")
+    lv_assert(math::fmin(1.5, 2.5) < 2.0, "fmin")
+    lv_assert(math::fmax(1.5, 2.5) > 2.0, "fmax")
+
+    // clamp
+    lv_assert(math::clamp(5, 1, 10) == 5, "clamp mid")
+    lv_assert(math::clamp(-1, 1, 10) == 1, "clamp low")
+    lv_assert(math::clamp(15, 1, 10) == 10, "clamp high")
+
+    // rounding
+    lv_assert(math::floor(2.7) > 1.9, "floor(2.7)")
+    lv_assert(math::floor(2.7) < 2.1, "floor(2.7) upper")
+    lv_assert(math::ceil(2.3) > 2.9, "ceil(2.3)")
+    lv_assert(math::ceil(2.3) < 3.1, "ceil(2.3) upper")
+    lv_assert(math::round(2.5) > 1.9, "round(2.5)")
+
+    // sqrt, pow, exp
+    lv_assert(math::sqrt(16.0) > 3.9, "sqrt(16)")
+    lv_assert(math::sqrt(16.0) < 4.1, "sqrt(16) upper")
+    lv_assert(math::pow(2.0, 10.0) > 1023.0, "pow(2,10)")
+    lv_assert(math::pow(2.0, 10.0) < 1025.0, "pow(2,10) upper")
+    lv_assert(math::exp(0.0) > 0.9, "exp(0)")
+    lv_assert(math::exp(0.0) < 1.1, "exp(0) upper")
+
+    // log
+    lv_assert(math::log(1.0) > -0.1, "log(1)")
+    lv_assert(math::log(1.0) < 0.1, "log(1) upper")
+    lv_assert(math::log2(8.0) > 2.9, "log2(8)")
+    lv_assert(math::log2(8.0) < 3.1, "log2(8) upper")
+    lv_assert(math::log10(1000.0) > 2.9, "log10(1000)")
+    lv_assert(math::log10(1000.0) < 3.1, "log10(1000) upper")
+
+    // trig: sin(0)=0, cos(0)=1, tan(0)=0
+    lv_assert(math::sin(0.0) > -0.1, "sin(0)")
+    lv_assert(math::sin(0.0) < 0.1, "sin(0) upper")
+    lv_assert(math::cos(0.0) > 0.9, "cos(0)")
+    lv_assert(math::cos(0.0) < 1.1, "cos(0) upper")
+    lv_assert(math::tan(0.0) > -0.1, "tan(0)")
+    lv_assert(math::tan(0.0) < 0.1, "tan(0) upper")
+
+    // inverse trig: asin(0)=0, acos(1)=0, atan(0)=0
+    lv_assert(math::asin(0.0) > -0.1, "asin(0)")
+    lv_assert(math::asin(0.0) < 0.1, "asin(0) upper")
+    lv_assert(math::acos(1.0) > -0.1, "acos(1)")
+    lv_assert(math::acos(1.0) < 0.1, "acos(1) upper")
+    lv_assert(math::atan(0.0) > -0.1, "atan(0)")
+    lv_assert(math::atan(0.0) < 0.1, "atan(0) upper")
+
+    // atan2(1,1) = pi/4 ≈ 0.785
+    lv_assert(math::atan2(1.0, 1.0) > 0.78, "atan2(1,1)")
+    lv_assert(math::atan2(1.0, 1.0) < 0.79, "atan2(1,1) upper")
+
+    // random
+    int r = math::random(1, 100)
+    lv_assert(r >= 1, "random >= 1")
+    lv_assert(r <= 100, "random <= 100")
+    float rf = math::random_float()
+    lv_assert(rf >= 0.0, "random_float >= 0")
+    lv_assert(rf <= 1.0, "random_float <= 1")
+
+    print("All std::math tests passed!")
+    return 0

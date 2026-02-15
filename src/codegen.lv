@@ -1251,8 +1251,12 @@ class CppCodegen:
         if alias != "":
             this.output +="namespace ${alias} = ${full_name};\n"
 
-        for ref stmt in this.module_stmts[index]:
-            this.emit_using_if_public(full_name, stmt)
+        // Only emit 'using' for non-std modules
+        // std modules should be accessed via namespace (e.g. math::sin)
+        // to avoid conflicts with C standard library functions
+        if not full_name.starts_with("std_"):
+            for ref stmt in this.module_stmts[index]:
+                this.emit_using_if_public(full_name, stmt)
 
         this.output +="\n"
         this.declarations +=this.output

@@ -1,0 +1,92 @@
+// std::math — mathematical functions and constants
+
+// Constants (as functions)
+public float fn pi():
+    return __lv_pi()
+
+public float fn e():
+    return __lv_e()
+
+// Basic
+public int fn abs(int n):
+    return __lv_abs(n)
+
+public float fn fabs(float n):
+    return __lv_fabs(n)
+
+public int fn min(int a, int b):
+    return __lv_min(a, b)
+
+public int fn max(int a, int b):
+    return __lv_max(a, b)
+
+public float fn fmin(float a, float b):
+    return __lv_fmin(a, b)
+
+public float fn fmax(float a, float b):
+    return __lv_fmax(a, b)
+
+public int fn clamp(int val, int lo, int hi):
+    return __lv_clamp(val, lo, hi)
+
+public float fn fclamp(float val, float lo, float hi):
+    return __lv_fclamp(val, lo, hi)
+
+// Rounding
+public float fn floor(float n):
+    return __lv_floor(n)
+
+public float fn ceil(float n):
+    return __lv_ceil(n)
+
+public float fn round(float n):
+    return __lv_round(n)
+
+// Powers and roots
+public float fn sqrt(float n):
+    return __lv_sqrt(n)
+
+public float fn pow(float base, float exp):
+    return __lv_pow(base, exp)
+
+public float fn exp(float n):
+    return __lv_exp(n)
+
+// Logarithms
+public float fn log(float n):
+    return __lv_log(n)
+
+public float fn log2(float n):
+    return __lv_log2(n)
+
+public float fn log10(float n):
+    return __lv_log10(n)
+
+// Trigonometry
+public float fn sin(float n):
+    return __lv_sin(n)
+
+public float fn cos(float n):
+    return __lv_cos(n)
+
+public float fn tan(float n):
+    return __lv_tan(n)
+
+public float fn asin(float n):
+    return __lv_asin(n)
+
+public float fn acos(float n):
+    return __lv_acos(n)
+
+public float fn atan(float n):
+    return __lv_atan(n)
+
+public float fn atan2(float y, float x):
+    return __lv_atan2(y, x)
+
+// Random
+public int fn random(int min, int max):
+    return __lv_random(min, max)
+
+public float fn random_float():
+    return __lv_random_float()

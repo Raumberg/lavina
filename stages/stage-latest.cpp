@@ -3497,8 +3497,10 @@ struct CppCodegen {
         if ((alias != std::string(""))) {
             this->output = (this->output + ((((std::string("namespace ") + (alias)) + std::string(" = ")) + (full_name)) + std::string(";\n")));
         }
-        for (const auto& stmt : this->module_stmts[index]) {
-            (*this).emit_using_if_public(full_name, stmt);
+        if ((!full_name.starts_with(std::string("std_")))) {
+            for (const auto& stmt : this->module_stmts[index]) {
+                (*this).emit_using_if_public(full_name, stmt);
+            }
         }
         this->output = (this->output + std::string("\n"));
         this->declarations = (this->declarations + this->output);
