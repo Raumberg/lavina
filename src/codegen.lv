@@ -598,10 +598,13 @@ class CppCodegen:
                 this.output +="${this.indent()}${this.emit_expr(expr, m)};\n"
             Let(name, var_type, initializer, visibility, is_ref, is_mut):
                 this.emit_let(name, var_type, initializer, m, is_ref, is_mut)
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 string cpp_type = this.emit_type(const_type)
                 string val = this.emit_expr(value, m)
-                this.output +="${this.indent()}const ${cpp_type} ${name.lexeme} = ${val};\n"
+                string prefix = "const "
+                if comptime_mode == 1 or comptime_mode == 2:
+                    prefix = "constexpr "
+                this.output +="${this.indent()}${prefix}${cpp_type} ${name.lexeme} = ${val};\n"
             Return(keyword, value):
                 match value:
                     None():
@@ -1214,7 +1217,7 @@ class CppCodegen:
             Enum(name, variants, methods, visibility, type_params):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
             Let(name, var_type, initializer, visibility, is_ref, is_mut):

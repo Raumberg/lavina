@@ -1151,7 +1151,7 @@ struct Stmt {
     struct None {};
     struct ExprStmt { Expr expr; };
     struct Let { Token name; TypeNode var_type; Expr initializer; std::string visibility; bool is_ref; bool is_mut; };
-    struct Const { Token name; TypeNode const_type; Expr value; std::string visibility; };
+    struct Const { Token name; TypeNode const_type; Expr value; std::string visibility; int64_t comptime_mode; };
     struct Return { Token keyword; Expr value; };
     struct If { Expr condition; std::shared_ptr<Stmt> then_branch; std::shared_ptr<Stmt> else_branch; };
     struct While { Expr condition; std::shared_ptr<Stmt> body; };
@@ -1177,7 +1177,7 @@ struct Stmt {
     static Stmt make_None() { return {"None", None{}}; }
     static Stmt make_ExprStmt(Expr expr) { return {"ExprStmt", ExprStmt{expr}}; }
     static Stmt make_Let(Token name, TypeNode var_type, Expr initializer, std::string visibility, bool is_ref, bool is_mut) { return {"Let", Let{name, var_type, initializer, visibility, is_ref, is_mut}}; }
-    static Stmt make_Const(Token name, TypeNode const_type, Expr value, std::string visibility) { return {"Const", Const{name, const_type, value, visibility}}; }
+    static Stmt make_Const(Token name, TypeNode const_type, Expr value, std::string visibility, int64_t comptime_mode) { return {"Const", Const{name, const_type, value, visibility, comptime_mode}}; }
     static Stmt make_Return(Token keyword, Expr value) { return {"Return", Return{keyword, value}}; }
     static Stmt make_If(Expr condition, Stmt then_branch, Stmt else_branch) { return {"If", If{condition, std::make_shared<Stmt>(std::move(then_branch)), std::make_shared<Stmt>(std::move(else_branch))}}; }
     static Stmt make_While(Expr condition, Stmt body) { return {"While", While{condition, std::make_shared<Stmt>(std::move(body))}}; }
@@ -2316,9 +2316,14 @@ struct CppCodegen {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 std::string cpp_type = (*this).emit_type(const_type);
                 std::string val = (*this).emit_expr(value, m);
-                this->output = (this->output + ((((((((std::string("") + ((*this).indent())) + std::string("const ")) + (cpp_type)) + std::string(" ")) + (name.lexeme)) + std::string(" = ")) + (val)) + std::string(";\n")));
+                std::string prefix = std::string("const ");
+                if ((comptime_mode == INT64_C(1)) || (comptime_mode == INT64_C(2))) {
+                    prefix = std::string("constexpr ");
+                }
+                this->output = (this->output + ((((((((((std::string("") + ((*this).indent())) + std::string("")) + (prefix)) + std::string("")) + (cpp_type)) + std::string(" ")) + (name.lexeme)) + std::string(" = ")) + (val)) + std::string(";\n")));
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Return>(_match_23._data)) {
                 auto& _v = std::get<std::decay_t<decltype(_match_23)>::Return>(_match_23._data);
@@ -3426,6 +3431,7 @@ struct CppCodegen {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 if ((visibility != std::string("private"))) {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
@@ -4348,6 +4354,7 @@ struct Checker {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 (*this).declare(name.lexeme, const_type, std::string("const"), false, false, name);
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_82)>::Struct>(_match_82._data)) {
@@ -4428,6 +4435,7 @@ struct Checker {
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
                 auto& visibility = _v.visibility;
+                auto& comptime_mode = _v.comptime_mode;
                 (*this).check_expr(value);
             }
             else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Return>(_match_83._data)) {
@@ -5965,13 +5973,13 @@ struct Parser {
         return Stmt::make_Let(name, var_type, initializer, visibility, is_ref, is_mut);
     }
 
-    Stmt const_declaration(std::string visibility) {
+    Stmt const_declaration(std::string visibility, int64_t comptime_mode) {
         TypeNode const_type = (*this).parse_type();
         auto name = (*this).consume(TK_IDENTIFIER, std::string("Expect constant name after type."));
         (*this).consume(TK_EQUAL, std::string("Const declaration must have an initializer."));
         Expr value = (*this).expression();
         (*this).match_any(std::vector{TK_SEMICOLON, TK_NEWLINE});
-        return Stmt::make_Const(name, const_type, value, visibility);
+        return Stmt::make_Const(name, const_type, value, visibility, comptime_mode);
     }
 
     Stmt function_declaration(std::string visibility, bool is_static, int64_t comptime_mode) {
@@ -6201,8 +6209,17 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_TRY})) {
             return (*this).try_statement();
         }
+        int64_t comptime_mode = INT64_C(0);
+        if ((*this).match_any(std::vector{TK_COMPTIME_STRICT})) {
+            comptime_mode = INT64_C(2);
+        }
+        else {
+            if ((*this).match_any(std::vector{TK_COMPTIME})) {
+                comptime_mode = INT64_C(1);
+            }
+        }
         if ((*this).match_any(std::vector{TK_CONST})) {
-            return (*this).const_declaration(visibility);
+            return (*this).const_declaration(visibility, comptime_mode);
         }
         if (this->in_class_body && (*this).check(TK_IDENTIFIER)) {
             auto ctor_name = (*this).peek().lexeme;
@@ -6215,15 +6232,6 @@ struct Parser {
                 std::vector<Stmt> body = (*this).block();
                 std::vector<std::string> empty_tp = {};
                 return Stmt::make_Function(name_tok, params, TypeNode::make_Void(), body, false, INT64_C(0), is_static, visibility, empty_tp);
-            }
-        }
-        int64_t comptime_mode = INT64_C(0);
-        if ((*this).match_any(std::vector{TK_COMPTIME_STRICT})) {
-            comptime_mode = INT64_C(2);
-        }
-        else {
-            if ((*this).match_any(std::vector{TK_COMPTIME})) {
-                comptime_mode = INT64_C(1);
             }
         }
         if ((*this).match_any(std::vector{TK_REF_MUT})) {
@@ -6241,6 +6249,9 @@ struct Parser {
             if ((next_token == TK_IDENTIFIER) || (next_token == TK_FN) || (next_token == TK_INLINE) || (next_token == TK_COMPTIME) || (next_token == TK_OPERATOR)) {
                 if ((*this).is_function_start()) {
                     return (*this).function_declaration(visibility, is_static, comptime_mode);
+                }
+                if ((comptime_mode > INT64_C(0))) {
+                    return (*this).const_declaration(visibility, comptime_mode);
                 }
                 return (*this).var_declaration(visibility);
             }

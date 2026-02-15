@@ -455,7 +455,7 @@ class Checker:
                 this.known_classes[name.lexeme] = body
             Enum(name, variants, methods, visibility, enum_tp):
                 this.known_enums[name.lexeme] = variants
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 this.declare(name.lexeme, const_type, "const", false, false, name)
             Struct(name, body, visibility, struct_tp):
                 this.known_classes[name.lexeme] = body
@@ -488,7 +488,7 @@ class Checker:
                         if not this.types_compatible(var_type, init_type):
                             this.error("Cannot assign ${this.type_name(init_type)} to ${this.type_name(var_type)}", name)
                 this.declare(name.lexeme, var_type, "var", is_ref, true, name)
-            Const(name, const_type, value, visibility):
+            Const(name, const_type, value, visibility, comptime_mode):
                 this.check_expr(value)
             Return(keyword, value):
                 this.check_expr(value)

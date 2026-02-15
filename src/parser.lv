@@ -749,13 +749,13 @@ class Parser:
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
         return Stmt::Let(name, var_type, initializer, visibility, is_ref, is_mut)
 
-    Stmt fn const_declaration(string visibility):
+    Stmt fn const_declaration(string visibility, int comptime_mode):
         TypeNode const_type = this.parse_type()
         auto name = this.consume(TK_IDENTIFIER, "Expect constant name after type.")
         this.consume(TK_EQUAL, "Const declaration must have an initializer.")
         Expr value = this.expression()
         this.match_any([TK_SEMICOLON, TK_NEWLINE])
-        return Stmt::Const(name, const_type, value, visibility)
+        return Stmt::Const(name, const_type, value, visibility, comptime_mode)
 
     Stmt fn function_declaration(string visibility, bool is_static, int comptime_mode):
         TypeNode return_type = this.parse_type()
@@ -948,8 +948,14 @@ class Parser:
         if this.match_any([TK_TRY]):
             return this.try_statement()
 
+        int comptime_mode = 0
+        if this.match_any([TK_COMPTIME_STRICT]):
+            comptime_mode = 2
+        elif this.match_any([TK_COMPTIME]):
+            comptime_mode = 1
+
         if this.match_any([TK_CONST]):
-            return this.const_declaration(visibility)
+            return this.const_declaration(visibility, comptime_mode)
 
         if this.in_class_body and this.check(TK_IDENTIFIER):
             auto ctor_name = this.peek().lexeme
@@ -962,12 +968,6 @@ class Parser:
                 vector[Stmt] body = this.block()
                 vector[string] empty_tp = []
                 return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp)
-
-        int comptime_mode = 0
-        if this.match_any([TK_COMPTIME_STRICT]):
-            comptime_mode = 2
-        elif this.match_any([TK_COMPTIME]):
-            comptime_mode = 1
 
         if this.match_any([TK_REF_MUT]):
             return this.var_declaration_with_ref(visibility, true, true)
@@ -984,6 +984,9 @@ class Parser:
             if next_token == TK_IDENTIFIER or next_token == TK_FN or next_token == TK_INLINE or next_token == TK_COMPTIME or next_token == TK_OPERATOR:
                 if this.is_function_start():
                     return this.function_declaration(visibility, is_static, comptime_mode)
+                // comptime without const or fn → treat as comptime const
+                if comptime_mode > 0:
+                    return this.const_declaration(visibility, comptime_mode)
                 return this.var_declaration(visibility)
 
         return this.statement()

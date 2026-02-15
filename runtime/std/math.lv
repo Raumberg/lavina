@@ -1,11 +1,8 @@
 // std::math — mathematical functions and constants
 
-// Constants (as functions)
-public float fn pi():
-    return __lv_pi()
-
-public float fn e():
-    return __lv_e()
+// Constants
+public comptime float PI = 3.14159265358979323846
+public comptime float E = 2.71828182845904523536
 
 // Basic
 public int fn abs(int n):

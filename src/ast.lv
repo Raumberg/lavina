@@ -94,7 +94,7 @@ enum Stmt:
     None
     ExprStmt(Expr expr)
     Let(Token name, TypeNode var_type, Expr initializer, string visibility, bool is_ref, bool is_mut)
-    Const(Token name, TypeNode const_type, Expr value, string visibility)
+    Const(Token name, TypeNode const_type, Expr value, string visibility, int comptime_mode)
     Return(Token keyword, Expr value)
     If(Expr condition, Stmt then_branch, Stmt else_branch)
     While(Expr condition, Stmt body)
