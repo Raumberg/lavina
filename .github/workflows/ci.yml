@@ -37,3 +37,29 @@ jobs:
 
       - name: Build lvpkg
         run: make lvpkg
+
+  test-windows:
+    runs-on: windows-latest
+    continue-on-error: true
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          install: mingw-w64-ucrt-x86_64-gcc make diffutils
+
+      - name: Bootstrap
+        run: make bootstrap
+
+      - name: Test
+        run: make test
+
+      - name: Build
+        run: make build
+
+      - name: Build lvpkg
+        run: make lvpkg
