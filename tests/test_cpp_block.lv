@@ -3,6 +3,4 @@ void fn main():
     cpp {
         x = 42LL;
     }
-    print(x)
     lv_assert(x == 42, "cpp block should set x to 42")
-    print("cpp block test passed")

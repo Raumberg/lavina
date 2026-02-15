@@ -77,17 +77,33 @@ test:
 				continue; \
 			fi; \
 		fi; \
-		/tmp/lavina_next compile $$f 2>/dev/null && \
-		$$dir/$$name 2>/dev/null; \
-		if [ $$? -eq 0 ]; then \
-			echo "  PASS  $$name"; \
-			passed=$$((passed + 1)); \
-		else \
-			echo "  FAIL  $$name"; \
-			failed=$$((failed + 1)); \
-			errors="$$errors $$name"; \
-		fi; \
-		rm -f $$dir/$$name $$dir/$$name.cpp; \
+		case "$$name" in \
+		test_fail_*) \
+			/tmp/lavina_next compile $$f 2>/dev/null; \
+			if [ $$? -ne 0 ]; then \
+				echo "  PASS  $$name  (expected compile failure)"; \
+				passed=$$((passed + 1)); \
+			else \
+				echo "  FAIL  $$name  (should not compile)"; \
+				failed=$$((failed + 1)); \
+				errors="$$errors $$name"; \
+				rm -f $$dir/$$name $$dir/$$name.cpp; \
+			fi \
+			;; \
+		*) \
+			/tmp/lavina_next compile $$f 2>/dev/null && \
+			$$dir/$$name 2>/dev/null; \
+			if [ $$? -eq 0 ]; then \
+				echo "  PASS  $$name"; \
+				passed=$$((passed + 1)); \
+			else \
+				echo "  FAIL  $$name"; \
+				failed=$$((failed + 1)); \
+				errors="$$errors $$name"; \
+			fi; \
+			rm -f $$dir/$$name $$dir/$$name.cpp; \
+			;; \
+		esac; \
 	done; \
 	echo ""; \
 	if [ $$skipped -gt 0 ]; then \

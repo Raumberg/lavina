@@ -71,5 +71,3 @@ void fn main():
 
     string cwd = __os_cwd()
     lv_assert(cwd.len() > 0, "os_cwd")
-
-    print("test_stdlib: ALL PASSED")

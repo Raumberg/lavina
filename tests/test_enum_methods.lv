@@ -19,8 +19,9 @@ enum Shape:
 void fn main():
     auto c = Shape::Circle(5.0)
     auto s = Shape::Square(3.0)
-    print(c.area())
-    print(s.area())
-    print(c)
-    print(s)
-    print("Shape: ${c}")
+    lv_assert(c.area() > 78.53 and c.area() < 78.55, "circle area")
+    lv_assert(s.area() > 8.99 and s.area() < 9.01, "square area")
+    lv_assert(c.to_string().contains("Circle"), "circle to_string")
+    lv_assert(s.to_string().contains("Square"), "square to_string")
+    string interp = "Shape: ${c}"
+    lv_assert(interp.contains("Circle"), "string interpolation with enum")

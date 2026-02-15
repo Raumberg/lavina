@@ -27,5 +27,3 @@ void fn main():
     lv_assert(MAX_SIZE == 1024, "comptime int var")
     lv_assert(TAU > 6.28, "comptime float var")
     lv_assert(TAU < 6.29, "comptime float var upper")
-
-    print("test_comptime: ALL PASSED")

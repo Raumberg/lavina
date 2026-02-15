@@ -1,0 +1,4 @@
+// Negative test: assigning string to int should fail compilation
+
+void fn main():
+    int x = "hello"

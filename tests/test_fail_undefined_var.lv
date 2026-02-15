@@ -1,0 +1,4 @@
+// Negative test: using undefined variable should fail compilation
+
+void fn main():
+    int x = y + 1

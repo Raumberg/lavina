@@ -34,5 +34,3 @@ void fn main():
     lv_assert(s.len() == 2, "set dedup")
     lv_assert(s.contains("a"), "set contains a")
     lv_assert(!s.contains("c"), "set not contains c")
-
-    print("test_collections: ALL PASSED")

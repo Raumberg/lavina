@@ -39,5 +39,3 @@ void fn main():
     auto add_base = (int x):
         return x + base
     lv_assert(add_base(42) == 142, "block lambda closure")
-
-    print("All block lambda tests passed!")

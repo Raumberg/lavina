@@ -38,5 +38,3 @@ void fn main():
         outer_ran = true
     lv_assert(inner_ran, "inner catch ran")
     lv_assert(outer_ran, "outer catch ran")
-
-    print("test_exceptions: ALL PASSED")

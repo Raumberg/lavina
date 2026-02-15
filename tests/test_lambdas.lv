@@ -29,5 +29,3 @@ void fn main():
     int offset = 10
     auto shifted = (int x) => x + offset
     lv_assert(shifted(5) == 15, "lambda closure")
-
-    print("All lambda tests passed!")

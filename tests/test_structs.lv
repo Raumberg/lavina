@@ -72,5 +72,3 @@ void fn main():
     lv_assert(canvas.bounds.area() == 50.0, "canvas bounds area")
     lv_assert(canvas.circles[0].center.x == 5.0, "canvas first circle x")
     lv_assert(canvas.circles[1].radius == 1.0, "canvas second circle radius")
-
-    print("test_structs: ALL PASSED")
