@@ -1,9 +1,12 @@
 #pragma once
 #include "liblavina/core.h"
+#include "liblavina/crypto.h"
+#include "liblavina/base64.h"
 #include "liblavina/dynamic.h"
 #include "liblavina/print.h"
 #include "liblavina/convert.h"
 #include "liblavina/string.h"
+#include "liblavina/time.h"
 #include "liblavina/vector.h"
 #include "liblavina/hashset.h"
 #include "liblavina/hashmap.h"
