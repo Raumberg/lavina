@@ -14,15 +14,18 @@
 10. [References and Ownership](#references-and-ownership)
 11. [Lambdas](#lambdas)
 12. [Collections](#collections)
-13. [Strings](#strings)
-14. [Error Handling](#error-handling)
-15. [Imports and Modules](#imports-and-modules)
-16. [Operator Overloading](#operator-overloading)
-17. [Compile-Time Evaluation](#compile-time-evaluation)
-18. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
-19. [Standard Library](#standard-library)
-20. [Extension Methods](#extension-methods)
-21. [Compiler and Bootstrap](#compiler-and-bootstrap)
+13. [Bytes](#bytes)
+14. [Strings](#strings)
+15. [Error Handling](#error-handling)
+16. [Imports and Modules](#imports-and-modules)
+17. [Operator Overloading](#operator-overloading)
+18. [Compile-Time Evaluation](#compile-time-evaluation)
+19. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
+20. [Standard Library](#standard-library)
+21. [Networking](#networking)
+22. [Threading](#threading)
+23. [Extension Methods](#extension-methods)
+24. [Compiler and Bootstrap](#compiler-and-bootstrap)
 
 ---
 
@@ -40,6 +43,15 @@ Comments use `//`:
 ```lavina
 // This is a comment
 int x = 42  // inline comment
+```
+
+### Number Literals
+
+```lavina
+int x = 42           // decimal
+int y = 0xFF         // hexadecimal (255)
+int port = 0x01BB    // hex (443)
+float pi = 3.14      // float
 ```
 
 Every program needs a `main()` function as its entry point. It can return `int` or `void`.
@@ -65,6 +77,12 @@ Every program needs a `main()` function as its entry point. It can return `int` 
 | `vector[T]` | Dynamic array | `std::vector<T>` |
 | `hashmap[K, V]` | Hash map | `std::unordered_map<K, V>` |
 | `hashset[T]` | Hash set | `std::unordered_set<T>` |
+
+### Binary Types
+
+| Type | Description | C++ mapping |
+|------|-------------|-------------|
+| `bytes` | Byte buffer | `std::vector<uint8_t>` |
 
 ### Special Types
 
@@ -618,6 +636,90 @@ s.len()                        // 2
 
 ---
 
+## Bytes
+
+The `bytes` type is a built-in byte buffer backed by `std::vector<uint8_t>`. It is designed for binary protocol work (network headers, UUID encoding, crypto buffers, etc.).
+
+### Creating Bytes
+
+```lavina
+import std::bytes
+
+bytes buf = bytes::create(64)              // zero-filled buffer of 64 bytes
+bytes hello = bytes::from_string("Hello")  // from UTF-8 string
+bytes raw = bytes::from_hex("48656c6c6f")  // from hex string
+```
+
+### Byte-Level Access
+
+```lavina
+buf.set(0, 0xFF)          // set byte at index
+int val = buf.get(0)       // get byte at index (returns int)
+buf.fill(0x00)             // fill all bytes with value
+```
+
+### Conversions
+
+```lavina
+string s = buf.to_string()    // bytes → string
+string hex = buf.to_hex()     // bytes → hex string ("48656c6c6f")
+```
+
+### Binary Read/Write
+
+Read and write multi-byte integers in big-endian or little-endian byte order:
+
+```lavina
+bytes pkt = bytes::create(8)
+
+// Big-endian (network byte order)
+pkt.write_u16_be(0, 0x01BB)         // write u16 at offset 0
+int port = pkt.read_u16_be(0)       // 443
+pkt.write_u32_be(2, 0x01020304)     // write u32 at offset 2
+int val = pkt.read_u32_be(2)        // 16909060
+
+// Little-endian
+pkt.write_u16_le(0, 0x0102)
+pkt.write_u32_le(2, 0x01020304)
+```
+
+### Operations
+
+```lavina
+// Inherited from vector
+buf.push(0x42)            // append byte
+buf.len()                 // length
+buf.clear()               // clear
+
+// Slice and concat
+bytes sub = buf.slice(0, 5)        // [start, end)
+bytes combined = a.concat(b)       // concatenate two buffers
+bool eq = a.equals(b)              // byte-by-byte comparison
+
+// Free function alternatives
+bytes c = bytes::concat(a, b)
+bool e = bytes::equals(a, b)
+```
+
+### Example: Binary Packet
+
+```lavina
+import std::bytes
+
+// Build a packet: [u16 length][payload]
+bytes payload = bytes::from_string("Hi")
+bytes header = bytes::create(2)
+header.write_u16_be(0, payload.len())
+bytes packet = header.concat(payload)
+
+// Parse it back
+int plen = packet.read_u16_be(0)        // 2
+bytes extracted = packet.slice(2, 4)
+string msg = extracted.to_string()       // "Hi"
+```
+
+---
+
 ## Strings
 
 ### Basics
@@ -971,6 +1073,9 @@ import std::fs           // fs::read(), fs::write(), ...
 import std::os           // os::args(), os::exec(), ...
 import std::math         // math::PI, math::sqrt(), ...
 import std::collections  // vector/hashset dot-methods + free functions
+import std::bytes        // bytes::create(), buf.get(), buf.write_u16_be(), ...
+import std::net          // net::tcp_listen(), TcpStream, UdpSocket, ...
+import std::thread       // thread::spawn(), Mutex, Pool, ...
 ```
 
 **std::collections** provides higher-order functions both as free functions and as dot-notation methods via `extend`:
@@ -994,6 +1099,236 @@ auto r = collections::range(0, 10)
 
 Available dot-methods on vectors: `map`, `filter`, `reduce`, `for_each`, `zip`, `take`, `drop`, `enumerate`.
 Available dot-methods on hashsets: `union_with`, `intersect`, `difference`.
+
+**std::bytes** provides byte buffer operations for binary protocols, with both dot-notation methods (via `extend bytes`) and free functions:
+
+```lavina
+import std::bytes
+
+// Construction
+bytes buf = bytes::create(64)
+bytes hello = bytes::from_string("Hello")
+bytes decoded = bytes::from_hex("48656c6c6f")
+
+// Dot-methods (via extend)
+buf.set(0, 0xFF)                    // set byte
+int val = buf.get(0)                // get byte
+buf.fill(0x00)                      // fill all bytes
+string s = buf.to_string()          // convert to string
+string hex = buf.to_hex()           // hex-encode
+
+// Binary read/write (big-endian and little-endian)
+buf.write_u16_be(0, 0x01BB)         // write u16 big-endian
+int port = buf.read_u16_be(0)       // read u16 big-endian (443)
+buf.write_u32_le(0, 0x01020304)     // write u32 little-endian
+
+// Inherited vector methods
+buf.push(0x42)                      // append byte
+buf.len()                           // buffer length
+buf.clear()                         // clear buffer
+
+// Slice, concat, equals
+bytes sub = buf.slice(0, 5)         // slice [start, end)
+bytes combined = a.concat(b)        // concatenate
+bool eq = a.equals(b)               // compare
+
+// Free functions
+bytes c = bytes::concat(a, b)
+bool e = bytes::equals(a, b)
+```
+
+**std::net** provides TCP/UDP networking and DNS resolution:
+
+```lavina
+import std::net
+
+// High-level API with structs
+net::TcpListener server = net::TcpListener("127.0.0.1", 8080)
+net::TcpStream client = net::connect("127.0.0.1", 8080)
+net::TcpStream accepted = server.accept()
+client.send("hello")
+string data = accepted.recv(1024)
+client.close()
+accepted.close()
+server.close()
+
+net::UdpSocket udp = net::UdpSocket("0.0.0.0", 9000)
+udp.send("message", "127.0.0.1", 9001)
+string msg = udp.recv(1024)
+udp.close()
+
+// DNS
+string ip = net::resolve("example.com")
+
+// Low-level API (file descriptor based)
+int fd = net::tcp_listen("0.0.0.0", 8080)
+int conn = net::tcp_accept(fd)
+net::tcp_send(conn, "hello")
+string reply = net::tcp_recv(conn, 1024)
+net::tcp_close(conn)
+```
+
+**std::thread** provides OS threads, mutexes, and thread pools:
+
+```lavina
+import std::thread
+
+// Spawn threads
+int result = 0
+thread::Thread t = thread::spawn(():
+    result = 42
+)
+t.wait()       // join thread
+
+// Mutex for synchronization
+thread::Mutex mtx = thread::Mutex()
+mtx.lock()
+// ... critical section ...
+mtx.unlock()
+mtx.destroy()
+
+// Thread pool
+thread::Pool pool = thread::Pool(4)    // 4 workers
+for i in 0..100:
+    pool.submit(():
+        // task runs on a worker thread
+        pass
+    )
+pool.shutdown()    // wait for all tasks to finish
+
+// Utilities
+thread::sleep(100)                  // sleep 100ms
+int id = thread::current_id()      // current thread ID
+```
+
+---
+
+## Networking
+
+The `std::net` module provides TCP and UDP networking plus DNS resolution, using POSIX sockets (no external dependencies).
+
+### TCP
+
+```lavina
+import std::net
+
+// Server: listen, accept, send/recv
+net::TcpListener server = net::TcpListener("127.0.0.1", 8080)
+net::TcpStream client_conn = server.accept()
+string data = client_conn.recv(1024)
+client_conn.send("echo: ${data}")
+client_conn.close()
+server.close()
+
+// Client: connect, send/recv
+net::TcpStream client = net::connect("127.0.0.1", 8080)
+client.send("hello")
+string response = client.recv(1024)
+client.close()
+```
+
+### UDP
+
+```lavina
+import std::net
+
+net::UdpSocket sock = net::UdpSocket("0.0.0.0", 9000)
+sock.send("ping", "127.0.0.1", 9001)
+string msg = sock.recv(1024)
+sock.close()
+```
+
+### DNS
+
+```lavina
+import std::net
+
+string ip = net::resolve("example.com")    // "93.184.216.34"
+```
+
+### Low-Level API
+
+For direct file descriptor control:
+
+| Function | Description |
+|----------|-------------|
+| `net::tcp_listen(host, port)` | Bind and listen, returns fd |
+| `net::tcp_accept(fd)` | Accept connection, returns fd |
+| `net::tcp_connect(host, port)` | Connect, returns fd |
+| `net::tcp_send(fd, data)` | Send string over TCP |
+| `net::tcp_recv(fd, max)` | Receive string from TCP |
+| `net::tcp_close(fd)` | Close TCP socket |
+| `net::udp_create(host, port)` | Create and bind UDP socket |
+| `net::udp_send(fd, data, host, port)` | Send UDP datagram |
+| `net::udp_recv(fd, max)` | Receive UDP datagram |
+| `net::udp_close(fd)` | Close UDP socket |
+
+---
+
+## Threading
+
+The `std::thread` module provides OS threads, mutexes, and thread pools.
+
+### Spawning Threads
+
+```lavina
+import std::thread
+
+int result = 0
+thread::Thread t = thread::spawn(():
+    result = 42
+)
+t.wait()    // blocks until thread completes
+// result is now 42
+```
+
+Lambdas capture variables by reference (`[&]` in C++), so threads can modify shared state. Always call `.wait()` before the captured variables go out of scope.
+
+```lavina
+t.detach()  // let thread run independently (don't wait)
+```
+
+### Mutex
+
+```lavina
+import std::thread
+
+thread::Mutex mtx = thread::Mutex()
+int counter = 0
+
+for i in 0..10:
+    thread::spawn(():
+        mtx.lock()
+        counter += 1
+        mtx.unlock()
+    )
+
+// ... wait for threads ...
+mtx.destroy()
+```
+
+### Thread Pool
+
+```lavina
+import std::thread
+
+thread::Pool pool = thread::Pool(4)    // 4 worker threads
+
+for i in 0..100:
+    pool.submit(():
+        // runs on a worker thread
+        pass
+    )
+
+pool.shutdown()    // waits for all submitted tasks to finish
+```
+
+### Utilities
+
+| Function | Description |
+|----------|-------------|
+| `thread::sleep(ms)` | Sleep current thread for `ms` milliseconds |
+| `thread::current_id()` | Get current thread's ID (int) |
 
 ---
 
@@ -1028,7 +1363,7 @@ string greeting = "hello"
 print(greeting.shout())       // hello!
 ```
 
-Extend methods work on: `vector`, `hashmap`, `hashset`, `string`, and custom types (structs/enums by name).
+Extend methods work on: `vector`, `hashmap`, `hashset`, `string`, `bytes`, and custom types (structs/enums by name).
 
 Use `this` inside extend methods to refer to the object. Built-in methods (`.push()`, `.sort()`, etc.) take priority over extend methods.
 
@@ -1079,7 +1414,7 @@ The compiler maintains C++ snapshots in `stages/`. Each snapshot is a complete s
 make bootstrap   # Build from latest stage, verify fixed point
 make snapshot    # Save new stage after codegen changes
 make evolve      # Handle codegen output format changes (2-pass)
-make test        # Run test suite (37 tests)
+make test        # Run test suite (42 tests)
 ```
 
 **Fixed point verification**: The bootstrap compiles `src/main.lv` twice — once with the previous stage and once with the newly built compiler. The outputs must be identical, proving the compiler correctly compiles itself.
