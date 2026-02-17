@@ -12,3 +12,4 @@
 #include "liblavina/util.h"
 #include "liblavina/math.h"
 #include "liblavina/net.h"
+#include "liblavina/thread.h"

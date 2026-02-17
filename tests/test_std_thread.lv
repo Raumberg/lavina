@@ -1,0 +1,499 @@
+import std::thread
+
+// ── Basic spawn/wait ─────────────────────────────────────────
+
+void fn test_spawn_and_wait():
+    int result = 0
+    thread::Thread t = thread::spawn(():
+        result = 42
+    )
+    t.wait()
+    lv_assert(result == 42, "thread should modify shared state")
+    print("PASS: spawn and wait")
+
+void fn test_spawn_multiple_sequential():
+    int a = 0
+    int b = 0
+    int c = 0
+    thread::Thread t1 = thread::spawn(():
+        a = 1
+    )
+    t1.wait()
+    thread::Thread t2 = thread::spawn(():
+        b = a + 1
+    )
+    t2.wait()
+    thread::Thread t3 = thread::spawn(():
+        c = b + 1
+    )
+    t3.wait()
+    lv_assert(a == 1, "sequential thread a")
+    lv_assert(b == 2, "sequential thread b")
+    lv_assert(c == 3, "sequential thread c")
+    print("PASS: spawn multiple sequential")
+
+void fn test_spawn_many_concurrent():
+    int count = 0
+    thread::Mutex mtx = thread::Mutex()
+    vector[thread::Thread] threads = []
+    for i in 0..20:
+        thread::Thread t = thread::spawn(():
+            mtx.lock()
+            count += 1
+            mtx.unlock()
+        )
+        threads.push(t)
+    for t in threads:
+        t.wait()
+    mtx.destroy()
+    lv_assert(count == 20, "20 concurrent threads should all complete")
+    print("PASS: spawn many concurrent")
+
+void fn test_thread_with_computation():
+    int result = 0
+    thread::Thread t = thread::spawn(():
+        int sum = 0
+        for i in 0..100:
+            sum += i
+        result = sum
+    )
+    t.wait()
+    lv_assert(result == 4950, "thread should compute sum 0..99 = 4950")
+    print("PASS: thread with computation")
+
+void fn test_thread_string_capture():
+    string msg = ""
+    thread::Thread t = thread::spawn(():
+        msg = "hello from thread"
+    )
+    t.wait()
+    lv_assert(msg == "hello from thread", "thread should modify string")
+    print("PASS: thread string capture")
+
+void fn test_thread_vector_capture():
+    vector[int] nums = []
+    thread::Mutex mtx = thread::Mutex()
+    thread::Thread t = thread::spawn(():
+        for i in 0..5:
+            mtx.lock()
+            nums.push(i)
+            mtx.unlock()
+    )
+    t.wait()
+    mtx.destroy()
+    lv_assert(nums.len() == 5, "thread should push 5 elements")
+    lv_assert(nums[0] == 0, "first element should be 0")
+    lv_assert(nums[4] == 4, "last element should be 4")
+    print("PASS: thread vector capture")
+
+// ── Mutex ────────────────────────────────────────────────────
+
+void fn test_mutex_basic():
+    int counter = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Thread t1 = thread::spawn(():
+        for i in 0..1000:
+            mtx.lock()
+            counter += 1
+            mtx.unlock()
+    )
+    thread::Thread t2 = thread::spawn(():
+        for i in 0..1000:
+            mtx.lock()
+            counter += 1
+            mtx.unlock()
+    )
+    t1.wait()
+    t2.wait()
+    mtx.destroy()
+    lv_assert(counter == 2000, "mutex should protect counter")
+    print("PASS: mutex basic")
+
+void fn test_mutex_four_threads():
+    int counter = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Thread t1 = thread::spawn(():
+        for i in 0..500:
+            mtx.lock()
+            counter += 1
+            mtx.unlock()
+    )
+    thread::Thread t2 = thread::spawn(():
+        for i in 0..500:
+            mtx.lock()
+            counter += 1
+            mtx.unlock()
+    )
+    thread::Thread t3 = thread::spawn(():
+        for i in 0..500:
+            mtx.lock()
+            counter += 1
+            mtx.unlock()
+    )
+    thread::Thread t4 = thread::spawn(():
+        for i in 0..500:
+            mtx.lock()
+            counter += 1
+            mtx.unlock()
+    )
+    t1.wait()
+    t2.wait()
+    t3.wait()
+    t4.wait()
+    mtx.destroy()
+    lv_assert(counter == 2000, "4 threads x 500 = 2000")
+    print("PASS: mutex four threads")
+
+void fn test_mutex_protects_vector():
+    vector[int] results = []
+    thread::Mutex mtx = thread::Mutex()
+    thread::Thread t1 = thread::spawn(():
+        for i in 0..50:
+            mtx.lock()
+            results.push(1)
+            mtx.unlock()
+    )
+    thread::Thread t2 = thread::spawn(():
+        for i in 0..50:
+            mtx.lock()
+            results.push(2)
+            mtx.unlock()
+    )
+    t1.wait()
+    t2.wait()
+    mtx.destroy()
+    lv_assert(results.len() == 100, "mutex should protect vector, got 100 elements")
+    // Count 1s and 2s
+    int ones = 0
+    int twos = 0
+    for v in results:
+        if v == 1:
+            ones += 1
+        if v == 2:
+            twos += 1
+    lv_assert(ones == 50, "should have 50 ones")
+    lv_assert(twos == 50, "should have 50 twos")
+    print("PASS: mutex protects vector")
+
+void fn test_multiple_mutexes():
+    int a = 0
+    int b = 0
+    thread::Mutex mtx_a = thread::Mutex()
+    thread::Mutex mtx_b = thread::Mutex()
+    thread::Thread t1 = thread::spawn(():
+        for i in 0..500:
+            mtx_a.lock()
+            a += 1
+            mtx_a.unlock()
+    )
+    thread::Thread t2 = thread::spawn(():
+        for i in 0..500:
+            mtx_b.lock()
+            b += 1
+            mtx_b.unlock()
+    )
+    t1.wait()
+    t2.wait()
+    mtx_a.destroy()
+    mtx_b.destroy()
+    lv_assert(a == 500, "mutex_a should protect a")
+    lv_assert(b == 500, "mutex_b should protect b")
+    print("PASS: multiple mutexes")
+
+// ── Sleep / timing ───────────────────────────────────────────
+
+void fn test_sleep():
+    int t1 = __os_clock()
+    thread::sleep(50)
+    int t2 = __os_clock()
+    lv_assert(t2 - t1 >= 30, "sleep should wait at least ~30ms")
+    print("PASS: sleep")
+
+void fn test_sleep_in_thread():
+    int done = 0
+    int t1 = __os_clock()
+    thread::Thread t = thread::spawn(():
+        thread::sleep(50)
+        done = 1
+    )
+    t.wait()
+    int t2 = __os_clock()
+    lv_assert(done == 1, "thread should complete after sleep")
+    lv_assert(t2 - t1 >= 30, "thread sleep should take time")
+    print("PASS: sleep in thread")
+
+// ── Thread identity ──────────────────────────────────────────
+
+void fn test_current_id():
+    int main_id = thread::current_id()
+    int child_id = 0
+    thread::Thread t = thread::spawn(():
+        child_id = thread::current_id()
+    )
+    t.wait()
+    lv_assert(main_id != child_id, "different threads should have different IDs")
+    lv_assert(main_id != 0, "thread ID should not be zero")
+    print("PASS: current_id")
+
+void fn test_unique_thread_ids():
+    int id1 = 0
+    int id2 = 0
+    int id3 = 0
+    thread::Thread t1 = thread::spawn(():
+        id1 = thread::current_id()
+    )
+    thread::Thread t2 = thread::spawn(():
+        id2 = thread::current_id()
+    )
+    thread::Thread t3 = thread::spawn(():
+        id3 = thread::current_id()
+    )
+    t1.wait()
+    t2.wait()
+    t3.wait()
+    lv_assert(id1 != id2, "thread IDs 1 and 2 should differ")
+    lv_assert(id2 != id3, "thread IDs 2 and 3 should differ")
+    lv_assert(id1 != id3, "thread IDs 1 and 3 should differ")
+    print("PASS: unique thread IDs")
+
+// ── Thread pool ──────────────────────────────────────────────
+
+void fn test_pool_basic():
+    int count = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Pool pool = thread::Pool(4)
+    for i in 0..10:
+        pool.submit(():
+            mtx.lock()
+            count += 1
+            mtx.unlock()
+        )
+    pool.shutdown()
+    mtx.destroy()
+    lv_assert(count == 10, "pool should complete all 10 tasks")
+    print("PASS: pool basic")
+
+void fn test_pool_many_tasks():
+    int count = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Pool pool = thread::Pool(4)
+    for i in 0..100:
+        pool.submit(():
+            mtx.lock()
+            count += 1
+            mtx.unlock()
+        )
+    pool.shutdown()
+    mtx.destroy()
+    lv_assert(count == 100, "pool should complete all 100 tasks")
+    print("PASS: pool many tasks")
+
+void fn test_pool_single_worker():
+    int count = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Pool pool = thread::Pool(1)
+    for i in 0..20:
+        pool.submit(():
+            mtx.lock()
+            count += 1
+            mtx.unlock()
+        )
+    pool.shutdown()
+    mtx.destroy()
+    lv_assert(count == 20, "single-worker pool should complete all tasks")
+    print("PASS: pool single worker")
+
+void fn test_pool_heavy_computation():
+    int total = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Pool pool = thread::Pool(4)
+    for i in 0..8:
+        pool.submit(():
+            // Simulate work
+            int sum = 0
+            for j in 0..1000:
+                sum += 1
+            mtx.lock()
+            total += sum
+            mtx.unlock()
+        )
+    pool.shutdown()
+    mtx.destroy()
+    lv_assert(total == 8000, "pool heavy computation: 8 tasks x 1000 = 8000")
+    print("PASS: pool heavy computation")
+
+void fn test_pool_with_sleep():
+    int count = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Pool pool = thread::Pool(4)
+    for i in 0..4:
+        pool.submit(():
+            thread::sleep(20)
+            mtx.lock()
+            count += 1
+            mtx.unlock()
+        )
+    pool.shutdown()
+    mtx.destroy()
+    lv_assert(count == 4, "pool tasks with sleep should all complete")
+    print("PASS: pool with sleep")
+
+void fn test_pool_many_workers():
+    int count = 0
+    thread::Mutex mtx = thread::Mutex()
+    thread::Pool pool = thread::Pool(8)
+    for i in 0..50:
+        pool.submit(():
+            mtx.lock()
+            count += 1
+            mtx.unlock()
+        )
+    pool.shutdown()
+    mtx.destroy()
+    lv_assert(count == 50, "8-worker pool should complete 50 tasks")
+    print("PASS: pool many workers")
+
+// ── Detach ───────────────────────────────────────────────────
+
+void fn test_detach():
+    thread::Thread t = thread::spawn(():
+        thread::sleep(10)
+    )
+    t.detach()
+    thread::sleep(50)
+    print("PASS: detach")
+
+// ── Stress / edge cases ──────────────────────────────────────
+
+void fn test_rapid_spawn_wait():
+    int count = 0
+    for i in 0..50:
+        thread::Thread t = thread::spawn(():
+            count += 1
+        )
+        t.wait()
+    lv_assert(count == 50, "50 rapid spawn/wait cycles")
+    print("PASS: rapid spawn/wait")
+
+void fn test_nested_thread_spawn():
+    int result = 0
+    thread::Thread outer = thread::spawn(():
+        thread::Thread inner = thread::spawn(():
+            result = 99
+        )
+        inner.wait()
+    )
+    outer.wait()
+    lv_assert(result == 99, "nested thread should set result")
+    print("PASS: nested thread spawn")
+
+void fn test_thread_modifies_multiple_vars():
+    int x = 0
+    int y = 0
+    string s = ""
+    float f = 0.0
+    thread::Thread t = thread::spawn(():
+        x = 10
+        y = 20
+        s = "done"
+        f = 3.14
+    )
+    t.wait()
+    lv_assert(x == 10, "thread should set x")
+    lv_assert(y == 20, "thread should set y")
+    lv_assert(s == "done", "thread should set s")
+    lv_assert(f > 3.0, "thread should set f")
+    print("PASS: thread modifies multiple vars")
+
+void fn test_pool_sequential_reuse():
+    // Create, use, shutdown, create again
+    int count1 = 0
+    int count2 = 0
+    thread::Mutex mtx = thread::Mutex()
+
+    thread::Pool pool1 = thread::Pool(2)
+    for i in 0..5:
+        pool1.submit(():
+            mtx.lock()
+            count1 += 1
+            mtx.unlock()
+        )
+    pool1.shutdown()
+
+    thread::Pool pool2 = thread::Pool(2)
+    for i in 0..5:
+        pool2.submit(():
+            mtx.lock()
+            count2 += 1
+            mtx.unlock()
+        )
+    pool2.shutdown()
+    mtx.destroy()
+
+    lv_assert(count1 == 5, "first pool should complete 5 tasks")
+    lv_assert(count2 == 5, "second pool should complete 5 tasks")
+    print("PASS: pool sequential reuse")
+
+void fn test_mutex_contention():
+    // High contention: many threads fighting for one mutex
+    int counter = 0
+    thread::Mutex mtx = thread::Mutex()
+    vector[thread::Thread] threads = []
+    for i in 0..10:
+        thread::Thread t = thread::spawn(():
+            for j in 0..200:
+                mtx.lock()
+                counter += 1
+                mtx.unlock()
+        )
+        threads.push(t)
+    for t in threads:
+        t.wait()
+    mtx.destroy()
+    lv_assert(counter == 2000, "10 threads x 200 = 2000 under contention")
+    print("PASS: mutex contention")
+
+// ── Main ─────────────────────────────────────────────────────
+
+void fn main():
+    // Basic spawn/wait
+    test_spawn_and_wait()
+    test_spawn_multiple_sequential()
+    test_spawn_many_concurrent()
+    test_thread_with_computation()
+    test_thread_string_capture()
+    test_thread_vector_capture()
+
+    // Mutex
+    test_mutex_basic()
+    test_mutex_four_threads()
+    test_mutex_protects_vector()
+    test_multiple_mutexes()
+
+    // Sleep / timing
+    test_sleep()
+    test_sleep_in_thread()
+
+    // Thread identity
+    test_current_id()
+    test_unique_thread_ids()
+
+    // Thread pool
+    test_pool_basic()
+    test_pool_many_tasks()
+    test_pool_single_worker()
+    test_pool_heavy_computation()
+    test_pool_with_sleep()
+    test_pool_many_workers()
+
+    // Detach
+    test_detach()
+
+    // Stress / edge cases
+    test_rapid_spawn_wait()
+    test_nested_thread_spawn()
+    test_thread_modifies_multiple_vars()
+    test_pool_sequential_reuse()
+    test_mutex_contention()
+
+    println("All std::thread tests passed!")
