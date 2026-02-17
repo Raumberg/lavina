@@ -1080,9 +1080,9 @@ struct TypeNode {
     }
 };
 
-void print(const TypeNode& e) { std::cout << "TypeNode(" << e._tag << ")" << std::endl; }
-std::string operator+(const std::string& s, const TypeNode& e) { return s + e._tag; }
-std::string operator+(const TypeNode& e, const std::string& s) { return e._tag + s; }
+void print(const TypeNode& _v) { std::cout << "TypeNode(" << _v._tag << ")" << std::endl; }
+std::string operator+(const std::string& _s, const TypeNode& _v) { return _s + _v._tag; }
+std::string operator+(const TypeNode& _v, const std::string& _s) { return _v._tag + _s; }
 
 struct Param {
     Token name;
@@ -1160,9 +1160,9 @@ struct Expr {
     }
 };
 
-void print(const Expr& e) { std::cout << "Expr(" << e._tag << ")" << std::endl; }
-std::string operator+(const std::string& s, const Expr& e) { return s + e._tag; }
-std::string operator+(const Expr& e, const std::string& s) { return e._tag + s; }
+void print(const Expr& _v) { std::cout << "Expr(" << _v._tag << ")" << std::endl; }
+std::string operator+(const std::string& _s, const Expr& _v) { return _s + _v._tag; }
+std::string operator+(const Expr& _v, const std::string& _s) { return _v._tag + _s; }
 
 struct ExternType {
     std::string lavina_name;
@@ -1244,9 +1244,278 @@ struct Stmt {
     }
 };
 
-void print(const Stmt& e) { std::cout << "Stmt(" << e._tag << ")" << std::endl; }
-std::string operator+(const std::string& s, const Stmt& e) { return s + e._tag; }
-std::string operator+(const Stmt& e, const std::string& s) { return e._tag + s; }
+void print(const Stmt& _v) { std::cout << "Stmt(" << _v._tag << ")" << std::endl; }
+std::string operator+(const std::string& _s, const Stmt& _v) { return _s + _v._tag; }
+std::string operator+(const Stmt& _v, const std::string& _s) { return _v._tag + _s; }
+
+bool is_integer_type(const TypeNode& t) {
+    {
+        const auto& _match_0 = t;
+        if (std::holds_alternative<std::decay_t<decltype(_match_0)>::Int>(_match_0._data)) {
+            return true;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_0)>::Int8>(_match_0._data)) {
+            return true;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_0)>::Int16>(_match_0._data)) {
+            return true;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_0)>::Int32>(_match_0._data)) {
+            return true;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_0)>::USize>(_match_0._data)) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool is_float_type(const TypeNode& t) {
+    {
+        const auto& _match_1 = t;
+        if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Float>(_match_1._data)) {
+            return true;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Float32>(_match_1._data)) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool is_string_type(const TypeNode& t) {
+    {
+        const auto& _match_2 = t;
+        if (std::holds_alternative<std::decay_t<decltype(_match_2)>::Str>(_match_2._data)) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    return false;
+}
+
+bool is_bytes_type(const TypeNode& t) {
+    {
+        const auto& _match_3 = t;
+        if (std::holds_alternative<std::decay_t<decltype(_match_3)>::Bytes>(_match_3._data)) {
+            return true;
+        }
+        else {
+            return false;
+        }
+    }
+    return false;
+}
+
+std::string type_to_cpp(const TypeNode& t) {
+    {
+        const auto& _match_4 = t;
+        if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Int>(_match_4._data)) {
+            return std::string("int64_t");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Float>(_match_4._data)) {
+            return std::string("double");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Str>(_match_4._data)) {
+            return std::string("std::string");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Bool>(_match_4._data)) {
+            return std::string("bool");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Void>(_match_4._data)) {
+            return std::string("void");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Auto>(_match_4._data)) {
+            return std::string("auto");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Dynamic>(_match_4._data)) {
+            return std::string("std::any");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::NullType>(_match_4._data)) {
+            return std::string("std::nullptr_t");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Custom>(_match_4._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_4)>::Custom>(_match_4._data);
+            auto& name = _v.name;
+            auto& type_args = _v.type_args;
+            if ((static_cast<int64_t>(type_args.size()) > INT64_C(0))) {
+                std::vector<std::string> ta = {};
+                for (const auto& a : type_args) {
+                    ta.push_back(type_to_cpp(a));
+                }
+                return ((((std::string("") + (name)) + std::string("<")) + (lv_join(ta, std::string(", ")))) + std::string(">"));
+            }
+            return name;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Array>(_match_4._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_4)>::Array>(_match_4._data);
+            auto& inner = *_v.inner;
+            return ((std::string("std::vector<") + (type_to_cpp(inner))) + std::string(">"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::HashSet>(_match_4._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_4)>::HashSet>(_match_4._data);
+            auto& inner = *_v.inner;
+            return ((std::string("std::unordered_set<") + (type_to_cpp(inner))) + std::string(">"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::HashMap>(_match_4._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_4)>::HashMap>(_match_4._data);
+            auto& key_type = *_v.key_type;
+            auto& value_type = *_v.value_type;
+            return ((((std::string("std::unordered_map<") + (type_to_cpp(key_type))) + std::string(", ")) + (type_to_cpp(value_type))) + std::string(">"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Nullable>(_match_4._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_4)>::Nullable>(_match_4._data);
+            auto& inner = *_v.inner;
+            return ((std::string("std::optional<") + (type_to_cpp(inner))) + std::string(">"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Int8>(_match_4._data)) {
+            return std::string("int8_t");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Int16>(_match_4._data)) {
+            return std::string("int16_t");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Int32>(_match_4._data)) {
+            return std::string("int32_t");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Float32>(_match_4._data)) {
+            return std::string("float");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::USize>(_match_4._data)) {
+            return std::string("size_t");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::CString>(_match_4._data)) {
+            return std::string("const char*");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Ptr>(_match_4._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_4)>::Ptr>(_match_4._data);
+            auto& inner = *_v.inner;
+            return ((std::string("") + (type_to_cpp(inner))) + std::string("*"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Bytes>(_match_4._data)) {
+            return std::string("std::vector<uint8_t>");
+        }
+        else {
+            return std::string("auto");
+        }
+    }
+    return std::string("auto");
+}
+
+std::string type_to_display(const TypeNode& t) {
+    {
+        const auto& _match_5 = t;
+        if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Int>(_match_5._data)) {
+            return std::string("int");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Float>(_match_5._data)) {
+            return std::string("float");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Str>(_match_5._data)) {
+            return std::string("string");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Bool>(_match_5._data)) {
+            return std::string("bool");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Void>(_match_5._data)) {
+            return std::string("void");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Auto>(_match_5._data)) {
+            return std::string("auto");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Dynamic>(_match_5._data)) {
+            return std::string("dynamic");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::NullType>(_match_5._data)) {
+            return std::string("null");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Custom>(_match_5._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_5)>::Custom>(_match_5._data);
+            auto& name = _v.name;
+            auto& _ = _v.type_args;
+            return name;
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Array>(_match_5._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_5)>::Array>(_match_5._data);
+            auto& inner = *_v.inner;
+            return ((std::string("vector[") + (type_to_display(inner))) + std::string("]"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::HashSet>(_match_5._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_5)>::HashSet>(_match_5._data);
+            auto& inner = *_v.inner;
+            return ((std::string("set[") + (type_to_display(inner))) + std::string("]"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::HashMap>(_match_5._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_5)>::HashMap>(_match_5._data);
+            auto& k = *_v.key_type;
+            auto& v = *_v.value_type;
+            return ((((std::string("map[") + (type_to_display(k))) + std::string(", ")) + (type_to_display(v))) + std::string("]"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Nullable>(_match_5._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_5)>::Nullable>(_match_5._data);
+            auto& inner = *_v.inner;
+            return ((std::string("") + (type_to_display(inner))) + std::string("?"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Int8>(_match_5._data)) {
+            return std::string("int8");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Int16>(_match_5._data)) {
+            return std::string("int16");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Int32>(_match_5._data)) {
+            return std::string("int32");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Float32>(_match_5._data)) {
+            return std::string("float32");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::USize>(_match_5._data)) {
+            return std::string("usize");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::CString>(_match_5._data)) {
+            return std::string("cstring");
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Ptr>(_match_5._data)) {
+            auto& _v = std::get<std::decay_t<decltype(_match_5)>::Ptr>(_match_5._data);
+            auto& inner = *_v.inner;
+            return ((std::string("ptr[") + (type_to_display(inner))) + std::string("]"));
+        }
+        else if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Bytes>(_match_5._data)) {
+            return std::string("bytes");
+        }
+        else {
+            return std::string("unknown");
+        }
+    }
+    return std::string("unknown");
+}
+
+std::string find_enum_for_variant(std::unordered_map<std::string, std::vector<EnumVariantNode>>& known_enums, const std::string& variant_name) {
+    std::string found = std::string("");
+    int64_t count = INT64_C(0);
+    std::vector<std::string> keys = lv_keys(known_enums);
+    for (const auto& key : keys) {
+        std::vector<EnumVariantNode> variants = known_enums[key];
+        for (const auto& v : variants) {
+            if ((v.name.lexeme == variant_name)) {
+                if ((count == INT64_C(0))) {
+                    found = key;
+                }
+                count = (count + INT64_C(1));
+            }
+        }
+    }
+    if ((count == INT64_C(1))) {
+        return found;
+    }
+    return std::string("");
+}
 
 struct CppCodegen {
     std::string output;
@@ -1329,27 +1598,6 @@ struct CppCodegen {
         }
     }
 
-    std::string find_enum_for_variant(const std::string& variant_name) {
-        std::string found = std::string("");
-        int64_t count = INT64_C(0);
-        std::vector<std::string> keys = lv_keys(this->known_enums);
-        for (const auto& key : keys) {
-            std::vector<EnumVariantNode> variants = this->known_enums[key];
-            for (const auto& v : variants) {
-                if ((v.name.lexeme == variant_name)) {
-                    if ((count == INT64_C(0))) {
-                        found = key;
-                    }
-                    count = (count + INT64_C(1));
-                }
-            }
-        }
-        if ((count == INT64_C(1))) {
-            return found;
-        }
-        return std::string("");
-    }
-
     EnumVariantNode get_variant_info(const std::string& enum_name, const std::string& variant_name) {
         if ((this->known_enums.count(enum_name) > 0)) {
             std::vector<EnumVariantNode> variants = this->known_enums[enum_name];
@@ -1378,12 +1626,12 @@ struct CppCodegen {
 
     bool type_contains_dynamic(const TypeNode& t) {
         {
-            const auto& _match_0 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_0)>::Dynamic>(_match_0._data)) {
+            const auto& _match_6 = t;
+            if (std::holds_alternative<std::decay_t<decltype(_match_6)>::Dynamic>(_match_6._data)) {
                 return true;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_0)>::Array>(_match_0._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_0)>::Array>(_match_0._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_6)>::Array>(_match_6._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_6)>::Array>(_match_6._data);
                 auto& inner = *_v.inner;
                 return (*this).type_contains_dynamic(inner);
             }
@@ -1415,11 +1663,11 @@ struct CppCodegen {
 
     std::string wrap_convert(std::string expr, const TypeNode& from, const TypeNode& expected) {
         {
-            const auto& _match_1 = from;
-            if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Str>(_match_1._data)) {
+            const auto& _match_7 = from;
+            if (std::holds_alternative<std::decay_t<decltype(_match_7)>::Str>(_match_7._data)) {
                 {
-                    const auto& _match_2 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_2)>::CString>(_match_2._data)) {
+                    const auto& _match_8 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_8)>::CString>(_match_8._data)) {
                         return ((std::string("(") + (expr)) + std::string(").c_str()"));
                     }
                     else {
@@ -1427,10 +1675,10 @@ struct CppCodegen {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::CString>(_match_1._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_7)>::CString>(_match_7._data)) {
                 {
-                    const auto& _match_3 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_3)>::Str>(_match_3._data)) {
+                    const auto& _match_9 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_9)>::Str>(_match_9._data)) {
                         return ((std::string("std::string(") + (expr)) + std::string(")"));
                     }
                     else {
@@ -1438,13 +1686,13 @@ struct CppCodegen {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Int>(_match_1._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_7)>::Int>(_match_7._data)) {
                 {
-                    const auto& _match_4 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_4)>::Int32>(_match_4._data)) {
+                    const auto& _match_10 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_10)>::Int32>(_match_10._data)) {
                         return ((std::string("static_cast<int32_t>(") + (expr)) + std::string(")"));
                     }
-                    else if (std::holds_alternative<std::decay_t<decltype(_match_4)>::USize>(_match_4._data)) {
+                    else if (std::holds_alternative<std::decay_t<decltype(_match_10)>::USize>(_match_10._data)) {
                         return ((std::string("static_cast<size_t>(") + (expr)) + std::string(")"));
                     }
                     else {
@@ -1452,10 +1700,10 @@ struct CppCodegen {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Int32>(_match_1._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_7)>::Int32>(_match_7._data)) {
                 {
-                    const auto& _match_5 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_5)>::Int>(_match_5._data)) {
+                    const auto& _match_11 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_11)>::Int>(_match_11._data)) {
                         return ((std::string("static_cast<int64_t>(") + (expr)) + std::string(")"));
                     }
                     else {
@@ -1463,10 +1711,10 @@ struct CppCodegen {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::USize>(_match_1._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_7)>::USize>(_match_7._data)) {
                 {
-                    const auto& _match_6 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_6)>::Int>(_match_6._data)) {
+                    const auto& _match_12 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_12)>::Int>(_match_12._data)) {
                         return ((std::string("static_cast<int64_t>(") + (expr)) + std::string(")"));
                     }
                     else {
@@ -1474,10 +1722,10 @@ struct CppCodegen {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Float>(_match_1._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_7)>::Float>(_match_7._data)) {
                 {
-                    const auto& _match_7 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_7)>::Float32>(_match_7._data)) {
+                    const auto& _match_13 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_13)>::Float32>(_match_13._data)) {
                         return ((std::string("static_cast<float>(") + (expr)) + std::string(")"));
                     }
                     else {
@@ -1485,10 +1733,10 @@ struct CppCodegen {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_1)>::Float32>(_match_1._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_7)>::Float32>(_match_7._data)) {
                 {
-                    const auto& _match_8 = expected;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_8)>::Float>(_match_8._data)) {
+                    const auto& _match_14 = expected;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Float>(_match_14._data)) {
                         return ((std::string("static_cast<double>(") + (expr)) + std::string(")"));
                     }
                     else {
@@ -1505,16 +1753,16 @@ struct CppCodegen {
 
     std::string wrap_extern_arg(std::string expr, const Expr& original, const TypeNode& expected) {
         {
-            const auto& _match_9 = original;
-            if (std::holds_alternative<std::decay_t<decltype(_match_9)>::Literal>(_match_9._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_9)>::Literal>(_match_9._data);
+            const auto& _match_15 = original;
+            if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Literal>(_match_15._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Literal>(_match_15._data);
                 auto& kind = _v.kind;
                 auto& value = _v.value;
                 if ((kind == std::string("null"))) {
                     {
-                        const auto& _match_10 = expected;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_10)>::Ptr>(_match_10._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_10)>::Ptr>(_match_10._data);
+                        const auto& _match_16 = expected;
+                        if (std::holds_alternative<std::decay_t<decltype(_match_16)>::Ptr>(_match_16._data)) {
+                            auto& _v = std::get<std::decay_t<decltype(_match_16)>::Ptr>(_match_16._data);
                             auto& inner = *_v.inner;
                             return std::string("nullptr");
                         }
@@ -1525,8 +1773,8 @@ struct CppCodegen {
                 }
                 if ((kind == std::string("string"))) {
                     {
-                        const auto& _match_11 = expected;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_11)>::CString>(_match_11._data)) {
+                        const auto& _match_17 = expected;
+                        if (std::holds_alternative<std::decay_t<decltype(_match_17)>::CString>(_match_17._data)) {
                             return ((std::string("(") + (expr)) + std::string(").c_str()"));
                         }
                         else {
@@ -1536,11 +1784,11 @@ struct CppCodegen {
                 }
                 if ((kind == std::string("int"))) {
                     {
-                        const auto& _match_12 = expected;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_12)>::Int32>(_match_12._data)) {
+                        const auto& _match_18 = expected;
+                        if (std::holds_alternative<std::decay_t<decltype(_match_18)>::Int32>(_match_18._data)) {
                             return ((std::string("static_cast<int32_t>(") + (expr)) + std::string(")"));
                         }
-                        else if (std::holds_alternative<std::decay_t<decltype(_match_12)>::USize>(_match_12._data)) {
+                        else if (std::holds_alternative<std::decay_t<decltype(_match_18)>::USize>(_match_18._data)) {
                             return ((std::string("static_cast<size_t>(") + (expr)) + std::string(")"));
                         }
                         else {
@@ -1550,8 +1798,8 @@ struct CppCodegen {
                 }
                 if ((kind == std::string("float"))) {
                     {
-                        const auto& _match_13 = expected;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_13)>::Float32>(_match_13._data)) {
+                        const auto& _match_19 = expected;
+                        if (std::holds_alternative<std::decay_t<decltype(_match_19)>::Float32>(_match_19._data)) {
                             return ((std::string("static_cast<float>(") + (expr)) + std::string(")"));
                         }
                         else {
@@ -1561,8 +1809,8 @@ struct CppCodegen {
                 }
                 return expr;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_9)>::Variable>(_match_9._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_9)>::Variable>(_match_9._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Variable>(_match_15._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Variable>(_match_15._data);
                 auto& tok = _v.name;
                 if ((this->var_types.count(tok.lexeme) > 0)) {
                     TypeNode vt = this->var_types[tok.lexeme];
@@ -1578,33 +1826,9 @@ struct CppCodegen {
 
     std::string emit_type(const TypeNode& t) {
         {
-            const auto& _match_14 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Int>(_match_14._data)) {
-                return std::string("int64_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Float>(_match_14._data)) {
-                return std::string("double");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Str>(_match_14._data)) {
-                return std::string("std::string");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Bool>(_match_14._data)) {
-                return std::string("bool");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Void>(_match_14._data)) {
-                return std::string("void");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Auto>(_match_14._data)) {
-                return std::string("auto");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Dynamic>(_match_14._data)) {
-                return std::string("std::any");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::NullType>(_match_14._data)) {
-                return std::string("std::nullptr_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Custom>(_match_14._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_14)>::Custom>(_match_14._data);
+            const auto& _match_20 = t;
+            if (std::holds_alternative<std::decay_t<decltype(_match_20)>::Custom>(_match_20._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_20)>::Custom>(_match_20._data);
                 auto& name = _v.name;
                 auto& type_args = _v.type_args;
                 if ((static_cast<int64_t>(type_args.size()) > INT64_C(0))) {
@@ -1619,55 +1843,34 @@ struct CppCodegen {
                 }
                 return name;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Array>(_match_14._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_14)>::Array>(_match_14._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_20)>::Array>(_match_20._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_20)>::Array>(_match_20._data);
                 auto& inner = *_v.inner;
                 return ((std::string("std::vector<") + ((*this).emit_type(inner))) + std::string(">"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::HashSet>(_match_14._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_14)>::HashSet>(_match_14._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_20)>::HashSet>(_match_20._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_20)>::HashSet>(_match_20._data);
                 auto& inner = *_v.inner;
                 return ((std::string("std::unordered_set<") + ((*this).emit_type(inner))) + std::string(">"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::HashMap>(_match_14._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_14)>::HashMap>(_match_14._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_20)>::HashMap>(_match_20._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_20)>::HashMap>(_match_20._data);
                 auto& key_type = *_v.key_type;
                 auto& value_type = *_v.value_type;
                 return ((((std::string("std::unordered_map<") + ((*this).emit_type(key_type))) + std::string(", ")) + ((*this).emit_type(value_type))) + std::string(">"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Nullable>(_match_14._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_14)>::Nullable>(_match_14._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_20)>::Nullable>(_match_20._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_20)>::Nullable>(_match_20._data);
                 auto& inner = *_v.inner;
                 return ((std::string("std::optional<") + ((*this).emit_type(inner))) + std::string(">"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Int8>(_match_14._data)) {
-                return std::string("int8_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Int16>(_match_14._data)) {
-                return std::string("int16_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Int32>(_match_14._data)) {
-                return std::string("int32_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Float32>(_match_14._data)) {
-                return std::string("float");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::USize>(_match_14._data)) {
-                return std::string("size_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::CString>(_match_14._data)) {
-                return std::string("const char*");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Ptr>(_match_14._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_14)>::Ptr>(_match_14._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_20)>::Ptr>(_match_20._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_20)>::Ptr>(_match_20._data);
                 auto& inner = *_v.inner;
                 return ((std::string("") + ((*this).emit_type(inner))) + std::string("*"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Bytes>(_match_14._data)) {
-                return std::string("std::vector<uint8_t>");
-            }
             else {
-                return std::string("auto");
+                return type_to_cpp(t);
             }
         }
     }
@@ -1796,28 +1999,115 @@ struct CppCodegen {
         return std::string("");
     }
 
+    std::string emit_cast(const Expr& expr, const TypeNode& target_type, bool m) {
+        std::string ex = (*this).emit_expr(expr, m);
+        std::string t = (*this).emit_type(target_type);
+        if ((*this).is_dynamic_expression(expr)) {
+            return ((((std::string("std::any_cast<") + (t)) + std::string(">(")) + (ex)) + std::string(")"));
+        }
+        TypeNode src = (*this).infer_source_type(expr);
+        if (is_string_type(src)) {
+            if (is_integer_type(target_type)) {
+                {
+                    const auto& _match_21 = target_type;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_21)>::Int>(_match_21._data)) {
+                        return ((std::string("__str_to_int(") + (ex)) + std::string(")"));
+                    }
+                    else {
+                        return ((((std::string("static_cast<") + (t)) + std::string(">(__str_to_int(")) + (ex)) + std::string("))"));
+                    }
+                }
+            }
+            if (is_float_type(target_type)) {
+                {
+                    const auto& _match_22 = target_type;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_22)>::Float>(_match_22._data)) {
+                        return ((std::string("__str_to_float(") + (ex)) + std::string(")"));
+                    }
+                    else {
+                        return ((((std::string("static_cast<") + (t)) + std::string(">(__str_to_float(")) + (ex)) + std::string("))"));
+                    }
+                }
+            }
+            if (is_bytes_type(target_type)) {
+                return ((std::string("__bytes_from_string(") + (ex)) + std::string(")"));
+            }
+        }
+        if (is_string_type(target_type)) {
+            if (is_integer_type(src) || is_float_type(src)) {
+                return ((std::string("to_string(") + (ex)) + std::string(")"));
+            }
+            {
+                const auto& _match_23 = src;
+                if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Bool>(_match_23._data)) {
+                    return ((std::string("to_string(") + (ex)) + std::string(")"));
+                }
+                else {
+                    /* pass */
+                }
+            }
+        }
+        if (is_bytes_type(src) && is_string_type(target_type)) {
+            return ((std::string("__bytes_to_string(") + (ex)) + std::string(")"));
+        }
+        if (is_string_type(src) && is_bytes_type(target_type)) {
+            return ((std::string("__bytes_from_string(") + (ex)) + std::string(")"));
+        }
+        return ((((std::string("static_cast<") + (t)) + std::string(">(")) + (ex)) + std::string(")"));
+    }
+
+    std::string emit_member_prefix(const Expr& object, bool m) {
+        if (this->in_extend) {
+            {
+                const auto& _match_24 = object;
+                if (std::holds_alternative<std::decay_t<decltype(_match_24)>::This>(_match_24._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_24)>::This>(_match_24._data);
+                    auto& kw = _v.keyword;
+                    return std::string("self.");
+                }
+                else {
+                    return ((std::string("") + ((*this).emit_expr(object, m))) + std::string("."));
+                }
+            }
+        }
+        if (m) {
+            {
+                const auto& _match_25 = object;
+                if (std::holds_alternative<std::decay_t<decltype(_match_25)>::This>(_match_25._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_25)>::This>(_match_25._data);
+                    auto& kw = _v.keyword;
+                    return std::string("this->");
+                }
+                else {
+                    return ((std::string("") + ((*this).emit_expr(object, m))) + std::string("."));
+                }
+            }
+        }
+        return ((std::string("") + ((*this).emit_expr(object, m))) + std::string("."));
+    }
+
     std::string emit_expr(const Expr& e, bool m) {
         {
-            const auto& _match_15 = e;
-            if (_match_15._tag == "None") {
+            const auto& _match_26 = e;
+            if (_match_26._tag == "None") {
                 return std::string("");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Literal>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Literal>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Literal>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Literal>(_match_26._data);
                 auto& kind = _v.kind;
                 auto& value = _v.value;
                 return (*this).emit_literal(kind, value);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Unary>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Unary>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Unary>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Unary>(_match_26._data);
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 std::string r = (*this).emit_expr(right, m);
                 std::string op_str = (*this).token_to_cpp_op(op);
                 return ((((std::string("(") + (op_str)) + std::string("")) + (r)) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Binary>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Binary>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Binary>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Binary>(_match_26._data);
                 auto& left = *_v.left;
                 auto& op = _v.op;
                 auto& right = *_v.right;
@@ -1826,24 +2116,24 @@ struct CppCodegen {
                 std::string op_str = (*this).token_to_cpp_op(op);
                 return ((((((std::string("(") + (l)) + std::string(" ")) + (op_str)) + std::string(" ")) + (r)) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Grouping>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Grouping>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Grouping>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Grouping>(_match_26._data);
                 auto& inner = *_v.inner;
                 return ((std::string("(") + ((*this).emit_expr(inner, m))) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Variable>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Variable>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Variable>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Variable>(_match_26._data);
                 auto& name = _v.name;
                 return name.lexeme;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Assign>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Assign>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Assign>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Assign>(_match_26._data);
                 auto& name = _v.name;
                 auto& value = *_v.value;
                 return ((((std::string("") + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Logical>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Logical>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Logical>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Logical>(_match_26._data);
                 auto& left = *_v.left;
                 auto& op = _v.op;
                 auto& right = *_v.right;
@@ -1855,31 +2145,31 @@ struct CppCodegen {
                 }
                 return ((((((std::string("") + (l)) + std::string(" ")) + (op_str)) + std::string(" ")) + (r)) + std::string(""));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Call>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Call>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Call>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Call>(_match_26._data);
                 auto& callee = *_v.callee;
                 auto& paren = _v.paren;
                 auto& args = _v.args;
                 auto& arg_names = _v.arg_names;
                 return (*this).emit_call_expr(callee, args, arg_names, m);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Index>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Index>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Index>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Index>(_match_26._data);
                 auto& object = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& index = *_v.index;
                 return ((((std::string("") + ((*this).emit_expr(object, m))) + std::string("[")) + ((*this).emit_expr(index, m))) + std::string("]"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::IndexSet>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::IndexSet>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::IndexSet>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::IndexSet>(_match_26._data);
                 auto& object = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& index = *_v.index;
                 auto& value = *_v.value;
                 return ((((((std::string("") + ((*this).emit_expr(object, m))) + std::string("[")) + ((*this).emit_expr(index, m))) + std::string("] = ")) + ((*this).emit_expr(value, m))) + std::string(""));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Vector>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Vector>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Vector>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Vector>(_match_26._data);
                 auto& elements = _v.elements;
                 if ((static_cast<int64_t>(elements.size()) == INT64_C(0))) {
                     return std::string("{}");
@@ -1890,8 +2180,8 @@ struct CppCodegen {
                 }
                 return ((std::string("std::vector{") + (lv_join(elems, std::string(", ")))) + std::string("}"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Map>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Map>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Map>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Map>(_match_26._data);
                 auto& keys = _v.keys;
                 auto& values = _v.values;
                 std::vector<std::string> entries = {};
@@ -1900,80 +2190,28 @@ struct CppCodegen {
                 }
                 return ((std::string("{{") + (lv_join(entries, std::string(", ")))) + std::string("}}"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Get>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Get>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Get>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Get>(_match_26._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
-                if (this->in_extend) {
-                    {
-                        const auto& _match_16 = object;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_16)>::This>(_match_16._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_16)>::This>(_match_16._data);
-                            auto& kw = _v.keyword;
-                            return ((std::string("self.") + (name.lexeme)) + std::string(""));
-                        }
-                        else {
-                            return ((((std::string("") + ((*this).emit_expr(object, m))) + std::string(".")) + (name.lexeme)) + std::string(""));
-                        }
-                    }
-                }
-                if (m) {
-                    {
-                        const auto& _match_17 = object;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_17)>::This>(_match_17._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_17)>::This>(_match_17._data);
-                            auto& kw = _v.keyword;
-                            return ((std::string("this->") + (name.lexeme)) + std::string(""));
-                        }
-                        else {
-                            return ((((std::string("") + ((*this).emit_expr(object, m))) + std::string(".")) + (name.lexeme)) + std::string(""));
-                        }
-                    }
-                }
-                return ((((std::string("") + ((*this).emit_expr(object, m))) + std::string(".")) + (name.lexeme)) + std::string(""));
+                return ((((std::string("") + ((*this).emit_member_prefix(object, m))) + std::string("")) + (name.lexeme)) + std::string(""));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Set>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Set>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Set>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Set>(_match_26._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 auto& value = *_v.value;
-                if (this->in_extend) {
-                    {
-                        const auto& _match_18 = object;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_18)>::This>(_match_18._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_18)>::This>(_match_18._data);
-                            auto& kw = _v.keyword;
-                            return ((((std::string("self.") + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
-                        }
-                        else {
-                            return ((((((std::string("") + ((*this).emit_expr(object, m))) + std::string(".")) + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
-                        }
-                    }
-                }
-                if (m) {
-                    {
-                        const auto& _match_19 = object;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_19)>::This>(_match_19._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_19)>::This>(_match_19._data);
-                            auto& kw = _v.keyword;
-                            return ((((std::string("this->") + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
-                        }
-                        else {
-                            return ((((((std::string("") + ((*this).emit_expr(object, m))) + std::string(".")) + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
-                        }
-                    }
-                }
-                return ((((((std::string("") + ((*this).emit_expr(object, m))) + std::string(".")) + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
+                return ((((((std::string("") + ((*this).emit_member_prefix(object, m))) + std::string("")) + (name.lexeme)) + std::string(" = ")) + ((*this).emit_expr(value, m))) + std::string(""));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::StaticGet>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::StaticGet>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::StaticGet>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::StaticGet>(_match_26._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 if (m) {
                     {
-                        const auto& _match_20 = object;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_20)>::This>(_match_20._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_20)>::This>(_match_20._data);
+                        const auto& _match_27 = object;
+                        if (std::holds_alternative<std::decay_t<decltype(_match_27)>::This>(_match_27._data)) {
+                            auto& _v = std::get<std::decay_t<decltype(_match_27)>::This>(_match_27._data);
                             auto& kw = _v.keyword;
                             return ((std::string("(*this)::") + (name.lexeme)) + std::string(""));
                         }
@@ -1984,96 +2222,43 @@ struct CppCodegen {
                 }
                 return ((((std::string("") + ((*this).emit_expr(object, m))) + std::string("::")) + (name.lexeme)) + std::string(""));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::This>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::This>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::This>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::This>(_match_26._data);
                 auto& keyword = _v.keyword;
                 if (this->in_extend) {
                     return std::string("self");
                 }
                 return std::string("(*this)");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Cast>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Cast>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Cast>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Cast>(_match_26._data);
                 auto& expr = *_v.expr;
                 auto& target_type = _v.target_type;
-                std::string ex = (*this).emit_expr(expr, m);
-                std::string t = (*this).emit_type(target_type);
-                if ((*this).is_dynamic_expression(expr)) {
-                    return ((((std::string("std::any_cast<") + (t)) + std::string(">(")) + (ex)) + std::string(")"));
-                }
-                TypeNode src = (*this).infer_source_type(expr);
-                if ((*this).is_string_type(src)) {
-                    if ((*this).is_integer_type(target_type)) {
-                        {
-                            const auto& _match_21 = target_type;
-                            if (std::holds_alternative<std::decay_t<decltype(_match_21)>::Int>(_match_21._data)) {
-                                return ((std::string("__str_to_int(") + (ex)) + std::string(")"));
-                            }
-                            else {
-                                return ((((std::string("static_cast<") + (t)) + std::string(">(__str_to_int(")) + (ex)) + std::string("))"));
-                            }
-                        }
-                    }
-                    if ((*this).is_float_type(target_type)) {
-                        {
-                            const auto& _match_22 = target_type;
-                            if (std::holds_alternative<std::decay_t<decltype(_match_22)>::Float>(_match_22._data)) {
-                                return ((std::string("__str_to_float(") + (ex)) + std::string(")"));
-                            }
-                            else {
-                                return ((((std::string("static_cast<") + (t)) + std::string(">(__str_to_float(")) + (ex)) + std::string("))"));
-                            }
-                        }
-                    }
-                    if ((*this).is_bytes_type(target_type)) {
-                        return ((std::string("__bytes_from_string(") + (ex)) + std::string(")"));
-                    }
-                }
-                if ((*this).is_string_type(target_type)) {
-                    if ((*this).is_integer_type(src) || (*this).is_float_type(src)) {
-                        return ((std::string("to_string(") + (ex)) + std::string(")"));
-                    }
-                    {
-                        const auto& _match_23 = src;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_23)>::Bool>(_match_23._data)) {
-                            return ((std::string("to_string(") + (ex)) + std::string(")"));
-                        }
-                        else {
-                            /* pass */
-                        }
-                    }
-                }
-                if ((*this).is_bytes_type(src) && (*this).is_string_type(target_type)) {
-                    return ((std::string("__bytes_to_string(") + (ex)) + std::string(")"));
-                }
-                if ((*this).is_string_type(src) && (*this).is_bytes_type(target_type)) {
-                    return ((std::string("__bytes_from_string(") + (ex)) + std::string(")"));
-                }
-                return ((((std::string("static_cast<") + (t)) + std::string(">(")) + (ex)) + std::string(")"));
+                return (*this).emit_cast(expr, target_type, m);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Throw>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Throw>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Throw>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Throw>(_match_26._data);
                 auto& expr = *_v.expr;
                 return ((std::string("throw std::runtime_error(") + ((*this).emit_expr(expr, m))) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Lambda>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Lambda>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Lambda>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Lambda>(_match_26._data);
                 auto& params = _v.params;
                 auto& body = *_v.body;
                 return (*this).emit_lambda(params, body, m);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::Own>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::Own>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Own>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::Own>(_match_26._data);
                 auto& expr = *_v.expr;
                 return ((std::string("std::move(") + ((*this).emit_expr(expr, m))) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::AddressOf>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::AddressOf>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::AddressOf>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::AddressOf>(_match_26._data);
                 auto& expr = *_v.expr;
                 return ((std::string("&(") + ((*this).emit_expr(expr, m))) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_15)>::BlockLambda>(_match_15._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_15)>::BlockLambda>(_match_15._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_26)>::BlockLambda>(_match_26._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_26)>::BlockLambda>(_match_26._data);
                 auto& params = _v.params;
                 auto& body_id = _v.body_id;
                 return (*this).emit_block_lambda(params, body_id, m);
@@ -2113,14 +2298,14 @@ struct CppCodegen {
 
     bool is_dynamic_expression(const Expr& e) {
         {
-            const auto& _match_24 = e;
-            if (std::holds_alternative<std::decay_t<decltype(_match_24)>::Variable>(_match_24._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_24)>::Variable>(_match_24._data);
+            const auto& _match_28 = e;
+            if (std::holds_alternative<std::decay_t<decltype(_match_28)>::Variable>(_match_28._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_28)>::Variable>(_match_28._data);
                 auto& name = _v.name;
                 return (*this).is_dynamic_var(name.lexeme);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_24)>::Index>(_match_24._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_24)>::Index>(_match_24._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_28)>::Index>(_match_28._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_28)>::Index>(_match_28._data);
                 auto& object = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& index = *_v.index;
@@ -2194,18 +2379,41 @@ struct CppCodegen {
         return result;
     }
 
+    std::vector<std::string> emit_args(const std::vector<Expr>& args, bool m) {
+        std::vector<std::string> result = {};
+        for (const auto& a : args) {
+            result.push_back((*this).emit_expr(a, m));
+        }
+        return result;
+    }
+
+    void apply_extern_wrapping(std::vector<std::string>& arg_strs, const std::vector<Expr>& args, const std::string& fn_name) {
+        if ((this->extern_fn_params.count(fn_name) > 0)) {
+            std::vector<Param> eparams = this->extern_fn_params[fn_name];
+            for (int64_t i = INT64_C(0); i < static_cast<int64_t>(arg_strs.size()); i++) {
+                if ((i < static_cast<int64_t>(eparams.size()))) {
+                    arg_strs[i] = (*this).wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type);
+                }
+            }
+        }
+    }
+
+    std::string resolve_fn_name(const std::string& name) {
+        if ((this->extern_fn_names.count(name) > 0)) {
+            return this->extern_fn_names[name];
+        }
+        return name;
+    }
+
     std::string emit_call_expr(const Expr& callee, const std::vector<Expr>& args, const std::vector<std::string>& arg_names, bool in_method) {
         {
-            const auto& _match_25 = callee;
-            if (std::holds_alternative<std::decay_t<decltype(_match_25)>::Get>(_match_25._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_25)>::Get>(_match_25._data);
+            const auto& _match_29 = callee;
+            if (std::holds_alternative<std::decay_t<decltype(_match_29)>::Get>(_match_29._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_29)>::Get>(_match_29._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 std::string obj = (*this).emit_expr(object, in_method);
-                std::vector<std::string> arg_strs = {};
-                for (const auto& a : args) {
-                    arg_strs.push_back((*this).emit_expr(a, in_method));
-                }
+                std::vector<std::string> arg_strs = (*this).emit_args(args, in_method);
                 std::string remapped = (*this).try_remap_method(obj, name.lexeme, arg_strs);
                 if ((remapped != std::string(""))) {
                     return remapped;
@@ -2216,19 +2424,16 @@ struct CppCodegen {
                 }
                 return ((((((std::string("") + (obj)) + std::string(".")) + (name.lexeme)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_25)>::StaticGet>(_match_25._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_25)>::StaticGet>(_match_25._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::StaticGet>(_match_29._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_29)>::StaticGet>(_match_29._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 std::string obj = (*this).emit_expr(object, in_method);
-                std::vector<std::string> arg_strs = {};
-                for (const auto& a : args) {
-                    arg_strs.push_back((*this).emit_expr(a, in_method));
-                }
+                std::vector<std::string> arg_strs = (*this).emit_args(args, in_method);
                 {
-                    const auto& _match_26 = object;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_26)>::Variable>(_match_26._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_26)>::Variable>(_match_26._data);
+                    const auto& _match_30 = object;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_30)>::Variable>(_match_30._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_30)>::Variable>(_match_30._data);
                         auto& tok = _v.name;
                         if ((*this).is_known_enum(tok.lexeme)) {
                             return ((((((std::string("") + (obj)) + std::string("::make_")) + (name.lexeme)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
@@ -2240,8 +2445,8 @@ struct CppCodegen {
                 }
                 return ((((((std::string("") + (obj)) + std::string("::")) + (name.lexeme)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_25)>::Variable>(_match_25._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_25)>::Variable>(_match_25._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::Variable>(_match_29._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_29)>::Variable>(_match_29._data);
                 auto& tok = _v.name;
                 if ((this->fn_params.count(tok.lexeme) > 0)) {
                     std::vector<Param> fparams = this->fn_params[tok.lexeme];
@@ -2250,51 +2455,19 @@ struct CppCodegen {
                         fdefaults = this->fn_defaults[tok.lexeme];
                     }
                     std::vector<std::string> arg_strs = (*this).resolve_named_args(args, arg_names, fparams, fdefaults, in_method);
-                    if ((this->extern_fn_params.count(tok.lexeme) > 0)) {
-                        std::vector<Param> eparams = this->extern_fn_params[tok.lexeme];
-                        for (int64_t i = INT64_C(0); i < static_cast<int64_t>(arg_strs.size()); i++) {
-                            if ((i < static_cast<int64_t>(eparams.size()))) {
-                                arg_strs[i] = (*this).wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type);
-                            }
-                        }
-                    }
-                    std::string fn_name = tok.lexeme;
-                    if ((this->extern_fn_names.count(tok.lexeme) > 0)) {
-                        fn_name = this->extern_fn_names[tok.lexeme];
-                    }
-                    return ((((std::string("") + (fn_name)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
+                    (*this).apply_extern_wrapping(arg_strs, args, tok.lexeme);
+                    return ((((std::string("") + ((*this).resolve_fn_name(tok.lexeme))) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
                 }
-                std::vector<std::string> arg_strs = {};
-                for (const auto& a : args) {
-                    arg_strs.push_back((*this).emit_expr(a, in_method));
-                }
+                std::vector<std::string> arg_strs = (*this).emit_args(args, in_method);
                 if ((tok.lexeme == std::string("exit"))) {
                     return ((std::string("lv_exit(") + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
                 }
-                if ((this->extern_fn_params.count(tok.lexeme) > 0)) {
-                    std::vector<Param> eparams = this->extern_fn_params[tok.lexeme];
-                    for (int64_t i = INT64_C(0); i < static_cast<int64_t>(arg_strs.size()); i++) {
-                        if ((i < static_cast<int64_t>(eparams.size()))) {
-                            arg_strs[i] = (*this).wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type);
-                        }
-                    }
-                    std::string fn_name = tok.lexeme;
-                    if ((this->extern_fn_names.count(tok.lexeme) > 0)) {
-                        fn_name = this->extern_fn_names[tok.lexeme];
-                    }
-                    return ((((std::string("") + (fn_name)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
-                }
-                if ((this->extern_fn_names.count(tok.lexeme) > 0)) {
-                    return ((((std::string("") + (this->extern_fn_names[tok.lexeme])) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
-                }
-                return ((((std::string("") + (tok.lexeme)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
+                (*this).apply_extern_wrapping(arg_strs, args, tok.lexeme);
+                return ((((std::string("") + ((*this).resolve_fn_name(tok.lexeme))) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
             }
             else {
                 std::string func = (*this).emit_expr(callee, in_method);
-                std::vector<std::string> arg_strs = {};
-                for (const auto& a : args) {
-                    arg_strs.push_back((*this).emit_expr(a, in_method));
-                }
+                std::vector<std::string> arg_strs = (*this).emit_args(args, in_method);
                 return ((((std::string("") + (func)) + std::string("(")) + (lv_join(arg_strs, std::string(", ")))) + std::string(")"));
             }
         }
@@ -2467,25 +2640,25 @@ struct CppCodegen {
 
     std::string get_type_category(const Expr& object) {
         {
-            const auto& _match_27 = object;
-            if (std::holds_alternative<std::decay_t<decltype(_match_27)>::Variable>(_match_27._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_27)>::Variable>(_match_27._data);
+            const auto& _match_31 = object;
+            if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Variable>(_match_31._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Variable>(_match_31._data);
                 auto& tok = _v.name;
                 if ((this->var_types.count(tok.lexeme) > 0)) {
                     TypeNode t = this->var_types[tok.lexeme];
                     return (*this).type_node_to_category(t);
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_27)>::Call>(_match_27._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_27)>::Call>(_match_27._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Call>(_match_31._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Call>(_match_31._data);
                 auto& callee = *_v.callee;
                 auto& paren = _v.paren;
                 auto& args = _v.args;
                 auto& arg_names = _v.arg_names;
                 {
-                    const auto& _match_28 = callee;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_28)>::Get>(_match_28._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_28)>::Get>(_match_28._data);
+                    const auto& _match_32 = callee;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_32)>::Get>(_match_32._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_32)>::Get>(_match_32._data);
                         auto& inner_obj = *_v.object;
                         auto& method_name = _v.name;
                         std::string obj_cat = (*this).get_type_category(inner_obj);
@@ -2507,31 +2680,31 @@ struct CppCodegen {
 
     std::string type_node_to_category(const TypeNode& t) {
         {
-            const auto& _match_29 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_29)>::Array>(_match_29._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_29)>::Array>(_match_29._data);
+            const auto& _match_33 = t;
+            if (std::holds_alternative<std::decay_t<decltype(_match_33)>::Array>(_match_33._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_33)>::Array>(_match_33._data);
                 auto& inner = *_v.inner;
                 return std::string("vector");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::HashMap>(_match_29._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_29)>::HashMap>(_match_29._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_33)>::HashMap>(_match_33._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_33)>::HashMap>(_match_33._data);
                 auto& k = *_v.key_type;
                 auto& v = *_v.value_type;
                 return std::string("hashmap");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::HashSet>(_match_29._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_29)>::HashSet>(_match_29._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_33)>::HashSet>(_match_33._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_33)>::HashSet>(_match_33._data);
                 auto& inner = *_v.inner;
                 return std::string("hashset");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::Str>(_match_29._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_33)>::Str>(_match_33._data)) {
                 return std::string("string");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::Bytes>(_match_29._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_33)>::Bytes>(_match_33._data)) {
                 return std::string("bytes");
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_29)>::Custom>(_match_29._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_29)>::Custom>(_match_29._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_33)>::Custom>(_match_33._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_33)>::Custom>(_match_33._data);
                 auto& name = _v.name;
                 auto& type_args = _v.type_args;
                 return name;
@@ -2585,9 +2758,9 @@ struct CppCodegen {
             std::vector<Stmt> methods = this->extend_methods[obj_cat];
             for (const auto& ext_m : methods) {
                 {
-                    const auto& _match_30 = ext_m;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_30)>::Function>(_match_30._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_30)>::Function>(_match_30._data);
+                    const auto& _match_34 = ext_m;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_34)>::Function>(_match_34._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_34)>::Function>(_match_34._data);
                         auto& mname = _v.name;
                         auto& mparams = _v.params;
                         auto& mret = _v.return_type;
@@ -2617,9 +2790,9 @@ struct CppCodegen {
 
     TypeNode infer_source_type(const Expr& e) {
         {
-            const auto& _match_31 = e;
-            if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Literal>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Literal>(_match_31._data);
+            const auto& _match_35 = e;
+            if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Literal>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Literal>(_match_35._data);
                 auto& kind = _v.kind;
                 auto& value = _v.value;
                 if ((kind == std::string("int"))) {
@@ -2642,55 +2815,55 @@ struct CppCodegen {
                 }
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Variable>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Variable>(_match_31._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Variable>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Variable>(_match_35._data);
                 auto& tok = _v.name;
                 if ((this->var_types.count(tok.lexeme) > 0)) {
                     return this->var_types[tok.lexeme];
                 }
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Grouping>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Grouping>(_match_31._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Grouping>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Grouping>(_match_35._data);
                 auto& inner = *_v.inner;
                 return (*this).infer_source_type(inner);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Cast>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Cast>(_match_31._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Cast>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Cast>(_match_35._data);
                 auto& expr = *_v.expr;
                 auto& target_type = _v.target_type;
                 return target_type;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Unary>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Unary>(_match_31._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Unary>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Unary>(_match_35._data);
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 return (*this).infer_source_type(right);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Call>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Call>(_match_31._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Call>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Call>(_match_35._data);
                 auto& callee = *_v.callee;
                 auto& paren = _v.paren;
                 auto& args = _v.args;
                 auto& arg_names = _v.arg_names;
                 {
-                    const auto& _match_32 = callee;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_32)>::Get>(_match_32._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_32)>::Get>(_match_32._data);
+                    const auto& _match_36 = callee;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_36)>::Get>(_match_36._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_36)>::Get>(_match_36._data);
                         auto& obj = *_v.object;
                         auto& method_tok = _v.name;
                         TypeNode obj_type = (*this).infer_source_type(obj);
                         std::string method = method_tok.lexeme;
                         if ((method == std::string("at"))) {
                             {
-                                const auto& _match_33 = obj_type;
-                                if (std::holds_alternative<std::decay_t<decltype(_match_33)>::Array>(_match_33._data)) {
-                                    auto& _v = std::get<std::decay_t<decltype(_match_33)>::Array>(_match_33._data);
+                                const auto& _match_37 = obj_type;
+                                if (std::holds_alternative<std::decay_t<decltype(_match_37)>::Array>(_match_37._data)) {
+                                    auto& _v = std::get<std::decay_t<decltype(_match_37)>::Array>(_match_37._data);
                                     auto& inner = *_v.inner;
                                     return inner;
                                 }
-                                else if (std::holds_alternative<std::decay_t<decltype(_match_33)>::Custom>(_match_33._data)) {
-                                    auto& _v = std::get<std::decay_t<decltype(_match_33)>::Custom>(_match_33._data);
+                                else if (std::holds_alternative<std::decay_t<decltype(_match_37)>::Custom>(_match_37._data)) {
+                                    auto& _v = std::get<std::decay_t<decltype(_match_37)>::Custom>(_match_37._data);
                                     auto& name = _v.name;
                                     auto& targs = _v.type_args;
                                     if ((static_cast<int64_t>(targs.size()) > INT64_C(0))) {
@@ -2717,21 +2890,21 @@ struct CppCodegen {
                 }
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_31)>::Index>(_match_31._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_31)>::Index>(_match_31._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Index>(_match_35._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_35)>::Index>(_match_35._data);
                 auto& obj = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& idx = *_v.index;
                 TypeNode obj_type = (*this).infer_source_type(obj);
                 {
-                    const auto& _match_34 = obj_type;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_34)>::Array>(_match_34._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_34)>::Array>(_match_34._data);
+                    const auto& _match_38 = obj_type;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_38)>::Array>(_match_38._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_38)>::Array>(_match_38._data);
                         auto& inner = *_v.inner;
                         return inner;
                     }
-                    else if (std::holds_alternative<std::decay_t<decltype(_match_34)>::Custom>(_match_34._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_34)>::Custom>(_match_34._data);
+                    else if (std::holds_alternative<std::decay_t<decltype(_match_38)>::Custom>(_match_38._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_38)>::Custom>(_match_38._data);
                         auto& name = _v.name;
                         auto& targs = _v.type_args;
                         if ((static_cast<int64_t>(targs.size()) > INT64_C(0))) {
@@ -2747,69 +2920,6 @@ struct CppCodegen {
             }
             else {
                 return TypeNode::make_Auto();
-            }
-        }
-    }
-
-    bool is_integer_type(const TypeNode& t) {
-        {
-            const auto& _match_35 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Int>(_match_35._data)) {
-                return true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Int8>(_match_35._data)) {
-                return true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Int16>(_match_35._data)) {
-                return true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::Int32>(_match_35._data)) {
-                return true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_35)>::USize>(_match_35._data)) {
-                return true;
-            }
-            else {
-                return false;
-            }
-        }
-    }
-
-    bool is_float_type(const TypeNode& t) {
-        {
-            const auto& _match_36 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_36)>::Float>(_match_36._data)) {
-                return true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_36)>::Float32>(_match_36._data)) {
-                return true;
-            }
-            else {
-                return false;
-            }
-        }
-    }
-
-    bool is_string_type(const TypeNode& t) {
-        {
-            const auto& _match_37 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_37)>::Str>(_match_37._data)) {
-                return true;
-            }
-            else {
-                return false;
-            }
-        }
-    }
-
-    bool is_bytes_type(const TypeNode& t) {
-        {
-            const auto& _match_38 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_38)>::Bytes>(_match_38._data)) {
-                return true;
-            }
-            else {
-                return false;
             }
         }
     }
@@ -3452,6 +3562,40 @@ struct CppCodegen {
         }
     }
 
+    bool has_method_named(const std::vector<Stmt>& methods, std::string name) {
+        for (const auto& m : methods) {
+            {
+                const auto& _match_55 = m;
+                if (std::holds_alternative<std::decay_t<decltype(_match_55)>::Function>(_match_55._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_55)>::Function>(_match_55._data);
+                    auto& mname = _v.name;
+                    auto& mparams = _v.params;
+                    auto& mret = _v.return_type;
+                    auto& mbody = _v.body;
+                    auto& mi = _v.is_inline;
+                    auto& mc = _v.comptime_mode;
+                    auto& ms = _v.is_static;
+                    auto& mv = _v.visibility;
+                    auto& mtp = _v.type_params;
+                    auto& m_defs = _v.param_defaults;
+                    if ((mname.lexeme == name)) {
+                        return true;
+                    }
+                }
+                else {
+                    /* pass */
+                }
+            }
+        }
+        return false;
+    }
+
+    void emit_print_ops(const std::string& full_name, const std::string& tmpl_line, const std::string& to_str_expr) {
+        this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("void print(const ")) + (full_name)) + std::string("& _v) { std::cout << ")) + (to_str_expr)) + std::string(" << std::endl; }\n")));
+        this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const std::string& _s, const ")) + (full_name)) + std::string("& _v) { return _s + ")) + (to_str_expr)) + std::string("; }\n")));
+        this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const ")) + (full_name)) + std::string("& _v, const std::string& _s) { return ")) + (to_str_expr)) + std::string(" + _s; }\n\n")));
+    }
+
     void emit_class(const Token& name, const std::vector<Stmt>& body, const std::vector<std::string>& type_params) {
         std::vector<Stmt> init_body = {};
         std::vector<Param> init_params = {};
@@ -3462,9 +3606,9 @@ struct CppCodegen {
         std::vector<std::string> let_field_types = {};
         for (const auto& st : body) {
             {
-                const auto& _match_55 = st;
-                if (std::holds_alternative<std::decay_t<decltype(_match_55)>::Function>(_match_55._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_55)>::Function>(_match_55._data);
+                const auto& _match_56 = st;
+                if (std::holds_alternative<std::decay_t<decltype(_match_56)>::Function>(_match_56._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_56)>::Function>(_match_56._data);
                     auto& fname = _v.name;
                     auto& params = _v.params;
                     auto& return_type = _v.return_type;
@@ -3485,8 +3629,8 @@ struct CppCodegen {
                         methods.push_back(st);
                     }
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_55)>::Let>(_match_55._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_55)>::Let>(_match_55._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_56)>::Let>(_match_56._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_56)>::Let>(_match_56._data);
                     auto& fname = _v.name;
                     auto& var_type = _v.var_type;
                     auto& init = _v.initializer;
@@ -3513,21 +3657,21 @@ struct CppCodegen {
             std::vector<std::string> seen = {};
             for (const auto& st : init_body) {
                 {
-                    const auto& _match_56 = st;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_56)>::ExprStmt>(_match_56._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_56)>::ExprStmt>(_match_56._data);
+                    const auto& _match_57 = st;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_57)>::ExprStmt>(_match_57._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_57)>::ExprStmt>(_match_57._data);
                         auto& expr = _v.expr;
                         {
-                            const auto& _match_57 = expr;
-                            if (std::holds_alternative<std::decay_t<decltype(_match_57)>::Set>(_match_57._data)) {
-                                auto& _v = std::get<std::decay_t<decltype(_match_57)>::Set>(_match_57._data);
+                            const auto& _match_58 = expr;
+                            if (std::holds_alternative<std::decay_t<decltype(_match_58)>::Set>(_match_58._data)) {
+                                auto& _v = std::get<std::decay_t<decltype(_match_58)>::Set>(_match_58._data);
                                 auto& object = *_v.object;
                                 auto& prop = _v.name;
                                 auto& value = *_v.value;
                                 {
-                                    const auto& _match_58 = object;
-                                    if (std::holds_alternative<std::decay_t<decltype(_match_58)>::This>(_match_58._data)) {
-                                        auto& _v = std::get<std::decay_t<decltype(_match_58)>::This>(_match_58._data);
+                                    const auto& _match_59 = object;
+                                    if (std::holds_alternative<std::decay_t<decltype(_match_59)>::This>(_match_59._data)) {
+                                        auto& _v = std::get<std::decay_t<decltype(_match_59)>::This>(_match_59._data);
                                         auto& kw = _v.keyword;
                                         bool already = false;
                                         for (const auto& s : seen) {
@@ -3571,41 +3715,13 @@ struct CppCodegen {
         }
         this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("};\n\n")));
-        bool has_to_string = false;
-        for (const auto& m : methods) {
-            {
-                const auto& _match_59 = m;
-                if (std::holds_alternative<std::decay_t<decltype(_match_59)>::Function>(_match_59._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_59)>::Function>(_match_59._data);
-                    auto& mname = _v.name;
-                    auto& mparams = _v.params;
-                    auto& mret = _v.return_type;
-                    auto& mbody = _v.body;
-                    auto& mi = _v.is_inline;
-                    auto& mc = _v.comptime_mode;
-                    auto& ms = _v.is_static;
-                    auto& mv = _v.visibility;
-                    auto& mtp = _v.type_params;
-                    auto& m_defs = _v.param_defaults;
-                    if ((mname.lexeme == std::string("to_string"))) {
-                        has_to_string = true;
-                    }
-                }
-                else {
-                    /* pass */
-                }
-            }
-        }
-        if (has_to_string) {
+        if ((*this).has_method_named(methods, std::string("to_string"))) {
             std::string tmpl_line = (*this).template_prefix(type_params);
             std::string type_suffix = std::string("");
             if ((static_cast<int64_t>(type_params.size()) > INT64_C(0))) {
                 type_suffix = ((std::string("<") + (lv_join(type_params, std::string(", ")))) + std::string(">"));
             }
-            std::string full_name = ((((std::string("") + (name.lexeme)) + std::string("")) + (type_suffix)) + std::string(""));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("")) + ((*this).indent())) + std::string("void print(const ")) + (full_name)) + std::string("& _v) { std::cout << _v.to_string() << std::endl; }\n")));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("")) + ((*this).indent())) + std::string("std::string operator+(const std::string& _s, const ")) + (full_name)) + std::string("& _v) { return _s + _v.to_string(); }\n")));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("")) + ((*this).indent())) + std::string("std::string operator+(const ")) + (full_name)) + std::string("& _v, const std::string& _s) { return _v.to_string() + _s; }\n\n")));
+            (*this).emit_print_ops(((((std::string("") + (name.lexeme)) + std::string("")) + (type_suffix)) + std::string("")), tmpl_line, std::string("_v.to_string()"));
         }
     }
 
@@ -3850,15 +3966,14 @@ struct CppCodegen {
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("}\n")));
         this->indent_level = (this->indent_level - INT64_C(1));
         this->output = (this->output + ((std::string("") + ((*this).indent())) + std::string("};\n\n")));
+        std::string full_type = ((((std::string("") + (enum_name)) + std::string("")) + (type_suffix)) + std::string(""));
         if (has_to_string) {
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("void print(const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e) { std::cout << e.to_string() << std::endl; }\n")));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const std::string& s, const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e) { return s + e.to_string(); }\n")));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e, const std::string& s) { return e.to_string() + s; }\n\n")));
+            (*this).emit_print_ops(full_type, tmpl_line, std::string("_v.to_string()"));
         }
         else {
-            this->output = (this->output + ((((((((std::string("") + (tmpl_line)) + std::string("void print(const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e) { std::cout << \"")) + (enum_name)) + std::string("(\" << e._tag << \")\" << std::endl; }\n")));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const std::string& s, const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e) { return s + e._tag; }\n")));
-            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const ")) + (enum_name)) + std::string("")) + (type_suffix)) + std::string("& e, const std::string& s) { return e._tag + s; }\n\n")));
+            this->output = (this->output + ((((((std::string("") + (tmpl_line)) + std::string("void print(const ")) + (full_type)) + std::string("& _v) { std::cout << \"")) + (enum_name)) + std::string("(\" << _v._tag << \")\" << std::endl; }\n")));
+            this->output = (this->output + ((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const std::string& _s, const ")) + (full_type)) + std::string("& _v) { return _s + _v._tag; }\n")));
+            this->output = (this->output + ((((std::string("") + (tmpl_line)) + std::string("std::string operator+(const ")) + (full_type)) + std::string("& _v, const std::string& _s) { return _v._tag + _s; }\n\n")));
         }
     }
 
@@ -3899,31 +4014,7 @@ struct CppCodegen {
         for (const auto& m : methods) {
             (*this).emit_class_method(name, m);
         }
-        bool has_to_string = false;
-        for (const auto& m : methods) {
-            {
-                const auto& _match_66 = m;
-                if (std::holds_alternative<std::decay_t<decltype(_match_66)>::Function>(_match_66._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_66)>::Function>(_match_66._data);
-                    auto& mname = _v.name;
-                    auto& mparams = _v.params;
-                    auto& mret = _v.return_type;
-                    auto& mbody = _v.body;
-                    auto& mi = _v.is_inline;
-                    auto& mc = _v.comptime_mode;
-                    auto& ms = _v.is_static;
-                    auto& mv = _v.visibility;
-                    auto& mtp = _v.type_params;
-                    auto& m_defs = _v.param_defaults;
-                    if ((mname.lexeme == std::string("to_string"))) {
-                        has_to_string = true;
-                    }
-                }
-                else {
-                    /* pass */
-                }
-            }
-        }
+        bool has_to_string = (*this).has_method_named(methods, std::string("to_string"));
         (*this).emit_enum_operators(enum_name, type_suffix, tmpl_line, has_to_string);
     }
 
@@ -3956,7 +4047,7 @@ struct CppCodegen {
                     keyword = std::string("else if");
                 }
                 first = false;
-                std::string ename = (*this).find_enum_for_variant(arm.pattern_name);
+                std::string ename = find_enum_for_variant(this->known_enums, arm.pattern_name);
                 if ((ename != std::string(""))) {
                     this->output = (this->output + ((((((((((std::string("") + ((*this).indent())) + std::string("")) + (keyword)) + std::string(" (std::holds_alternative<std::decay_t<decltype(")) + (temp)) + std::string(")>::")) + (arm.pattern_name)) + std::string(">(")) + (temp)) + std::string("._data)) {\n")));
                 }
@@ -3974,9 +4065,9 @@ struct CppCodegen {
                                 bool is_self_ref = false;
                                 if ((bi < static_cast<int64_t>(vinfo.types.size()))) {
                                     {
-                                        const auto& _match_67 = vinfo.types[bi];
-                                        if (std::holds_alternative<std::decay_t<decltype(_match_67)>::Custom>(_match_67._data)) {
-                                            auto& _v = std::get<std::decay_t<decltype(_match_67)>::Custom>(_match_67._data);
+                                        const auto& _match_66 = vinfo.types[bi];
+                                        if (std::holds_alternative<std::decay_t<decltype(_match_66)>::Custom>(_match_66._data)) {
+                                            auto& _v = std::get<std::decay_t<decltype(_match_66)>::Custom>(_match_66._data);
                                             auto& n = _v.name;
                                             auto& _ = _v.type_args;
                                             if ((n == ename)) {
@@ -4009,9 +4100,9 @@ struct CppCodegen {
 
     void emit_arm_body(const Stmt& arm_body, bool in_method) {
         {
-            const auto& _match_68 = arm_body;
-            if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Block>(_match_68._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Block>(_match_68._data);
+            const auto& _match_67 = arm_body;
+            if (std::holds_alternative<std::decay_t<decltype(_match_67)>::Block>(_match_67._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_67)>::Block>(_match_67._data);
                 auto& stmts = _v.statements;
                 for (const auto& st : stmts) {
                     (*this).emit_stmt(st, in_method);
@@ -4025,9 +4116,9 @@ struct CppCodegen {
 
     void emit_using_if_public(const std::string& ns, const Stmt& stmt) {
         {
-            const auto& _match_69 = stmt;
-            if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Function>(_match_69._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_69)>::Function>(_match_69._data);
+            const auto& _match_68 = stmt;
+            if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Function>(_match_68._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Function>(_match_68._data);
                 auto& name = _v.name;
                 auto& params = _v.params;
                 auto& return_type = _v.return_type;
@@ -4042,8 +4133,8 @@ struct CppCodegen {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Class>(_match_69._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_69)>::Class>(_match_69._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Class>(_match_68._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Class>(_match_68._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
@@ -4051,8 +4142,8 @@ struct CppCodegen {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Struct>(_match_69._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_69)>::Struct>(_match_69._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Struct>(_match_68._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Struct>(_match_68._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
@@ -4061,8 +4152,8 @@ struct CppCodegen {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Enum>(_match_69._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_69)>::Enum>(_match_69._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Enum>(_match_68._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Enum>(_match_68._data);
                 auto& name = _v.name;
                 auto& variants = _v.variants;
                 auto& methods = _v.methods;
@@ -4072,8 +4163,8 @@ struct CppCodegen {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Const>(_match_69._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_69)>::Const>(_match_69._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Const>(_match_68._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Const>(_match_68._data);
                 auto& name = _v.name;
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
@@ -4083,8 +4174,8 @@ struct CppCodegen {
                     this->output = (this->output + ((((std::string("using ") + (ns)) + std::string("::")) + (name.lexeme)) + std::string(";\n")));
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Let>(_match_69._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_69)>::Let>(_match_69._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_68)>::Let>(_match_68._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_68)>::Let>(_match_68._data);
                 auto& name = _v.name;
                 auto& var_type = _v.var_type;
                 auto& initializer = _v.initializer;
@@ -4109,9 +4200,9 @@ struct CppCodegen {
         this->indent_level = INT64_C(1);
         for (const auto& stmt : this->module_stmts[index]) {
             {
-                const auto& _match_70 = stmt;
-                if (std::holds_alternative<std::decay_t<decltype(_match_70)>::Function>(_match_70._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_70)>::Function>(_match_70._data);
+                const auto& _match_69 = stmt;
+                if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Function>(_match_69._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_69)>::Function>(_match_69._data);
                     auto& name = _v.name;
                     auto& params = _v.params;
                     auto& return_type = _v.return_type;
@@ -4129,8 +4220,8 @@ struct CppCodegen {
                         (*this).emit_stmt(stmt, false);
                     }
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_70)>::Extern>(_match_70._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_70)>::Extern>(_match_70._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_69)>::Extern>(_match_69._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_69)>::Extern>(_match_69._data);
                     auto& header = _v.header;
                     auto& import_path = _v.import_path;
                     auto& link_lib = _v.link_lib;
@@ -4161,32 +4252,12 @@ struct CppCodegen {
         this->output = std::string("");
     }
 
-    std::string generate(const std::vector<Stmt>& stmts) {
-        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
-            for (const auto& stmt : this->module_stmts[mi]) {
-                {
-                    const auto& _match_71 = stmt;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_71)>::Extern>(_match_71._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_71)>::Extern>(_match_71._data);
-                        auto& header = _v.header;
-                        auto& import_path = _v.import_path;
-                        auto& link_lib = _v.link_lib;
-                        auto& types = _v.types;
-                        auto& functions = _v.functions;
-                        (*this).emit_stmt(stmt, false);
-                        this->output = std::string("");
-                    }
-                    else {
-                        /* pass */
-                    }
-                }
-            }
-        }
+    void collect_externs(const std::vector<Stmt>& stmts) {
         for (const auto& stmt : stmts) {
             {
-                const auto& _match_72 = stmt;
-                if (std::holds_alternative<std::decay_t<decltype(_match_72)>::Extern>(_match_72._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_72)>::Extern>(_match_72._data);
+                const auto& _match_70 = stmt;
+                if (std::holds_alternative<std::decay_t<decltype(_match_70)>::Extern>(_match_70._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_70)>::Extern>(_match_70._data);
                     auto& header = _v.header;
                     auto& import_path = _v.import_path;
                     auto& link_lib = _v.link_lib;
@@ -4200,35 +4271,14 @@ struct CppCodegen {
                 }
             }
         }
-        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
-            for (const auto& stmt : this->module_stmts[mi]) {
-                {
-                    const auto& _match_73 = stmt;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_73)>::Extend>(_match_73._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_73)>::Extend>(_match_73._data);
-                        auto& target = _v.target_type;
-                        auto& methods = _v.methods;
-                        auto& visibility = _v.visibility;
-                        std::string key = target.lexeme;
-                        if ((!(this->extend_methods.count(key) > 0))) {
-                            std::vector<Stmt> empty = {};
-                            this->extend_methods[key] = empty;
-                        }
-                        for (const auto& m : methods) {
-                            this->extend_methods[key].push_back(m);
-                        }
-                    }
-                    else {
-                        /* pass */
-                    }
-                }
-            }
-        }
+    }
+
+    void collect_extends(const std::vector<Stmt>& stmts) {
         for (const auto& stmt : stmts) {
             {
-                const auto& _match_74 = stmt;
-                if (std::holds_alternative<std::decay_t<decltype(_match_74)>::Extend>(_match_74._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_74)>::Extend>(_match_74._data);
+                const auto& _match_71 = stmt;
+                if (std::holds_alternative<std::decay_t<decltype(_match_71)>::Extend>(_match_71._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_71)>::Extend>(_match_71._data);
                     auto& target = _v.target_type;
                     auto& methods = _v.methods;
                     auto& visibility = _v.visibility;
@@ -4246,28 +4296,14 @@ struct CppCodegen {
                 }
             }
         }
-        this->declarations = std::string("#include \"lavina.h\"\n");
-        for (const auto& inc : this->extern_includes) {
-            this->declarations = (this->declarations + ((std::string("") + (inc)) + std::string("\n")));
-        }
-        this->declarations = (this->declarations + std::string("\n"));
-        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
-            (*this).emit_module(mi);
-        }
-        auto ext_keys = lv_keys(this->extend_methods);
-        for (const auto& ek : ext_keys) {
-            std::vector<Stmt> methods = this->extend_methods[ek];
-            for (const auto& m : methods) {
-                (*this).emit_extend_method(ek, m);
-            }
-            this->declarations = (this->declarations + this->output);
-            this->output = std::string("");
-        }
+    }
+
+    void emit_main_stmts(const std::vector<Stmt>& stmts) {
         for (const auto& stmt : stmts) {
             {
-                const auto& _match_75 = stmt;
-                if (std::holds_alternative<std::decay_t<decltype(_match_75)>::Function>(_match_75._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_75)>::Function>(_match_75._data);
+                const auto& _match_72 = stmt;
+                if (std::holds_alternative<std::decay_t<decltype(_match_72)>::Function>(_match_72._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_72)>::Function>(_match_72._data);
                     auto& name = _v.name;
                     auto& params = _v.params;
                     auto& return_type = _v.return_type;
@@ -4297,8 +4333,8 @@ struct CppCodegen {
                         this->output = std::string("");
                     }
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_75)>::Extern>(_match_75._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_75)>::Extern>(_match_75._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_72)>::Extern>(_match_72._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_72)>::Extern>(_match_72._data);
                     auto& header = _v.header;
                     auto& import_path = _v.import_path;
                     auto& link_lib = _v.link_lib;
@@ -4306,8 +4342,8 @@ struct CppCodegen {
                     auto& functions = _v.functions;
                     /* pass */
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_75)>::Extend>(_match_75._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_75)>::Extend>(_match_75._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_72)>::Extend>(_match_72._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_72)>::Extend>(_match_72._data);
                     auto& target = _v.target_type;
                     auto& methods = _v.methods;
                     auto& visibility = _v.visibility;
@@ -4320,6 +4356,35 @@ struct CppCodegen {
                 }
             }
         }
+    }
+
+    std::string generate(const std::vector<Stmt>& stmts) {
+        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
+            (*this).collect_externs(this->module_stmts[mi]);
+        }
+        (*this).collect_externs(stmts);
+        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
+            (*this).collect_extends(this->module_stmts[mi]);
+        }
+        (*this).collect_extends(stmts);
+        this->declarations = std::string("#include \"lavina.h\"\n");
+        for (const auto& inc : this->extern_includes) {
+            this->declarations = (this->declarations + ((std::string("") + (inc)) + std::string("\n")));
+        }
+        this->declarations = (this->declarations + std::string("\n"));
+        for (int64_t mi = INT64_C(0); mi < static_cast<int64_t>(this->module_stmts.size()); mi++) {
+            (*this).emit_module(mi);
+        }
+        auto ext_keys = lv_keys(this->extend_methods);
+        for (const auto& ek : ext_keys) {
+            std::vector<Stmt> methods = this->extend_methods[ek];
+            for (const auto& m : methods) {
+                (*this).emit_extend_method(ek, m);
+            }
+            this->declarations = (this->declarations + this->output);
+            this->output = std::string("");
+        }
+        (*this).emit_main_stmts(stmts);
         return this->declarations;
     }
 
@@ -4365,10 +4430,6 @@ struct Checker {
 
     void error(const std::string& msg, const Token& t) {
         this->errors.push_back(((((((std::string("[") + (t.line)) + std::string(":")) + (t.col)) + std::string("] Error: ")) + (msg)) + std::string("")));
-    }
-
-    void error_msg(const std::string& msg) {
-        this->errors.push_back(((std::string("Error: ") + (msg)) + std::string("")));
     }
 
     void warn(const std::string& msg, const Token& t) {
@@ -4447,27 +4508,27 @@ struct Checker {
 
     bool types_compatible(const TypeNode& expected, const TypeNode& actual) {
         {
-            const auto& _match_76 = actual;
-            if (std::holds_alternative<std::decay_t<decltype(_match_76)>::Array>(_match_76._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_76)>::Array>(_match_76._data);
+            const auto& _match_73 = actual;
+            if (std::holds_alternative<std::decay_t<decltype(_match_73)>::Array>(_match_73._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_73)>::Array>(_match_73._data);
                 auto& a_inner = *_v.inner;
                 {
-                    const auto& _match_77 = a_inner;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_77)>::Auto>(_match_77._data)) {
+                    const auto& _match_74 = a_inner;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_74)>::Auto>(_match_74._data)) {
                         {
-                            const auto& _match_78 = expected;
-                            if (std::holds_alternative<std::decay_t<decltype(_match_78)>::Array>(_match_78._data)) {
-                                auto& _v = std::get<std::decay_t<decltype(_match_78)>::Array>(_match_78._data);
+                            const auto& _match_75 = expected;
+                            if (std::holds_alternative<std::decay_t<decltype(_match_75)>::Array>(_match_75._data)) {
+                                auto& _v = std::get<std::decay_t<decltype(_match_75)>::Array>(_match_75._data);
                                 auto& e_inner = *_v.inner;
                                 return true;
                             }
-                            else if (std::holds_alternative<std::decay_t<decltype(_match_78)>::HashSet>(_match_78._data)) {
-                                auto& _v = std::get<std::decay_t<decltype(_match_78)>::HashSet>(_match_78._data);
+                            else if (std::holds_alternative<std::decay_t<decltype(_match_75)>::HashSet>(_match_75._data)) {
+                                auto& _v = std::get<std::decay_t<decltype(_match_75)>::HashSet>(_match_75._data);
                                 auto& e_inner = *_v.inner;
                                 return true;
                             }
-                            else if (std::holds_alternative<std::decay_t<decltype(_match_78)>::HashMap>(_match_78._data)) {
-                                auto& _v = std::get<std::decay_t<decltype(_match_78)>::HashMap>(_match_78._data);
+                            else if (std::holds_alternative<std::decay_t<decltype(_match_75)>::HashMap>(_match_75._data)) {
+                                auto& _v = std::get<std::decay_t<decltype(_match_75)>::HashMap>(_match_75._data);
                                 auto& ek = *_v.key_type;
                                 auto& ev = *_v.value_type;
                                 return true;
@@ -4487,14 +4548,14 @@ struct Checker {
             }
         }
         {
-            const auto& _match_79 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_79)>::Array>(_match_79._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_79)>::Array>(_match_79._data);
+            const auto& _match_76 = expected;
+            if (std::holds_alternative<std::decay_t<decltype(_match_76)>::Array>(_match_76._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_76)>::Array>(_match_76._data);
                 auto& e_inner = *_v.inner;
                 {
-                    const auto& _match_80 = actual;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_80)>::Array>(_match_80._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_80)>::Array>(_match_80._data);
+                    const auto& _match_77 = actual;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_77)>::Array>(_match_77._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_77)>::Array>(_match_77._data);
                         auto& a_inner = *_v.inner;
                         return (*this).types_compatible(e_inner, a_inner);
                     }
@@ -4508,14 +4569,14 @@ struct Checker {
             }
         }
         {
-            const auto& _match_81 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_81)>::Auto>(_match_81._data)) {
+            const auto& _match_78 = expected;
+            if (std::holds_alternative<std::decay_t<decltype(_match_78)>::Auto>(_match_78._data)) {
                 return true;
             }
-            else if (_match_81._tag == "None") {
+            else if (_match_78._tag == "None") {
                 return true;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_81)>::Dynamic>(_match_81._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_78)>::Dynamic>(_match_78._data)) {
                 return true;
             }
             else {
@@ -4523,98 +4584,32 @@ struct Checker {
             }
         }
         {
-            const auto& _match_82 = actual;
-            if (std::holds_alternative<std::decay_t<decltype(_match_82)>::Auto>(_match_82._data)) {
+            const auto& _match_79 = actual;
+            if (std::holds_alternative<std::decay_t<decltype(_match_79)>::Auto>(_match_79._data)) {
                 return true;
             }
-            else if (_match_82._tag == "None") {
+            else if (_match_79._tag == "None") {
                 return true;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_82)>::Dynamic>(_match_82._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_79)>::Dynamic>(_match_79._data)) {
                 return true;
             }
             else {
                 /* pass */
             }
         }
-        std::string e = (*this).type_name(expected);
-        std::string a = (*this).type_name(actual);
+        std::string e = type_to_display(expected);
+        std::string a = type_to_display(actual);
         if ((e == a)) {
             return true;
         }
-        bool e_is_int = false;
-        bool a_is_int = false;
-        {
-            const auto& _match_83 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Int>(_match_83._data)) {
-                e_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Int8>(_match_83._data)) {
-                e_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Int16>(_match_83._data)) {
-                e_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Int32>(_match_83._data)) {
-                e_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_83)>::USize>(_match_83._data)) {
-                e_is_int = true;
-            }
-            else {
-                /* pass */
-            }
-        }
-        {
-            const auto& _match_84 = actual;
-            if (std::holds_alternative<std::decay_t<decltype(_match_84)>::Int>(_match_84._data)) {
-                a_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_84)>::Int8>(_match_84._data)) {
-                a_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_84)>::Int16>(_match_84._data)) {
-                a_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_84)>::Int32>(_match_84._data)) {
-                a_is_int = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_84)>::USize>(_match_84._data)) {
-                a_is_int = true;
-            }
-            else {
-                /* pass */
-            }
-        }
+        bool e_is_int = is_integer_type(expected);
+        bool a_is_int = is_integer_type(actual);
         if (e_is_int && a_is_int) {
             return true;
         }
-        bool e_is_float = false;
-        bool a_is_float = false;
-        {
-            const auto& _match_85 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_85)>::Float>(_match_85._data)) {
-                e_is_float = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_85)>::Float32>(_match_85._data)) {
-                e_is_float = true;
-            }
-            else {
-                /* pass */
-            }
-        }
-        {
-            const auto& _match_86 = actual;
-            if (std::holds_alternative<std::decay_t<decltype(_match_86)>::Float>(_match_86._data)) {
-                a_is_float = true;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_86)>::Float32>(_match_86._data)) {
-                a_is_float = true;
-            }
-            else {
-                /* pass */
-            }
-        }
+        bool e_is_float = is_float_type(expected);
+        bool a_is_float = is_float_type(actual);
         if (e_is_float && a_is_float) {
             return true;
         }
@@ -4622,11 +4617,11 @@ struct Checker {
             return true;
         }
         {
-            const auto& _match_87 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_87)>::CString>(_match_87._data)) {
+            const auto& _match_80 = expected;
+            if (std::holds_alternative<std::decay_t<decltype(_match_80)>::CString>(_match_80._data)) {
                 {
-                    const auto& _match_88 = actual;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_88)>::Str>(_match_88._data)) {
+                    const auto& _match_81 = actual;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_81)>::Str>(_match_81._data)) {
                         return true;
                     }
                     else {
@@ -4634,10 +4629,10 @@ struct Checker {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Str>(_match_87._data)) {
+            else if (std::holds_alternative<std::decay_t<decltype(_match_80)>::Str>(_match_80._data)) {
                 {
-                    const auto& _match_89 = actual;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_89)>::CString>(_match_89._data)) {
+                    const auto& _match_82 = actual;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_82)>::CString>(_match_82._data)) {
                         return true;
                     }
                     else {
@@ -4650,13 +4645,13 @@ struct Checker {
             }
         }
         {
-            const auto& _match_90 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_90)>::Nullable>(_match_90._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_90)>::Nullable>(_match_90._data);
+            const auto& _match_83 = expected;
+            if (std::holds_alternative<std::decay_t<decltype(_match_83)>::Nullable>(_match_83._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_83)>::Nullable>(_match_83._data);
                 auto& inner = *_v.inner;
                 {
-                    const auto& _match_91 = actual;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_91)>::NullType>(_match_91._data)) {
+                    const auto& _match_84 = actual;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_84)>::NullType>(_match_84._data)) {
                         return true;
                     }
                     else {
@@ -4669,13 +4664,13 @@ struct Checker {
             }
         }
         {
-            const auto& _match_92 = expected;
-            if (std::holds_alternative<std::decay_t<decltype(_match_92)>::Ptr>(_match_92._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_92)>::Ptr>(_match_92._data);
+            const auto& _match_85 = expected;
+            if (std::holds_alternative<std::decay_t<decltype(_match_85)>::Ptr>(_match_85._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_85)>::Ptr>(_match_85._data);
                 auto& inner = *_v.inner;
                 {
-                    const auto& _match_93 = actual;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_93)>::NullType>(_match_93._data)) {
+                    const auto& _match_86 = actual;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_86)>::NullType>(_match_86._data)) {
                         return true;
                     }
                     else {
@@ -4690,100 +4685,14 @@ struct Checker {
         return false;
     }
 
-    std::string type_name(const TypeNode& t) {
-        {
-            const auto& _match_94 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Int>(_match_94._data)) {
-                return std::string("int");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Float>(_match_94._data)) {
-                return std::string("float");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Str>(_match_94._data)) {
-                return std::string("string");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Bool>(_match_94._data)) {
-                return std::string("bool");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Void>(_match_94._data)) {
-                return std::string("void");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Auto>(_match_94._data)) {
-                return std::string("auto");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Dynamic>(_match_94._data)) {
-                return std::string("dynamic");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::NullType>(_match_94._data)) {
-                return std::string("null");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Custom>(_match_94._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_94)>::Custom>(_match_94._data);
-                auto& name = _v.name;
-                auto& _ = _v.type_args;
-                return name;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Array>(_match_94._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_94)>::Array>(_match_94._data);
-                auto& inner = *_v.inner;
-                return ((std::string("vector[") + ((*this).type_name(inner))) + std::string("]"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::HashSet>(_match_94._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_94)>::HashSet>(_match_94._data);
-                auto& inner = *_v.inner;
-                return ((std::string("set[") + ((*this).type_name(inner))) + std::string("]"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::HashMap>(_match_94._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_94)>::HashMap>(_match_94._data);
-                auto& k = *_v.key_type;
-                auto& v = *_v.value_type;
-                return ((((std::string("map[") + ((*this).type_name(k))) + std::string(", ")) + ((*this).type_name(v))) + std::string("]"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Nullable>(_match_94._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_94)>::Nullable>(_match_94._data);
-                auto& inner = *_v.inner;
-                return ((std::string("") + ((*this).type_name(inner))) + std::string("?"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Int8>(_match_94._data)) {
-                return std::string("int8");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Int16>(_match_94._data)) {
-                return std::string("int16");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Int32>(_match_94._data)) {
-                return std::string("int32");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Float32>(_match_94._data)) {
-                return std::string("float32");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::USize>(_match_94._data)) {
-                return std::string("usize");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::CString>(_match_94._data)) {
-                return std::string("cstring");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Ptr>(_match_94._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_94)>::Ptr>(_match_94._data);
-                auto& inner = *_v.inner;
-                return ((std::string("ptr[") + ((*this).type_name(inner))) + std::string("]"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Bytes>(_match_94._data)) {
-                return std::string("bytes");
-            }
-            else {
-                return std::string("unknown");
-            }
-        }
-    }
-
     TypeNode infer_type(const Expr& e) {
         {
-            const auto& _match_95 = e;
-            if (_match_95._tag == "None") {
+            const auto& _match_87 = e;
+            if (_match_87._tag == "None") {
                 return TypeNode::make_None();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Literal>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Literal>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Literal>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Literal>(_match_87._data);
                 auto& kind = _v.kind;
                 auto& value = _v.value;
                 if ((kind == std::string("int"))) {
@@ -4811,14 +4720,14 @@ struct Checker {
                 }
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Variable>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Variable>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Variable>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Variable>(_match_87._data);
                 auto& name = _v.name;
                 auto sym = (*this).lookup(name.lexeme);
                 return sym.sym_type;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Binary>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Binary>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Binary>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Binary>(_match_87._data);
                 auto& left = *_v.left;
                 auto& op = _v.op;
                 auto& right = *_v.right;
@@ -4828,8 +4737,8 @@ struct Checker {
                     return TypeNode::make_Bool();
                 }
                 {
-                    const auto& _match_96 = lt;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_96)>::Str>(_match_96._data)) {
+                    const auto& _match_88 = lt;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_88)>::Str>(_match_88._data)) {
                         return TypeNode::make_Str();
                     }
                     else {
@@ -4837,8 +4746,8 @@ struct Checker {
                     }
                 }
                 {
-                    const auto& _match_97 = lt;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Float>(_match_97._data)) {
+                    const auto& _match_89 = lt;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_89)>::Float>(_match_89._data)) {
                         return TypeNode::make_Float();
                     }
                     else {
@@ -4846,8 +4755,8 @@ struct Checker {
                     }
                 }
                 {
-                    const auto& _match_98 = rt;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_98)>::Float>(_match_98._data)) {
+                    const auto& _match_90 = rt;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_90)>::Float>(_match_90._data)) {
                         return TypeNode::make_Float();
                     }
                     else {
@@ -4855,8 +4764,8 @@ struct Checker {
                     }
                 }
                 {
-                    const auto& _match_99 = lt;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_99)>::Int>(_match_99._data)) {
+                    const auto& _match_91 = lt;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_91)>::Int>(_match_91._data)) {
                         return TypeNode::make_Int();
                     }
                     else {
@@ -4865,8 +4774,8 @@ struct Checker {
                 }
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Unary>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Unary>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Unary>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Unary>(_match_87._data);
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 if ((op.token_type == TK_BANG) || (op.token_type == TK_NOT)) {
@@ -4874,36 +4783,36 @@ struct Checker {
                 }
                 return (*this).infer_type(right);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Logical>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Logical>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Logical>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Logical>(_match_87._data);
                 auto& left = *_v.left;
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 return TypeNode::make_Bool();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Call>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Call>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Call>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Call>(_match_87._data);
                 auto& callee = *_v.callee;
                 auto& paren = _v.paren;
                 auto& args = _v.args;
                 auto& arg_names = _v.arg_names;
                 return (*this).infer_call_type(callee);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Grouping>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Grouping>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Grouping>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Grouping>(_match_87._data);
                 auto& inner = *_v.inner;
                 return (*this).infer_type(inner);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Index>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Index>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Index>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Index>(_match_87._data);
                 auto& object = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& index = *_v.index;
                 auto ot = (*this).infer_type(object);
                 {
-                    const auto& _match_100 = ot;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_100)>::Array>(_match_100._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_100)>::Array>(_match_100._data);
+                    const auto& _match_92 = ot;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_92)>::Array>(_match_92._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_92)>::Array>(_match_92._data);
                         auto& inner = *_v.inner;
                         return inner;
                     }
@@ -4912,8 +4821,8 @@ struct Checker {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Vector>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Vector>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Vector>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Vector>(_match_87._data);
                 auto& elements = _v.elements;
                 if ((static_cast<int64_t>(elements.size()) > INT64_C(0))) {
                     auto inner = (*this).infer_type(elements[INT64_C(0)]);
@@ -4921,24 +4830,24 @@ struct Checker {
                 }
                 return TypeNode::make_Array(TypeNode::make_Auto());
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Cast>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Cast>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Cast>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Cast>(_match_87._data);
                 auto& expr = *_v.expr;
                 auto& target_type = _v.target_type;
                 return target_type;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::This>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::This>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::This>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::This>(_match_87._data);
                 auto& kw = _v.keyword;
                 return TypeNode::make_Custom(this->current_class_name, {});
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Own>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Own>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::Own>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::Own>(_match_87._data);
                 auto& expr = *_v.expr;
                 return (*this).infer_type(expr);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::AddressOf>(_match_95._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_95)>::AddressOf>(_match_95._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_87)>::AddressOf>(_match_87._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_87)>::AddressOf>(_match_87._data);
                 auto& expr = *_v.expr;
                 return TypeNode::make_Ptr((*this).infer_type(expr));
             }
@@ -4950,9 +4859,9 @@ struct Checker {
 
     TypeNode infer_call_type(const Expr& callee) {
         {
-            const auto& _match_101 = callee;
-            if (std::holds_alternative<std::decay_t<decltype(_match_101)>::Variable>(_match_101._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_101)>::Variable>(_match_101._data);
+            const auto& _match_93 = callee;
+            if (std::holds_alternative<std::decay_t<decltype(_match_93)>::Variable>(_match_93._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_93)>::Variable>(_match_93._data);
                 auto& name = _v.name;
                 if ((this->known_funcs.count(name.lexeme) > 0)) {
                     ExternFn fi = this->known_funcs[name.lexeme];
@@ -4966,20 +4875,20 @@ struct Checker {
                 }
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_101)>::Get>(_match_101._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_101)>::Get>(_match_101._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_93)>::Get>(_match_93._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_93)>::Get>(_match_93._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 return TypeNode::make_Auto();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_101)>::StaticGet>(_match_101._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_101)>::StaticGet>(_match_101._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_93)>::StaticGet>(_match_93._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_93)>::StaticGet>(_match_93._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 {
-                    const auto& _match_102 = object;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_102)>::Variable>(_match_102._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_102)>::Variable>(_match_102._data);
+                    const auto& _match_94 = object;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_94)>::Variable>(_match_94._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_94)>::Variable>(_match_94._data);
                         auto& obj_name = _v.name;
                         if ((this->known_enums.count(obj_name.lexeme) > 0)) {
                             return TypeNode::make_Custom(obj_name.lexeme, {});
@@ -4995,19 +4904,6 @@ struct Checker {
                 return TypeNode::make_Auto();
             }
         }
-    }
-
-    std::string find_enum_for_variant(const std::string& variant_name) {
-        std::vector<std::string> keys = lv_keys(this->known_enums);
-        for (const auto& key : keys) {
-            std::vector<EnumVariantNode> variants = this->known_enums[key];
-            for (const auto& v : variants) {
-                if ((v.name.lexeme == variant_name)) {
-                    return key;
-                }
-            }
-        }
-        return std::string("");
     }
 
     void register_builtins() {
@@ -5033,9 +4929,9 @@ struct Checker {
 
     void collect_decl(const Stmt& s) {
         {
-            const auto& _match_103 = s;
-            if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Function>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Function>(_match_103._data);
+            const auto& _match_95 = s;
+            if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Function>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Function>(_match_95._data);
                 auto& name = _v.name;
                 auto& params = _v.params;
                 auto& return_type = _v.return_type;
@@ -5048,15 +4944,15 @@ struct Checker {
                 auto& param_defaults = _v.param_defaults;
                 this->known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params, param_defaults);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Class>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Class>(_match_103._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Class>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Class>(_match_95._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
                 this->known_classes[name.lexeme] = body;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Enum>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Enum>(_match_103._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Enum>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Enum>(_match_95._data);
                 auto& name = _v.name;
                 auto& variants = _v.variants;
                 auto& methods = _v.methods;
@@ -5064,8 +4960,8 @@ struct Checker {
                 auto& enum_tp = _v.type_params;
                 this->known_enums[name.lexeme] = variants;
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Const>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Const>(_match_103._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Const>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Const>(_match_95._data);
                 auto& name = _v.name;
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
@@ -5073,8 +4969,8 @@ struct Checker {
                 auto& comptime_mode = _v.comptime_mode;
                 (*this).declare(name.lexeme, const_type, std::string("const"), false, false, name);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Struct>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Struct>(_match_103._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Struct>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Struct>(_match_95._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
@@ -5082,9 +4978,9 @@ struct Checker {
                 this->known_classes[name.lexeme] = body;
                 for (const auto& st : body) {
                     {
-                        const auto& _match_104 = st;
-                        if (std::holds_alternative<std::decay_t<decltype(_match_104)>::Function>(_match_104._data)) {
-                            auto& _v = std::get<std::decay_t<decltype(_match_104)>::Function>(_match_104._data);
+                        const auto& _match_96 = st;
+                        if (std::holds_alternative<std::decay_t<decltype(_match_96)>::Function>(_match_96._data)) {
+                            auto& _v = std::get<std::decay_t<decltype(_match_96)>::Function>(_match_96._data);
                             auto& fname = _v.name;
                             auto& fparams = _v.params;
                             auto& fret = _v.return_type;
@@ -5105,8 +5001,8 @@ struct Checker {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Namespace>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Namespace>(_match_103._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Namespace>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Namespace>(_match_95._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
@@ -5114,8 +5010,8 @@ struct Checker {
                     (*this).collect_decl(ns_stmt);
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Extern>(_match_103._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Extern>(_match_103._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_95)>::Extern>(_match_95._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_95)>::Extern>(_match_95._data);
                 auto& header = _v.header;
                 auto& import_path = _v.import_path;
                 auto& link_lib = _v.link_lib;
@@ -5137,14 +5033,14 @@ struct Checker {
 
     void check_stmt(const Stmt& s) {
         {
-            const auto& _match_105 = s;
-            if (std::holds_alternative<std::decay_t<decltype(_match_105)>::ExprStmt>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::ExprStmt>(_match_105._data);
+            const auto& _match_97 = s;
+            if (std::holds_alternative<std::decay_t<decltype(_match_97)>::ExprStmt>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::ExprStmt>(_match_97._data);
                 auto& expr = _v.expr;
                 (*this).check_expr(expr);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Let>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Let>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Let>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Let>(_match_97._data);
                 auto& name = _v.name;
                 auto& var_type = _v.var_type;
                 auto& initializer = _v.initializer;
@@ -5154,23 +5050,23 @@ struct Checker {
                 (*this).check_expr(initializer);
                 auto init_type = (*this).infer_type(initializer);
                 {
-                    const auto& _match_106 = var_type;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_106)>::Auto>(_match_106._data)) {
+                    const auto& _match_98 = var_type;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_98)>::Auto>(_match_98._data)) {
                         /* pass */
                     }
-                    else if (_match_106._tag == "None") {
+                    else if (_match_98._tag == "None") {
                         /* pass */
                     }
                     else {
                         if ((!(*this).types_compatible(var_type, init_type))) {
-                            (*this).error(((((std::string("Cannot assign ") + ((*this).type_name(init_type))) + std::string(" to ")) + ((*this).type_name(var_type))) + std::string("")), name);
+                            (*this).error(((((std::string("Cannot assign ") + (type_to_display(init_type))) + std::string(" to ")) + (type_to_display(var_type))) + std::string("")), name);
                         }
                     }
                 }
                 (*this).declare(name.lexeme, var_type, std::string("var"), is_ref, true, name);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Const>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Const>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Const>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Const>(_match_97._data);
                 auto& name = _v.name;
                 auto& const_type = _v.const_type;
                 auto& value = _v.value;
@@ -5178,20 +5074,20 @@ struct Checker {
                 auto& comptime_mode = _v.comptime_mode;
                 (*this).check_expr(value);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Return>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Return>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Return>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Return>(_match_97._data);
                 auto& keyword = _v.keyword;
                 auto& value = _v.value;
                 (*this).check_expr(value);
                 {
-                    const auto& _match_107 = this->current_return_type;
-                    if (_match_107._tag == "None") {
+                    const auto& _match_99 = this->current_return_type;
+                    if (_match_99._tag == "None") {
                         /* pass */
                     }
-                    else if (std::holds_alternative<std::decay_t<decltype(_match_107)>::Void>(_match_107._data)) {
+                    else if (std::holds_alternative<std::decay_t<decltype(_match_99)>::Void>(_match_99._data)) {
                         {
-                            const auto& _match_108 = value;
-                            if (_match_108._tag == "None") {
+                            const auto& _match_100 = value;
+                            if (_match_100._tag == "None") {
                                 /* pass */
                             }
                             else {
@@ -5202,13 +5098,13 @@ struct Checker {
                     else {
                         auto val_type = (*this).infer_type(value);
                         if ((!(*this).types_compatible(this->current_return_type, val_type))) {
-                            (*this).error(((((std::string("Return type mismatch: expected ") + ((*this).type_name(this->current_return_type))) + std::string(", got ")) + ((*this).type_name(val_type))) + std::string("")), keyword);
+                            (*this).error(((((std::string("Return type mismatch: expected ") + (type_to_display(this->current_return_type))) + std::string(", got ")) + (type_to_display(val_type))) + std::string("")), keyword);
                         }
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::If>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::If>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::If>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::If>(_match_97._data);
                 auto& condition = _v.condition;
                 auto& then_branch = *_v.then_branch;
                 auto& else_branch = *_v.else_branch;
@@ -5216,15 +5112,15 @@ struct Checker {
                 (*this).check_stmt(then_branch);
                 (*this).check_stmt(else_branch);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::While>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::While>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::While>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::While>(_match_97._data);
                 auto& condition = _v.condition;
                 auto& body = *_v.body;
                 (*this).check_expr(condition);
                 (*this).check_stmt(body);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::For>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::For>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::For>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::For>(_match_97._data);
                 auto& item_name = _v.item_name;
                 auto& collection = _v.collection;
                 auto& body = *_v.body;
@@ -5235,9 +5131,9 @@ struct Checker {
                 auto coll_type = (*this).infer_type(collection);
                 auto item_type = TypeNode::make_Auto();
                 {
-                    const auto& _match_109 = coll_type;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_109)>::Array>(_match_109._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_109)>::Array>(_match_109._data);
+                    const auto& _match_101 = coll_type;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_101)>::Array>(_match_101._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_101)>::Array>(_match_101._data);
                         auto& inner = *_v.inner;
                         item_type = inner;
                     }
@@ -5249,8 +5145,8 @@ struct Checker {
                 (*this).check_stmt(body);
                 (*this).pop_scope();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Block>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Block>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Block>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Block>(_match_97._data);
                 auto& statements = _v.statements;
                 (*this).push_scope();
                 for (const auto& st : statements) {
@@ -5258,8 +5154,8 @@ struct Checker {
                 }
                 (*this).pop_scope();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Function>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Function>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Function>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Function>(_match_97._data);
                 auto& name = _v.name;
                 auto& params = _v.params;
                 auto& return_type = _v.return_type;
@@ -5272,23 +5168,23 @@ struct Checker {
                 auto& param_defaults = _v.param_defaults;
                 (*this).check_function(name, params, return_type, body);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Class>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Class>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Class>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Class>(_match_97._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
                 (*this).check_class(name, body);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Struct>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Struct>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Struct>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Struct>(_match_97._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
                 auto& struct_tp = _v.type_params;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Enum>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Enum>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Enum>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Enum>(_match_97._data);
                 auto& name = _v.name;
                 auto& variants = _v.variants;
                 auto& methods = _v.methods;
@@ -5296,16 +5192,16 @@ struct Checker {
                 auto& enum_tp = _v.type_params;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Match>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Match>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Match>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Match>(_match_97._data);
                 auto& expr = _v.expr;
                 auto& arm_patterns = _v.arm_patterns;
                 auto& arm_bodies = _v.arm_bodies;
                 (*this).check_expr(expr);
                 (*this).check_match(expr, arm_patterns, arm_bodies);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Try>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Try>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Try>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Try>(_match_97._data);
                 auto& try_body = *_v.try_body;
                 auto& catch_body = *_v.catch_body;
                 auto& exception_name = _v.exception_name;
@@ -5319,8 +5215,8 @@ struct Checker {
                 (*this).check_stmt(catch_body);
                 (*this).pop_scope();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Namespace>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Namespace>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Namespace>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Namespace>(_match_97._data);
                 auto& name = _v.name;
                 auto& body = _v.body;
                 auto& visibility = _v.visibility;
@@ -5333,34 +5229,34 @@ struct Checker {
                 }
                 (*this).pop_scope();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Import>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Import>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Import>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Import>(_match_97._data);
                 auto& path = _v.path;
                 auto& alias = _v.alias;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Break>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Break>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Break>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Break>(_match_97._data);
                 auto& keyword = _v.keyword;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Continue>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Continue>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Continue>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Continue>(_match_97._data);
                 auto& keyword = _v.keyword;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Pass>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Pass>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Pass>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Pass>(_match_97._data);
                 auto& keyword = _v.keyword;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::CppBlock>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::CppBlock>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::CppBlock>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::CppBlock>(_match_97._data);
                 auto& code = _v.code;
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Extern>(_match_105._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Extern>(_match_105._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_97)>::Extern>(_match_97._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_97)>::Extern>(_match_97._data);
                 auto& header = _v.header;
                 auto& import_path = _v.import_path;
                 auto& link_lib = _v.link_lib;
@@ -5374,13 +5270,17 @@ struct Checker {
         }
     }
 
+    void declare_params(const std::vector<Param>& params) {
+        for (const auto& p : params) {
+            (*this).declare(p.name.lexeme, p.param_type, std::string("param"), p.is_ref, true, p.name);
+        }
+    }
+
     void check_function(const Token& name, const std::vector<Param>& params, const TypeNode& return_type, const std::vector<Stmt>& body) {
         auto saved_return = this->current_return_type;
         this->current_return_type = return_type;
         (*this).push_scope();
-        for (const auto& p : params) {
-            (*this).declare(p.name.lexeme, p.param_type, std::string("param"), p.is_ref, true, p.name);
-        }
+        (*this).declare_params(params);
         for (const auto& s : body) {
             (*this).check_stmt(s);
         }
@@ -5397,9 +5297,9 @@ struct Checker {
         (*this).declare(std::string("this"), TypeNode::make_Custom(name.lexeme, {}), std::string("var"), false, false, name);
         for (const auto& s : body) {
             {
-                const auto& _match_110 = s;
-                if (std::holds_alternative<std::decay_t<decltype(_match_110)>::Function>(_match_110._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_110)>::Function>(_match_110._data);
+                const auto& _match_102 = s;
+                if (std::holds_alternative<std::decay_t<decltype(_match_102)>::Function>(_match_102._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_102)>::Function>(_match_102._data);
                     auto& fname = _v.name;
                     auto& params = _v.params;
                     auto& return_type = _v.return_type;
@@ -5412,8 +5312,8 @@ struct Checker {
                     auto& fn_defaults = _v.param_defaults;
                     (*this).check_function(fname, params, return_type, fbody);
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_110)>::Let>(_match_110._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_110)>::Let>(_match_110._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_102)>::Let>(_match_102._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_102)>::Let>(_match_102._data);
                     auto& lname = _v.name;
                     auto& var_type = _v.var_type;
                     auto& initializer = _v.initializer;
@@ -5434,46 +5334,46 @@ struct Checker {
 
     void check_expr(const Expr& e) {
         {
-            const auto& _match_111 = e;
-            if (_match_111._tag == "None") {
+            const auto& _match_103 = e;
+            if (_match_103._tag == "None") {
                 /* pass */
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Variable>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Variable>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Variable>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Variable>(_match_103._data);
                 auto& name = _v.name;
                 if ((!(*this).resolve(name.lexeme))) {
                     (*this).error(((std::string("Undefined variable '") + (name.lexeme)) + std::string("'")), name);
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Binary>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Binary>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Binary>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Binary>(_match_103._data);
                 auto& left = *_v.left;
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 (*this).check_expr(left);
                 (*this).check_expr(right);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Unary>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Unary>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Unary>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Unary>(_match_103._data);
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 (*this).check_expr(right);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Logical>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Logical>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Logical>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Logical>(_match_103._data);
                 auto& left = *_v.left;
                 auto& op = _v.op;
                 auto& right = *_v.right;
                 (*this).check_expr(left);
                 (*this).check_expr(right);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Grouping>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Grouping>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Grouping>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Grouping>(_match_103._data);
                 auto& inner = *_v.inner;
                 (*this).check_expr(inner);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Call>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Call>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Call>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Call>(_match_103._data);
                 auto& callee = *_v.callee;
                 auto& paren = _v.paren;
                 auto& args = _v.args;
@@ -5484,8 +5384,8 @@ struct Checker {
                 }
                 (*this).check_call_args(callee, args, arg_names, paren);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Assign>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Assign>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Assign>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Assign>(_match_103._data);
                 auto& name = _v.name;
                 auto& value = *_v.value;
                 (*this).check_expr(value);
@@ -5499,16 +5399,16 @@ struct Checker {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Index>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Index>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Index>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Index>(_match_103._data);
                 auto& object = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& index = *_v.index;
                 (*this).check_expr(object);
                 (*this).check_expr(index);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::IndexSet>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::IndexSet>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::IndexSet>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::IndexSet>(_match_103._data);
                 auto& object = *_v.object;
                 auto& bracket = _v.bracket;
                 auto& index = *_v.index;
@@ -5517,15 +5417,15 @@ struct Checker {
                 (*this).check_expr(index);
                 (*this).check_expr(value);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Vector>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Vector>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Vector>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Vector>(_match_103._data);
                 auto& elements = _v.elements;
                 for (const auto& el : elements) {
                     (*this).check_expr(el);
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Map>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Map>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Map>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Map>(_match_103._data);
                 auto& keys = _v.keys;
                 auto& values = _v.values;
                 for (const auto& k : keys) {
@@ -5535,28 +5435,28 @@ struct Checker {
                     (*this).check_expr(v);
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Get>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Get>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Get>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Get>(_match_103._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 (*this).check_expr(object);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Set>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Set>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Set>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Set>(_match_103._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 auto& value = *_v.value;
                 (*this).check_expr(object);
                 (*this).check_expr(value);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::StaticGet>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::StaticGet>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::StaticGet>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::StaticGet>(_match_103._data);
                 auto& object = *_v.object;
                 auto& name = _v.name;
                 {
-                    const auto& _match_112 = object;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_112)>::Variable>(_match_112._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_112)>::Variable>(_match_112._data);
+                    const auto& _match_104 = object;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_104)>::Variable>(_match_104._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_104)>::Variable>(_match_104._data);
                         auto& tok = _v.name;
                         /* pass */
                     }
@@ -5565,52 +5465,48 @@ struct Checker {
                     }
                 }
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Cast>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Cast>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Cast>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Cast>(_match_103._data);
                 auto& expr = *_v.expr;
                 auto& target_type = _v.target_type;
                 (*this).check_expr(expr);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Throw>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Throw>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Throw>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Throw>(_match_103._data);
                 auto& expr = *_v.expr;
                 (*this).check_expr(expr);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Range>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Range>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Range>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Range>(_match_103._data);
                 auto& start = *_v.start;
                 auto& end = *_v.end;
                 (*this).check_expr(start);
                 (*this).check_expr(end);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Lambda>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Lambda>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Lambda>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Lambda>(_match_103._data);
                 auto& params = _v.params;
                 auto& body = *_v.body;
                 (*this).push_scope();
-                for (const auto& p : params) {
-                    (*this).declare(p.name.lexeme, p.param_type, std::string("param"), p.is_ref, true, p.name);
-                }
+                (*this).declare_params(params);
                 (*this).check_expr(body);
                 (*this).pop_scope();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::BlockLambda>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::BlockLambda>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::BlockLambda>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::BlockLambda>(_match_103._data);
                 auto& params = _v.params;
                 auto& body_id = _v.body_id;
                 (*this).push_scope();
-                for (const auto& p : params) {
-                    (*this).declare(p.name.lexeme, p.param_type, std::string("param"), p.is_ref, true, p.name);
-                }
+                (*this).declare_params(params);
                 (*this).pop_scope();
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Own>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::Own>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::Own>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::Own>(_match_103._data);
                 auto& expr = *_v.expr;
                 (*this).check_expr(expr);
             }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_111)>::AddressOf>(_match_111._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_111)>::AddressOf>(_match_111._data);
+            else if (std::holds_alternative<std::decay_t<decltype(_match_103)>::AddressOf>(_match_103._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_103)>::AddressOf>(_match_103._data);
                 auto& expr = *_v.expr;
                 (*this).check_expr(expr);
             }
@@ -5622,9 +5518,9 @@ struct Checker {
 
     void check_call_args(const Expr& callee, const std::vector<Expr>& args, const std::vector<std::string>& arg_names, const Token& paren) {
         {
-            const auto& _match_113 = callee;
-            if (std::holds_alternative<std::decay_t<decltype(_match_113)>::Variable>(_match_113._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_113)>::Variable>(_match_113._data);
+            const auto& _match_105 = callee;
+            if (std::holds_alternative<std::decay_t<decltype(_match_105)>::Variable>(_match_105._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_105)>::Variable>(_match_105._data);
                 auto& name = _v.name;
                 if ((this->known_funcs.count(name.lexeme) > 0)) {
                     ExternFn fi = this->known_funcs[name.lexeme];
@@ -5635,8 +5531,8 @@ struct Checker {
                     int64_t di = INT64_C(0);
                     while ((di < static_cast<int64_t>(fi.param_defaults.size()))) {
                         {
-                            const auto& _match_114 = fi.param_defaults[di];
-                            if (_match_114._tag == "None") {
+                            const auto& _match_106 = fi.param_defaults[di];
+                            if (_match_106._tag == "None") {
                                 required = (required + INT64_C(1));
                             }
                             else {
@@ -5673,7 +5569,7 @@ struct Checker {
                 has_wildcard = true;
             }
             else {
-                std::string enum_name = (*this).find_enum_for_variant(arm.pattern_name);
+                std::string enum_name = find_enum_for_variant(this->known_enums, arm.pattern_name);
                 if ((enum_name == std::string(""))) {
                     /* pass */
                 }
@@ -6019,77 +5915,6 @@ struct Parser {
         return t;
     }
 
-    std::string type_to_string(const TypeNode& t) {
-        {
-            const auto& _match_115 = t;
-            if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Int>(_match_115._data)) {
-                return std::string("int64_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Float>(_match_115._data)) {
-                return std::string("double");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Str>(_match_115._data)) {
-                return std::string("std::string");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Bool>(_match_115._data)) {
-                return std::string("bool");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Void>(_match_115._data)) {
-                return std::string("void");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Auto>(_match_115._data)) {
-                return std::string("auto");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Custom>(_match_115._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_115)>::Custom>(_match_115._data);
-                auto& name = _v.name;
-                auto& type_args = _v.type_args;
-                if ((static_cast<int64_t>(type_args.size()) > INT64_C(0))) {
-                    std::vector<std::string> ta = {};
-                    for (const auto& a : type_args) {
-                        ta.push_back((*this).type_to_string(a));
-                    }
-                    return ((((std::string("") + (name)) + std::string("<")) + (lv_join(ta, std::string(", ")))) + std::string(">"));
-                }
-                return name;
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Array>(_match_115._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_115)>::Array>(_match_115._data);
-                auto& inner = *_v.inner;
-                return ((std::string("std::vector<") + ((*this).type_to_string(inner))) + std::string(">"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Int8>(_match_115._data)) {
-                return std::string("int8_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Int16>(_match_115._data)) {
-                return std::string("int16_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Int32>(_match_115._data)) {
-                return std::string("int32_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Float32>(_match_115._data)) {
-                return std::string("float");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::USize>(_match_115._data)) {
-                return std::string("size_t");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::CString>(_match_115._data)) {
-                return std::string("const char*");
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Ptr>(_match_115._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_115)>::Ptr>(_match_115._data);
-                auto& inner = *_v.inner;
-                return ((std::string("") + ((*this).type_to_string(inner))) + std::string("*"));
-            }
-            else if (std::holds_alternative<std::decay_t<decltype(_match_115)>::Bytes>(_match_115._data)) {
-                return std::string("std::vector<uint8_t>");
-            }
-            else {
-                return std::string("auto");
-            }
-        }
-    }
-
     Expr expression() {
         return (*this).assignment();
     }
@@ -6099,20 +5924,20 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_EQUAL})) {
             Expr value = (*this).assignment();
             {
-                const auto& _match_116 = expr;
-                if (std::holds_alternative<std::decay_t<decltype(_match_116)>::Variable>(_match_116._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_116)>::Variable>(_match_116._data);
+                const auto& _match_107 = expr;
+                if (std::holds_alternative<std::decay_t<decltype(_match_107)>::Variable>(_match_107._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_107)>::Variable>(_match_107._data);
                     auto& name = _v.name;
                     return Expr::make_Assign(name, value);
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_116)>::Get>(_match_116._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_116)>::Get>(_match_116._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_107)>::Get>(_match_107._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_107)>::Get>(_match_107._data);
                     auto& object = *_v.object;
                     auto& name = _v.name;
                     return Expr::make_Set(object, name, value);
                 }
-                else if (std::holds_alternative<std::decay_t<decltype(_match_116)>::Index>(_match_116._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_116)>::Index>(_match_116._data);
+                else if (std::holds_alternative<std::decay_t<decltype(_match_107)>::Index>(_match_107._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_107)>::Index>(_match_107._data);
                     auto& object = *_v.object;
                     auto& bracket = _v.bracket;
                     auto& index = *_v.index;
@@ -6141,22 +5966,22 @@ struct Parser {
                 }
                 auto op_token = Token(base_type, base_lexeme, compound_op.line, compound_op.col);
                 {
-                    const auto& _match_117 = expr;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_117)>::Variable>(_match_117._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_117)>::Variable>(_match_117._data);
+                    const auto& _match_108 = expr;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_108)>::Variable>(_match_108._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_108)>::Variable>(_match_108._data);
                         auto& name = _v.name;
                         Expr bin = Expr::make_Binary(Expr::make_Variable(name), op_token, rhs);
                         return Expr::make_Assign(name, bin);
                     }
-                    else if (std::holds_alternative<std::decay_t<decltype(_match_117)>::Get>(_match_117._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_117)>::Get>(_match_117._data);
+                    else if (std::holds_alternative<std::decay_t<decltype(_match_108)>::Get>(_match_108._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_108)>::Get>(_match_108._data);
                         auto& object = *_v.object;
                         auto& name = _v.name;
                         Expr bin = Expr::make_Binary(Expr::make_Get(object, name), op_token, rhs);
                         return Expr::make_Set(object, name, bin);
                     }
-                    else if (std::holds_alternative<std::decay_t<decltype(_match_117)>::Index>(_match_117._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_117)>::Index>(_match_117._data);
+                    else if (std::holds_alternative<std::decay_t<decltype(_match_108)>::Index>(_match_108._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_108)>::Index>(_match_108._data);
                         auto& object = *_v.object;
                         auto& bracket = _v.bracket;
                         auto& index = *_v.index;
@@ -6252,9 +6077,9 @@ struct Parser {
     Expr call() {
         Expr expr = (*this).primary();
         {
-            const auto& _match_118 = expr;
-            if (std::holds_alternative<std::decay_t<decltype(_match_118)>::Variable>(_match_118._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_118)>::Variable>(_match_118._data);
+            const auto& _match_109 = expr;
+            if (std::holds_alternative<std::decay_t<decltype(_match_109)>::Variable>(_match_109._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_109)>::Variable>(_match_109._data);
                 auto& tok = _v.name;
                 if ((*this).check(TK_LEFT_BRACKET)) {
                     int64_t save_pos = this->current;
@@ -6263,13 +6088,13 @@ struct Parser {
                     std::vector<std::string> type_strs = {};
                     try {
                         TypeNode first_t = (*this).parse_type();
-                        type_strs.push_back((*this).type_to_string(first_t));
+                        type_strs.push_back(type_to_cpp(first_t));
                         while ((*this).match_any(std::vector{TK_COMMA})) {
                             if ((*this).check(TK_RIGHT_BRACKET)) {
                                 break;
                             }
                             TypeNode next_t = (*this).parse_type();
-                            type_strs.push_back((*this).type_to_string(next_t));
+                            type_strs.push_back(type_to_cpp(next_t));
                         }
                         if ((!(*this).check(TK_RIGHT_BRACKET))) {
                             is_type_args = false;
@@ -6336,9 +6161,9 @@ struct Parser {
 
     Expr finish_call(const Expr& callee) {
         {
-            const auto& _match_119 = callee;
-            if (std::holds_alternative<std::decay_t<decltype(_match_119)>::Variable>(_match_119._data)) {
-                auto& _v = std::get<std::decay_t<decltype(_match_119)>::Variable>(_match_119._data);
+            const auto& _match_110 = callee;
+            if (std::holds_alternative<std::decay_t<decltype(_match_110)>::Variable>(_match_110._data)) {
+                auto& _v = std::get<std::decay_t<decltype(_match_110)>::Variable>(_match_110._data);
                 auto& name = _v.name;
                 if ((name.lexeme == std::string("cast"))) {
                     Expr expr = (*this).expression();
@@ -6359,9 +6184,9 @@ struct Parser {
             (*this).match_any(std::vector{TK_REF, TK_REF_MUT});
             Expr arg_expr = (*this).expression();
             {
-                const auto& _match_120 = arg_expr;
-                if (std::holds_alternative<std::decay_t<decltype(_match_120)>::Assign>(_match_120._data)) {
-                    auto& _v = std::get<std::decay_t<decltype(_match_120)>::Assign>(_match_120._data);
+                const auto& _match_111 = arg_expr;
+                if (std::holds_alternative<std::decay_t<decltype(_match_111)>::Assign>(_match_111._data)) {
+                    auto& _v = std::get<std::decay_t<decltype(_match_111)>::Assign>(_match_111._data);
                     auto& aname = _v.name;
                     auto& avalue = *_v.value;
                     arg_names.push_back(aname.lexeme);
@@ -6381,9 +6206,9 @@ struct Parser {
                 (*this).match_any(std::vector{TK_REF, TK_REF_MUT});
                 arg_expr = (*this).expression();
                 {
-                    const auto& _match_121 = arg_expr;
-                    if (std::holds_alternative<std::decay_t<decltype(_match_121)>::Assign>(_match_121._data)) {
-                        auto& _v = std::get<std::decay_t<decltype(_match_121)>::Assign>(_match_121._data);
+                    const auto& _match_112 = arg_expr;
+                    if (std::holds_alternative<std::decay_t<decltype(_match_112)>::Assign>(_match_112._data)) {
+                        auto& _v = std::get<std::decay_t<decltype(_match_112)>::Assign>(_match_112._data);
                         auto& aname = _v.name;
                         auto& avalue = *_v.value;
                         arg_names.push_back(aname.lexeme);
@@ -6496,6 +6321,21 @@ struct Parser {
         }
         auto t = (*this).peek();
         throw std::runtime_error(((((((std::string("Expect expression. Got ") + (t.token_type)) + std::string(" at ")) + (t.line)) + std::string(":")) + (t.col)) + std::string("")));
+    }
+
+    std::vector<std::string> parse_type_params() {
+        std::vector<std::string> type_params = {};
+        if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
+            type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
+            while ((*this).match_any(std::vector{TK_COMMA})) {
+                if ((*this).check(TK_RIGHT_BRACKET)) {
+                    break;
+                }
+                type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
+            }
+            (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
+        }
+        return type_params;
     }
 
     std::vector<Param> parse_param_list() {
@@ -6807,17 +6647,7 @@ struct Parser {
             (*this).consume(TK_FN, std::string("Expect 'fn' keyword after return type."));
             name = (*this).consume(TK_IDENTIFIER, std::string("Expect function name."));
         }
-        std::vector<std::string> type_params = {};
-        if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
-            type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
-            while ((*this).match_any(std::vector{TK_COMMA})) {
-                if ((*this).check(TK_RIGHT_BRACKET)) {
-                    break;
-                }
-                type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
-            }
-            (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
-        }
+        std::vector<std::string> type_params = (*this).parse_type_params();
         (*this).consume(TK_LEFT_PAREN, std::string("Expect '(' after function name."));
         std::vector<Param> params = (*this).parse_param_list();
         std::vector<Expr> defaults = this->last_param_defaults;
@@ -6839,17 +6669,7 @@ struct Parser {
 
     Stmt struct_declaration(std::string visibility) {
         auto name = (*this).consume(TK_IDENTIFIER, std::string("Expect struct name."));
-        std::vector<std::string> type_params = {};
-        if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
-            type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
-            while ((*this).match_any(std::vector{TK_COMMA})) {
-                if ((*this).check(TK_RIGHT_BRACKET)) {
-                    break;
-                }
-                type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
-            }
-            (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
-        }
+        std::vector<std::string> type_params = (*this).parse_type_params();
         (*this).consume(TK_COLON, std::string("Expect ':' after struct name."));
         auto old = this->in_class_body;
         this->in_class_body = true;
@@ -6860,17 +6680,7 @@ struct Parser {
 
     Stmt enum_declaration(std::string visibility) {
         auto name = (*this).consume(TK_IDENTIFIER, std::string("Expect enum name."));
-        std::vector<std::string> type_params = {};
-        if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
-            type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
-            while ((*this).match_any(std::vector{TK_COMMA})) {
-                if ((*this).check(TK_RIGHT_BRACKET)) {
-                    break;
-                }
-                type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
-            }
-            (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
-        }
+        std::vector<std::string> type_params = (*this).parse_type_params();
         (*this).consume(TK_COLON, std::string("Expect ':' after enum name."));
         (*this).match_any(std::vector{TK_NEWLINE});
         (*this).consume(TK_INDENT, std::string("Expect indentation to start enum body."));
@@ -6932,11 +6742,11 @@ struct Parser {
                             std::vector<std::string> old_fnames = {};
                             bool is_unit_type = false;
                             {
-                                const auto& _match_122 = vtype;
-                                if (std::holds_alternative<std::decay_t<decltype(_match_122)>::NullType>(_match_122._data)) {
+                                const auto& _match_113 = vtype;
+                                if (std::holds_alternative<std::decay_t<decltype(_match_113)>::NullType>(_match_113._data)) {
                                     is_unit_type = true;
                                 }
-                                else if (std::holds_alternative<std::decay_t<decltype(_match_122)>::Void>(_match_122._data)) {
+                                else if (std::holds_alternative<std::decay_t<decltype(_match_113)>::Void>(_match_113._data)) {
                                     is_unit_type = true;
                                 }
                                 else {

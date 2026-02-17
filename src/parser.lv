@@ -1,4 +1,4 @@
-import ast
+import type_utils
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Parser
@@ -232,48 +232,6 @@ class Parser:
             t = TypeNode::Nullable(t)
         return t
 
-    string fn type_to_string(ref TypeNode t):
-        match t:
-            Int():
-                return "int64_t"
-            Float():
-                return "double"
-            Str():
-                return "std::string"
-            Bool():
-                return "bool"
-            Void():
-                return "void"
-            Auto():
-                return "auto"
-            Custom(name, type_args):
-                if type_args.len() > 0:
-                    vector[string] ta = []
-                    for ref a in type_args:
-                        ta.push(this.type_to_string(a))
-                    return "${name}<${ta.join(", ")}>"
-                return name
-            Array(inner):
-                return "std::vector<${this.type_to_string(inner)}>"
-            Int8():
-                return "int8_t"
-            Int16():
-                return "int16_t"
-            Int32():
-                return "int32_t"
-            Float32():
-                return "float"
-            USize():
-                return "size_t"
-            CString():
-                return "const char*"
-            Ptr(inner):
-                return "${this.type_to_string(inner)}*"
-            Bytes():
-                return "std::vector<uint8_t>"
-            _:
-                return "auto"
-
     // ── Expression parsing ──────────────────────────────────
 
     Expr fn expression():
@@ -391,12 +349,12 @@ class Parser:
                     vector[string] type_strs = []
                     try:
                         TypeNode first_t = this.parse_type()
-                        type_strs.push(this.type_to_string(first_t))
+                        type_strs.push(type_to_cpp(first_t))
                         while this.match_any([TK_COMMA]):
                             if this.check(TK_RIGHT_BRACKET):
                                 break
                             TypeNode next_t = this.parse_type()
-                            type_strs.push(this.type_to_string(next_t))
+                            type_strs.push(type_to_cpp(next_t))
                         if not this.check(TK_RIGHT_BRACKET):
                             is_type_args = false
                     catch e:
@@ -554,6 +512,17 @@ class Parser:
 
         auto t = this.peek()
         throw "Expect expression. Got ${t.token_type} at ${t.line}:${t.col}"
+
+    vector[string] fn parse_type_params():
+        vector[string] type_params = []
+        if this.match_any([TK_LEFT_BRACKET]):
+            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            while this.match_any([TK_COMMA]):
+                if this.check(TK_RIGHT_BRACKET):
+                    break
+                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        return type_params
 
     vector[Param] fn parse_param_list():
         vector[Param] params = []
@@ -812,14 +781,7 @@ class Parser:
             this.consume(TK_FN, "Expect 'fn' keyword after return type.")
             name = this.consume(TK_IDENTIFIER, "Expect function name.")
 
-        vector[string] type_params = []
-        if this.match_any([TK_LEFT_BRACKET]):
-            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            while this.match_any([TK_COMMA]):
-                if this.check(TK_RIGHT_BRACKET):
-                    break
-                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        vector[string] type_params = this.parse_type_params()
 
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
         vector[Param] params = this.parse_param_list()
@@ -841,14 +803,7 @@ class Parser:
 
     Stmt fn struct_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect struct name.")
-        vector[string] type_params = []
-        if this.match_any([TK_LEFT_BRACKET]):
-            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            while this.match_any([TK_COMMA]):
-                if this.check(TK_RIGHT_BRACKET):
-                    break
-                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        vector[string] type_params = this.parse_type_params()
         this.consume(TK_COLON, "Expect ':' after struct name.")
         auto old = this.in_class_body
         this.in_class_body = true
@@ -858,14 +813,7 @@ class Parser:
 
     Stmt fn enum_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect enum name.")
-        vector[string] type_params = []
-        if this.match_any([TK_LEFT_BRACKET]):
-            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            while this.match_any([TK_COMMA]):
-                if this.check(TK_RIGHT_BRACKET):
-                    break
-                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        vector[string] type_params = this.parse_type_params()
         this.consume(TK_COLON, "Expect ':' after enum name.")
 
         this.match_any([TK_NEWLINE])

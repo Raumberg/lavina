@@ -1,4 +1,4 @@
-import ast
+import type_utils
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Type Checker
@@ -48,9 +48,6 @@ class Checker:
 
     void fn error(ref string msg, ref Token t):
         this.errors.push("[${t.line}:${t.col}] Error: ${msg}")
-
-    void fn error_msg(ref string msg):
-        this.errors.push("Error: ${msg}")
 
     void fn warn(ref string msg, ref Token t):
         this.warnings.push("[${t.line}:${t.col}] Warning: ${msg}")
@@ -163,58 +160,18 @@ class Checker:
             _:
                 pass
         // Same type check
-        string e = this.type_name(expected)
-        string a = this.type_name(actual)
+        string e = type_to_display(expected)
+        string a = type_to_display(actual)
         if e == a:
             return true
         // Integer family compatibility
-        bool e_is_int = false
-        bool a_is_int = false
-        match expected:
-            Int():
-                e_is_int = true
-            Int8():
-                e_is_int = true
-            Int16():
-                e_is_int = true
-            Int32():
-                e_is_int = true
-            USize():
-                e_is_int = true
-            _:
-                pass
-        match actual:
-            Int():
-                a_is_int = true
-            Int8():
-                a_is_int = true
-            Int16():
-                a_is_int = true
-            Int32():
-                a_is_int = true
-            USize():
-                a_is_int = true
-            _:
-                pass
+        bool e_is_int = is_integer_type(expected)
+        bool a_is_int = is_integer_type(actual)
         if e_is_int and a_is_int:
             return true
         // Float family compatibility
-        bool e_is_float = false
-        bool a_is_float = false
-        match expected:
-            Float():
-                e_is_float = true
-            Float32():
-                e_is_float = true
-            _:
-                pass
-        match actual:
-            Float():
-                a_is_float = true
-            Float32():
-                a_is_float = true
-            _:
-                pass
+        bool e_is_float = is_float_type(expected)
+        bool a_is_float = is_float_type(actual)
         if e_is_float and a_is_float:
             return true
         // Float accepts Int
@@ -257,53 +214,6 @@ class Checker:
             _:
                 pass
         return false
-
-    string fn type_name(ref TypeNode t):
-        match t:
-            Int():
-                return "int"
-            Float():
-                return "float"
-            Str():
-                return "string"
-            Bool():
-                return "bool"
-            Void():
-                return "void"
-            Auto():
-                return "auto"
-            Dynamic():
-                return "dynamic"
-            NullType():
-                return "null"
-            Custom(name, _):
-                return name
-            Array(inner):
-                return "vector[${this.type_name(inner)}]"
-            HashSet(inner):
-                return "set[${this.type_name(inner)}]"
-            HashMap(k, v):
-                return "map[${this.type_name(k)}, ${this.type_name(v)}]"
-            Nullable(inner):
-                return "${this.type_name(inner)}?"
-            Int8():
-                return "int8"
-            Int16():
-                return "int16"
-            Int32():
-                return "int32"
-            Float32():
-                return "float32"
-            USize():
-                return "usize"
-            CString():
-                return "cstring"
-            Ptr(inner):
-                return "ptr[${this.type_name(inner)}]"
-            Bytes():
-                return "bytes"
-            _:
-                return "unknown"
 
     // ── Type inference ─────────────────────────────────────────
 
@@ -415,17 +325,6 @@ class Checker:
             _:
                 return TypeNode::Auto()
 
-    // ── Enum helpers ───────────────────────────────────────────
-
-    string fn find_enum_for_variant(ref string variant_name):
-        vector[string] keys = this.known_enums.keys()
-        for ref key in keys:
-            vector[EnumVariantNode] variants = this.known_enums[key]
-            for ref v in variants:
-                if v.name.lexeme == variant_name:
-                    return key
-        return ""
-
     // ── Statement checking ─────────────────────────────────────
 
     void fn register_builtins():
@@ -496,7 +395,7 @@ class Checker:
                         pass
                     _:
                         if not this.types_compatible(var_type, init_type):
-                            this.error("Cannot assign ${this.type_name(init_type)} to ${this.type_name(var_type)}", name)
+                            this.error("Cannot assign ${type_to_display(init_type)} to ${type_to_display(var_type)}", name)
                 this.declare(name.lexeme, var_type, "var", is_ref, true, name)
             Const(name, const_type, value, visibility, comptime_mode):
                 this.check_expr(value)
@@ -514,7 +413,7 @@ class Checker:
                     _:
                         auto val_type = this.infer_type(value)
                         if not this.types_compatible(this.current_return_type, val_type):
-                            this.error("Return type mismatch: expected ${this.type_name(this.current_return_type)}, got ${this.type_name(val_type)}", keyword)
+                            this.error("Return type mismatch: expected ${type_to_display(this.current_return_type)}, got ${type_to_display(val_type)}", keyword)
             If(condition, then_branch, else_branch):
                 this.check_expr(condition)
                 this.check_stmt(then_branch)
@@ -583,12 +482,15 @@ class Checker:
             _:
                 pass
 
+    void fn declare_params(ref vector[Param] params):
+        for ref p in params:
+            this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+
     void fn check_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body):
         auto saved_return = this.current_return_type
         this.current_return_type = return_type
         this.push_scope()
-        for ref p in params:
-            this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+        this.declare_params(params)
         for ref s in body:
             this.check_stmt(s)
         this.pop_scope()
@@ -682,14 +584,12 @@ class Checker:
                 this.check_expr(end)
             Lambda(params, body):
                 this.push_scope()
-                for ref p in params:
-                    this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+                this.declare_params(params)
                 this.check_expr(body)
                 this.pop_scope()
             BlockLambda(params, body_id):
                 this.push_scope()
-                for ref p in params:
-                    this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+                this.declare_params(params)
                 this.pop_scope()
             Own(expr):
                 this.check_expr(expr)
@@ -738,7 +638,7 @@ class Checker:
                 has_wildcard = true
             else:
                 // Check variant exists
-                string enum_name = this.find_enum_for_variant(arm.pattern_name)
+                string enum_name = find_enum_for_variant(this.known_enums,arm.pattern_name)
                 if enum_name == "":
                     // Not a known variant — might be a binding, skip
                     pass
