@@ -209,6 +209,8 @@ class Parser:
                     TypeNode first_arg = this.parse_type()
                     type_args.push(first_arg)
                     while this.match_any([TK_COMMA]):
+                        if this.check(TK_RIGHT_BRACKET):
+                            break
                         type_args.push(this.parse_type())
                     if not this.check(TK_RIGHT_BRACKET):
                         is_type_args = false
@@ -389,6 +391,8 @@ class Parser:
                         TypeNode first_t = this.parse_type()
                         type_strs.push(this.type_to_string(first_t))
                         while this.match_any([TK_COMMA]):
+                            if this.check(TK_RIGHT_BRACKET):
+                                break
                             TypeNode next_t = this.parse_type()
                             type_strs.push(this.type_to_string(next_t))
                         if not this.check(TK_RIGHT_BRACKET):
@@ -447,6 +451,8 @@ class Parser:
             this.skip_formatting()
             while this.match_any([TK_COMMA]):
                 this.skip_formatting()
+                if this.check(TK_RIGHT_PAREN):
+                    break
                 this.match_any([TK_REF, TK_REF_MUT])
                 args.push(this.expression())
                 this.skip_formatting()
@@ -491,6 +497,8 @@ class Parser:
                 this.skip_formatting()
                 while this.match_any([TK_COMMA]):
                     this.skip_formatting()
+                    if this.check(TK_RIGHT_BRACKET):
+                        break
                     elements.push(this.expression())
                     this.skip_formatting()
             this.skip_formatting()
@@ -512,6 +520,8 @@ class Parser:
                 values.push(value)
                 while this.match_any([TK_COMMA]):
                     this.skip_formatting()
+                    if this.check(TK_RIGHT_BRACE):
+                        break
                     key = this.expression()
                     this.skip_formatting()
                     this.consume(TK_COLON, "Expect ':' after map key.")
@@ -539,6 +549,8 @@ class Parser:
             this.skip_formatting()
             while this.match_any([TK_COMMA]):
                 this.skip_formatting()
+                if this.check(TK_RIGHT_PAREN):
+                    break
                 p_mut = this.match_any([TK_REF_MUT])
                 p_ref = p_mut or this.match_any([TK_REF])
                 param_type = this.parse_type()
@@ -703,6 +715,8 @@ class Parser:
                         if not this.check(TK_RIGHT_PAREN):
                             bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
                             while this.match_any([TK_COMMA]):
+                                if this.check(TK_RIGHT_PAREN):
+                                    break
                                 bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
                         this.consume(TK_RIGHT_PAREN, "Expect ')' after bindings.")
                 this.consume(TK_COLON, "Expect ':' after match pattern.")
@@ -775,6 +789,8 @@ class Parser:
         if this.match_any([TK_LEFT_BRACKET]):
             type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
             while this.match_any([TK_COMMA]):
+                if this.check(TK_RIGHT_BRACKET):
+                    break
                 type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
 
@@ -801,6 +817,8 @@ class Parser:
         if this.match_any([TK_LEFT_BRACKET]):
             type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
             while this.match_any([TK_COMMA]):
+                if this.check(TK_RIGHT_BRACKET):
+                    break
                 type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
         this.consume(TK_COLON, "Expect ':' after struct name.")
@@ -816,6 +834,8 @@ class Parser:
         if this.match_any([TK_LEFT_BRACKET]):
             type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
             while this.match_any([TK_COMMA]):
+                if this.check(TK_RIGHT_BRACKET):
+                    break
                 type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
             this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
         this.consume(TK_COLON, "Expect ':' after enum name.")
@@ -847,6 +867,8 @@ class Parser:
                     fields.push(this.parse_type())
                     fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                     while this.match_any([TK_COMMA]):
+                        if this.check(TK_RIGHT_PAREN):
+                            break
                         fields.push(this.parse_type())
                         fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after variant fields.")

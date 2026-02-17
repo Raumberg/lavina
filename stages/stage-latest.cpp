@@ -5626,6 +5626,9 @@ struct Parser {
                                                                                                         TypeNode first_arg = (*this).parse_type();
                                                                                                         type_args.push_back(first_arg);
                                                                                                         while ((*this).match_any(std::vector{TK_COMMA})) {
+                                                                                                            if ((*this).check(TK_RIGHT_BRACKET)) {
+                                                                                                                break;
+                                                                                                            }
                                                                                                             type_args.push_back((*this).parse_type());
                                                                                                         }
                                                                                                         if ((!(*this).check(TK_RIGHT_BRACKET))) {
@@ -5922,6 +5925,9 @@ struct Parser {
                         TypeNode first_t = (*this).parse_type();
                         type_strs.push_back((*this).type_to_string(first_t));
                         while ((*this).match_any(std::vector{TK_COMMA})) {
+                            if ((*this).check(TK_RIGHT_BRACKET)) {
+                                break;
+                            }
                             TypeNode next_t = (*this).parse_type();
                             type_strs.push_back((*this).type_to_string(next_t));
                         }
@@ -6014,6 +6020,9 @@ struct Parser {
             (*this).skip_formatting();
             while ((*this).match_any(std::vector{TK_COMMA})) {
                 (*this).skip_formatting();
+                if ((*this).check(TK_RIGHT_PAREN)) {
+                    break;
+                }
                 (*this).match_any(std::vector{TK_REF, TK_REF_MUT});
                 args.push_back((*this).expression());
                 (*this).skip_formatting();
@@ -6072,6 +6081,9 @@ struct Parser {
                 (*this).skip_formatting();
                 while ((*this).match_any(std::vector{TK_COMMA})) {
                     (*this).skip_formatting();
+                    if ((*this).check(TK_RIGHT_BRACKET)) {
+                        break;
+                    }
                     elements.push_back((*this).expression());
                     (*this).skip_formatting();
                 }
@@ -6096,6 +6108,9 @@ struct Parser {
                 values.push_back(value);
                 while ((*this).match_any(std::vector{TK_COMMA})) {
                     (*this).skip_formatting();
+                    if ((*this).check(TK_RIGHT_BRACE)) {
+                        break;
+                    }
                     key = (*this).expression();
                     (*this).skip_formatting();
                     (*this).consume(TK_COLON, std::string("Expect ':' after map key."));
@@ -6126,6 +6141,9 @@ struct Parser {
             (*this).skip_formatting();
             while ((*this).match_any(std::vector{TK_COMMA})) {
                 (*this).skip_formatting();
+                if ((*this).check(TK_RIGHT_PAREN)) {
+                    break;
+                }
                 p_mut = (*this).match_any(std::vector{TK_REF_MUT});
                 p_ref = p_mut || (*this).match_any(std::vector{TK_REF});
                 param_type = (*this).parse_type();
@@ -6327,6 +6345,9 @@ struct Parser {
                         if ((!(*this).check(TK_RIGHT_PAREN))) {
                             bindings.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect binding name.")).lexeme);
                             while ((*this).match_any(std::vector{TK_COMMA})) {
+                                if ((*this).check(TK_RIGHT_PAREN)) {
+                                    break;
+                                }
                                 bindings.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect binding name.")).lexeme);
                             }
                         }
@@ -6410,6 +6431,9 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
             type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
             while ((*this).match_any(std::vector{TK_COMMA})) {
+                if ((*this).check(TK_RIGHT_BRACKET)) {
+                    break;
+                }
                 type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
             }
             (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
@@ -6438,6 +6462,9 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
             type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
             while ((*this).match_any(std::vector{TK_COMMA})) {
+                if ((*this).check(TK_RIGHT_BRACKET)) {
+                    break;
+                }
                 type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
             }
             (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
@@ -6456,6 +6483,9 @@ struct Parser {
         if ((*this).match_any(std::vector{TK_LEFT_BRACKET})) {
             type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
             while ((*this).match_any(std::vector{TK_COMMA})) {
+                if ((*this).check(TK_RIGHT_BRACKET)) {
+                    break;
+                }
                 type_params.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect type parameter name.")).lexeme);
             }
             (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type parameters."));
@@ -6495,6 +6525,9 @@ struct Parser {
                             fields.push_back((*this).parse_type());
                             fnames.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect field name.")).lexeme);
                             while ((*this).match_any(std::vector{TK_COMMA})) {
+                                if ((*this).check(TK_RIGHT_PAREN)) {
+                                    break;
+                                }
                                 fields.push_back((*this).parse_type());
                                 fnames.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect field name.")).lexeme);
                             }
