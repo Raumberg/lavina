@@ -791,6 +791,46 @@ class CppCodegen:
                 return target_type
             Unary(op, right):
                 return this.infer_source_type(right)
+            Call(callee, paren, args, arg_names):
+                // Infer return type from known method calls
+                match callee:
+                    Get(obj, method_tok):
+                        TypeNode obj_type = this.infer_source_type(obj)
+                        string method = method_tok.lexeme
+                        // Methods that return element type (at, pop, etc.)
+                        if method == "at":
+                            match obj_type:
+                                Array(inner):
+                                    return inner
+                                Custom(name, targs):
+                                    if targs.len() > 0:
+                                        return targs[0]
+                                    return TypeNode::Auto()
+                                _:
+                                    return TypeNode::Auto()
+                        // String methods that return string
+                        if method == "substring" or method == "trim" or method == "to_string" or method == "join":
+                            return TypeNode::Str()
+                        // len() returns int
+                        if method == "len":
+                            return TypeNode::Int()
+                        return TypeNode::Auto()
+                    _:
+                        return TypeNode::Auto()
+                return TypeNode::Auto()
+            Index(obj, bracket, idx):
+                // vec[i] returns element type
+                TypeNode obj_type = this.infer_source_type(obj)
+                match obj_type:
+                    Array(inner):
+                        return inner
+                    Custom(name, targs):
+                        if targs.len() > 0:
+                            return targs[0]
+                        return TypeNode::Auto()
+                    _:
+                        return TypeNode::Auto()
+                return TypeNode::Auto()
             _:
                 return TypeNode::Auto()
 

@@ -35,11 +35,16 @@ struct VlessRequest:
     int payload_offset
     bytes client_uuid
 
-    constructor():
-        this.command = 0
-        this.address = ""
-        this.port = 0
-        this.payload_offset = 0
+    constructor(
+        int command = 0,
+        string address = "",
+        int port = 0,
+        int payload_offset = 0,
+    ):
+        this.command = command
+        this.address = address
+        this.port = port
+        this.payload_offset = payload_offset
         this.client_uuid = bytes::create(0)
 
 // ── Parse VLESS request ─────────────────────────────────────
