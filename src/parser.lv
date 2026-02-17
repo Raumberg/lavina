@@ -68,7 +68,7 @@ class Parser:
             TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID,
             TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET,
             TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64,
-            TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR
+            TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR, TK_BYTES
         ]
         return type_tokens.contains(t)
 
@@ -185,6 +185,8 @@ class Parser:
             t = TypeNode::USize()
         elif this.match_any([TK_CSTRING]):
             t = TypeNode::CString()
+        elif this.match_any([TK_BYTES]):
+            t = TypeNode::Bytes()
         elif this.match_any([TK_PTR]):
             this.consume(TK_LEFT_BRACKET, "Expect '[' after 'ptr'.")
             TypeNode inner = this.parse_type()
@@ -263,6 +265,8 @@ class Parser:
                 return "const char*"
             Ptr(inner):
                 return "${this.type_to_string(inner)}*"
+            Bytes():
+                return "std::vector<uint8_t>"
             _:
                 return "auto"
 
@@ -465,6 +469,9 @@ class Parser:
             return Expr::Literal("string", this.previous().lexeme)
         if this.match_any([TK_IDENTIFIER]):
             return Expr::Variable(this.previous())
+        if this.check(TK_BYTES) and this.peek_at(1).token_type == TK_DOUBLE_COLON:
+            auto tok = this.advance()
+            return Expr::Variable(Token(TK_IDENTIFIER, tok.lexeme, tok.line, tok.col))
         if this.match_any([TK_THIS]):
             return Expr::This(this.previous())
         if this.match_any([TK_LEFT_PAREN]):
@@ -874,7 +881,7 @@ class Parser:
         return Stmt::Enum(name, variants, methods, visibility, type_params)
 
     Stmt fn extend_declaration(string visibility):
-        if not this.match_any([TK_IDENTIFIER, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_STRING_TYPE]):
+        if not this.match_any([TK_IDENTIFIER, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_STRING_TYPE, TK_BYTES]):
             throw "Expect type name after 'extend'."
         auto target = this.previous()
         this.consume(TK_COLON, "Expect ':' after extend target.")
@@ -899,11 +906,19 @@ class Parser:
         this.in_class_body = old
         return Stmt::Extend(target, methods, visibility)
 
+    Token fn consume_module_name():
+        if this.match_any([TK_IDENTIFIER]):
+            return this.previous()
+        if this.match_any([TK_BYTES]):
+            auto tok = this.previous()
+            return Token(TK_IDENTIFIER, tok.lexeme, tok.line, tok.col)
+        throw "Expect module name. Got ${this.peek().token_type} at ${this.peek().line}:${this.peek().col}"
+
     Stmt fn import_statement():
         vector[Token] path = []
-        path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
+        path.push(this.consume_module_name())
         while this.match_any([TK_DOUBLE_COLON]):
-            path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
+            path.push(this.consume_module_name())
 
         string alias = ""
         if this.match_any([TK_AS]):

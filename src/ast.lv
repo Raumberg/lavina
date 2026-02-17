@@ -28,6 +28,7 @@ enum TypeNode:
     USize
     CString
     Ptr(TypeNode inner)
+    Bytes
 
 // ── Helper structs ───────────────────────────────────────────
 

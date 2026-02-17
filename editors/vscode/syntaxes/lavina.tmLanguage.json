@@ -52,6 +52,10 @@
           "match": "\\b\\d+\\.\\d+\\b"
         },
         {
+          "name": "constant.numeric.hex.lavina",
+          "match": "\\b0[xX][0-9a-fA-F]+\\b"
+        },
+        {
           "name": "constant.numeric.integer.lavina",
           "match": "\\b\\d+\\b"
         }
@@ -78,7 +82,7 @@
       "name": "storage.type.lavina"
     },
     "types": {
-      "match": "\\b(int|float|string|bool|void|auto|dynamic|vector|hashmap|hashset|null|int8|int16|int32|int64|float32|float64|usize|cstring|ptr)\\b",
+      "match": "\\b(int|float|string|bool|void|auto|dynamic|vector|hashmap|hashset|bytes|null|int8|int16|int32|int64|float32|float64|usize|cstring|ptr)\\b",
       "name": "support.type.lavina"
     },
     "constants": {

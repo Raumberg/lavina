@@ -300,6 +300,8 @@ class Checker:
                 return "cstring"
             Ptr(inner):
                 return "ptr[${this.type_name(inner)}]"
+            Bytes():
+                return "bytes"
             _:
                 return "unknown"
 

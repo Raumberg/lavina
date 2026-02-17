@@ -271,6 +271,8 @@ class CppCodegen:
                 return "const char*"
             Ptr(inner):
                 return "${this.emit_type(inner)}*"
+            Bytes():
+                return "std::vector<uint8_t>"
             _:
                 return "auto"
 
@@ -594,6 +596,8 @@ class CppCodegen:
                             return "hashset"
                         Str():
                             return "string"
+                        Bytes():
+                            return "bytes"
                         Custom(name, type_args):
                             return name
                         _:

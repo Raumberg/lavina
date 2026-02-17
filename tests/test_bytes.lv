@@ -1,0 +1,200 @@
+// Test: bytes type + hex literals + std::bytes API
+import std::bytes
+
+void fn test_hex_literals():
+    int a = 0xFF
+    lv_assert(a == 255, "0xFF == 255")
+    int b = 0x10
+    lv_assert(b == 16, "0x10 == 16")
+    int c = 0xDEAD
+    lv_assert(c == 57005, "0xDEAD == 57005")
+    int d = 0x0
+    lv_assert(d == 0, "0x0 == 0")
+    print("PASS: hex literals")
+
+void fn test_create():
+    bytes buf = bytes::create(4)
+    lv_assert(buf.len() == 4, "create size 4")
+    bytes empty = bytes::create(0)
+    lv_assert(empty.len() == 0, "create size 0")
+    print("PASS: create")
+
+void fn test_get_set():
+    bytes buf = bytes::create(4)
+    buf.set(0, 0x48)
+    buf.set(1, 0x65)
+    buf.set(2, 0x6C)
+    buf.set(3, 0x6F)
+    lv_assert(buf.get(0) == 0x48, "get byte 0")
+    lv_assert(buf.get(1) == 0x65, "get byte 1")
+    lv_assert(buf.get(2) == 0x6C, "get byte 2")
+    lv_assert(buf.get(3) == 0x6F, "get byte 3")
+    print("PASS: get/set")
+
+void fn test_from_string():
+    bytes hello = bytes::from_string("Hello")
+    lv_assert(hello.len() == 5, "from_string length")
+    lv_assert(hello.get(0) == 0x48, "H = 0x48")
+    lv_assert(hello.get(4) == 0x6F, "o = 0x6F")
+    print("PASS: from_string")
+
+void fn test_to_string():
+    bytes hello = bytes::from_string("Hello")
+    string back = hello.to_string()
+    lv_assert(back == "Hello", "to_string roundtrip")
+    print("PASS: to_string")
+
+void fn test_hex_encode():
+    bytes hello = bytes::from_string("Hello")
+    string hex = hello.to_hex()
+    lv_assert(hex == "48656c6c6f", "to_hex")
+    print("PASS: hex encode")
+
+void fn test_hex_decode():
+    bytes decoded = bytes::from_hex("48656c6c6f")
+    lv_assert(decoded.len() == 5, "from_hex length")
+    string back = decoded.to_string()
+    lv_assert(back == "Hello", "from_hex roundtrip")
+    print("PASS: hex decode")
+
+void fn test_push():
+    bytes buf = bytes::create(0)
+    buf.push(0x41)
+    buf.push(0x42)
+    buf.push(0x43)
+    lv_assert(buf.len() == 3, "push length")
+    lv_assert(buf.get(0) == 0x41, "push byte 0")
+    lv_assert(buf.get(2) == 0x43, "push byte 2")
+    print("PASS: push")
+
+void fn test_slice():
+    bytes hello = bytes::from_string("Hello World")
+    bytes sub = hello.slice(0, 5)
+    lv_assert(sub.len() == 5, "slice length")
+    lv_assert(sub.to_string() == "Hello", "slice content")
+    bytes sub2 = hello.slice(6, 11)
+    lv_assert(sub2.to_string() == "World", "slice content 2")
+    print("PASS: slice")
+
+void fn test_concat():
+    bytes a = bytes::from_string("AB")
+    bytes b = bytes::from_string("CD")
+    bytes combined = a.concat(b)
+    lv_assert(combined.len() == 4, "concat length")
+    lv_assert(combined.to_string() == "ABCD", "concat content")
+    print("PASS: concat")
+
+void fn test_equals():
+    bytes a = bytes::from_string("test")
+    bytes b = bytes::from_string("test")
+    bytes c = bytes::from_string("other")
+    lv_assert(a.equals(b) == true, "equal bytes")
+    lv_assert(a.equals(c) == false, "not equal bytes")
+    print("PASS: equals")
+
+void fn test_fill():
+    bytes buf = bytes::create(4)
+    buf.fill(0xFF)
+    lv_assert(buf.get(0) == 255, "fill byte 0")
+    lv_assert(buf.get(3) == 255, "fill byte 3")
+    print("PASS: fill")
+
+void fn test_u16_be():
+    bytes buf = bytes::create(4)
+    buf.write_u16_be(0, 0x0102)
+    lv_assert(buf.read_u16_be(0) == 258, "u16 be roundtrip")
+    buf.write_u16_be(2, 0x01BB)
+    lv_assert(buf.read_u16_be(2) == 443, "u16 be port 443")
+    // Verify byte order
+    lv_assert(buf.get(0) == 0x01, "u16 be high byte")
+    lv_assert(buf.get(1) == 0x02, "u16 be low byte")
+    print("PASS: u16 big-endian")
+
+void fn test_u32_be():
+    bytes buf = bytes::create(4)
+    buf.write_u32_be(0, 0x01020304)
+    lv_assert(buf.read_u32_be(0) == 16909060, "u32 be roundtrip")
+    lv_assert(buf.get(0) == 0x01, "u32 be byte 0")
+    lv_assert(buf.get(1) == 0x02, "u32 be byte 1")
+    lv_assert(buf.get(2) == 0x03, "u32 be byte 2")
+    lv_assert(buf.get(3) == 0x04, "u32 be byte 3")
+    print("PASS: u32 big-endian")
+
+void fn test_u16_le():
+    bytes buf = bytes::create(2)
+    buf.write_u16_le(0, 0x0102)
+    lv_assert(buf.read_u16_le(0) == 258, "u16 le roundtrip")
+    // Little-endian: low byte first
+    lv_assert(buf.get(0) == 0x02, "u16 le low byte first")
+    lv_assert(buf.get(1) == 0x01, "u16 le high byte second")
+    print("PASS: u16 little-endian")
+
+void fn test_u32_le():
+    bytes buf = bytes::create(4)
+    buf.write_u32_le(0, 0x01020304)
+    lv_assert(buf.read_u32_le(0) == 16909060, "u32 le roundtrip")
+    lv_assert(buf.get(0) == 0x04, "u32 le byte 0 (lowest)")
+    lv_assert(buf.get(3) == 0x01, "u32 le byte 3 (highest)")
+    print("PASS: u32 little-endian")
+
+int fn get_len(bytes b):
+    return b.len()
+
+bytes fn make_bytes():
+    bytes b = bytes::create(3)
+    b.set(0, 1)
+    b.set(1, 2)
+    b.set(2, 3)
+    return b
+
+void fn test_bytes_as_param():
+    bytes data = bytes::from_string("param test")
+    int length = get_len(data)
+    lv_assert(length == 10, "bytes param passing")
+    print("PASS: bytes as param")
+
+void fn test_bytes_return():
+    bytes result = make_bytes()
+    lv_assert(result.len() == 3, "bytes return")
+    lv_assert(result.get(0) == 1, "return byte 0")
+    print("PASS: bytes return")
+
+void fn test_clear():
+    bytes buf = bytes::from_string("hello")
+    lv_assert(buf.len() == 5, "before clear")
+    buf.clear()
+    lv_assert(buf.len() == 0, "after clear")
+    print("PASS: clear")
+
+void fn test_free_functions():
+    bytes a = bytes::from_string("AB")
+    bytes b = bytes::from_string("AB")
+    bytes c = bytes::from_string("XY")
+    lv_assert(bytes::equals(a, b) == true, "free equals true")
+    lv_assert(bytes::equals(a, c) == false, "free equals false")
+    bytes combined = bytes::concat(a, c)
+    lv_assert(combined.to_string() == "ABXY", "free concat")
+    print("PASS: free functions")
+
+void fn main():
+    test_hex_literals()
+    test_create()
+    test_get_set()
+    test_from_string()
+    test_to_string()
+    test_hex_encode()
+    test_hex_decode()
+    test_push()
+    test_slice()
+    test_concat()
+    test_equals()
+    test_fill()
+    test_u16_be()
+    test_u32_be()
+    test_u16_le()
+    test_u32_le()
+    test_bytes_as_param()
+    test_bytes_return()
+    test_clear()
+    test_free_functions()
+    println("All bytes tests passed!")

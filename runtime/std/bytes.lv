@@ -1,0 +1,70 @@
+// std::bytes — byte buffer operations
+
+// ── Extension methods ───────────────────────────────────────
+// Methods available directly on bytes values: buf.get(0), buf.set(0, 0xFF), etc.
+// Note: .len(), .push(), .clear(), .slice() already work via try_remap_method.
+
+extend bytes:
+    int fn get(int idx):
+        return __bytes_get(this, idx)
+
+    void fn set(int idx, int val):
+        __bytes_set(this, idx, val)
+
+    string fn to_string():
+        return __bytes_to_string(this)
+
+    string fn to_hex():
+        return __bytes_to_hex(this)
+
+    void fn fill(int val):
+        __bytes_fill(this, val)
+
+    bool fn equals(bytes other):
+        return __bytes_equals(this, other)
+
+    bytes fn concat(bytes other):
+        return __bytes_concat(this, other)
+
+    // Big-endian
+    int fn read_u16_be(int offset):
+        return __bytes_read_u16_be(this, offset)
+
+    void fn write_u16_be(int offset, int val):
+        __bytes_write_u16_be(this, offset, val)
+
+    int fn read_u32_be(int offset):
+        return __bytes_read_u32_be(this, offset)
+
+    void fn write_u32_be(int offset, int val):
+        __bytes_write_u32_be(this, offset, val)
+
+    // Little-endian
+    int fn read_u16_le(int offset):
+        return __bytes_read_u16_le(this, offset)
+
+    void fn write_u16_le(int offset, int val):
+        __bytes_write_u16_le(this, offset, val)
+
+    int fn read_u32_le(int offset):
+        return __bytes_read_u32_le(this, offset)
+
+    void fn write_u32_le(int offset, int val):
+        __bytes_write_u32_le(this, offset, val)
+
+// ── Free functions (construction + utilities) ───────────────
+
+public bytes fn create(int size):
+    return __bytes_create(size)
+
+public bytes fn from_string(string s):
+    return __bytes_from_string(s)
+
+public bytes fn from_hex(string hex):
+    return __bytes_from_hex(hex)
+
+public bytes fn concat(bytes a, bytes b):
+    return __bytes_concat(a, b)
+
+public bool fn equals(bytes a, bytes b):
+    return __bytes_equals(a, b)

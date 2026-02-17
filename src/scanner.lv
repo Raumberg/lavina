@@ -100,6 +100,7 @@ const string TK_FLOAT64 = "Float64"
 const string TK_USIZE = "USize"
 const string TK_CSTRING = "CString"
 const string TK_PTR = "Ptr"
+const string TK_BYTES = "Bytes"
 const string TK_CPP = "Cpp"
 const string TK_AMPERSAND = "Ampersand"
 const string TK_EXTERN = "Extern"
@@ -237,6 +238,8 @@ string fn lookup_keyword(ref string w):
         return TK_CSTRING
     elif w == "ptr":
         return TK_PTR
+    elif w == "bytes":
+        return TK_BYTES
     elif w == "cpp":
         return TK_CPP
     elif w == "extern":
@@ -262,6 +265,15 @@ bool fn is_alpha(auto c):
 
 bool fn is_digit(auto c):
     if c >= "0" and c <= "9":
+        return true
+    return false
+
+bool fn is_hex_digit(auto c):
+    if is_digit(c):
+        return true
+    if c >= "a" and c <= "f":
+        return true
+    if c >= "A" and c <= "F":
         return true
     return false
 
@@ -412,6 +424,14 @@ class Scanner:
         this.add_token(TK_STRING, value)
 
     void fn scan_number():
+        // Check for hex literal: 0x...
+        if this.source.charAt(this.start) == "0" and (this.peek() == "x" or this.peek() == "X"):
+            this.advance()
+            while is_hex_digit(this.peek()):
+                this.advance()
+            this.add_simple_token(TK_INT)
+            return
+
         while is_digit(this.peek()):
             this.advance()
 

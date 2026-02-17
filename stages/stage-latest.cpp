@@ -95,6 +95,7 @@ const std::string TK_FLOAT64 = std::string("Float64");
 const std::string TK_USIZE = std::string("USize");
 const std::string TK_CSTRING = std::string("CString");
 const std::string TK_PTR = std::string("Ptr");
+const std::string TK_BYTES = std::string("Bytes");
 const std::string TK_CPP = std::string("Cpp");
 const std::string TK_AMPERSAND = std::string("Ampersand");
 const std::string TK_EXTERN = std::string("Extern");
@@ -349,24 +350,29 @@ std::string lookup_keyword(const std::string& w) {
                                                                                                                                                                                                                                     return TK_PTR;
                                                                                                                                                                                                                                 }
                                                                                                                                                                                                                                 else {
-                                                                                                                                                                                                                                    if ((w == std::string("cpp"))) {
-                                                                                                                                                                                                                                        return TK_CPP;
+                                                                                                                                                                                                                                    if ((w == std::string("bytes"))) {
+                                                                                                                                                                                                                                        return TK_BYTES;
                                                                                                                                                                                                                                     }
                                                                                                                                                                                                                                     else {
-                                                                                                                                                                                                                                        if ((w == std::string("extern"))) {
-                                                                                                                                                                                                                                            return TK_EXTERN;
+                                                                                                                                                                                                                                        if ((w == std::string("cpp"))) {
+                                                                                                                                                                                                                                            return TK_CPP;
                                                                                                                                                                                                                                         }
                                                                                                                                                                                                                                         else {
-                                                                                                                                                                                                                                            if ((w == std::string("link"))) {
-                                                                                                                                                                                                                                                return TK_LINK;
+                                                                                                                                                                                                                                            if ((w == std::string("extern"))) {
+                                                                                                                                                                                                                                                return TK_EXTERN;
                                                                                                                                                                                                                                             }
                                                                                                                                                                                                                                             else {
-                                                                                                                                                                                                                                                if ((w == std::string("operator"))) {
-                                                                                                                                                                                                                                                    return TK_OPERATOR;
+                                                                                                                                                                                                                                                if ((w == std::string("link"))) {
+                                                                                                                                                                                                                                                    return TK_LINK;
                                                                                                                                                                                                                                                 }
                                                                                                                                                                                                                                                 else {
-                                                                                                                                                                                                                                                    if ((w == std::string("extend"))) {
-                                                                                                                                                                                                                                                        return TK_EXTEND;
+                                                                                                                                                                                                                                                    if ((w == std::string("operator"))) {
+                                                                                                                                                                                                                                                        return TK_OPERATOR;
+                                                                                                                                                                                                                                                    }
+                                                                                                                                                                                                                                                    else {
+                                                                                                                                                                                                                                                        if ((w == std::string("extend"))) {
+                                                                                                                                                                                                                                                            return TK_EXTEND;
+                                                                                                                                                                                                                                                        }
                                                                                                                                                                                                                                                     }
                                                                                                                                                                                                                                                 }
                                                                                                                                                                                                                                             }
@@ -450,6 +456,19 @@ bool is_alpha(auto c) {
 
 bool is_digit(auto c) {
     if ((c >= std::string("0")) && (c <= std::string("9"))) {
+        return true;
+    }
+    return false;
+}
+
+bool is_hex_digit(auto c) {
+    if (is_digit(c)) {
+        return true;
+    }
+    if ((c >= std::string("a")) && (c <= std::string("f"))) {
+        return true;
+    }
+    if ((c >= std::string("A")) && (c <= std::string("F"))) {
         return true;
     }
     return false;
@@ -630,6 +649,14 @@ struct Scanner {
     }
 
     void scan_number() {
+        if ((std::string(1, this->source[this->start]) == std::string("0")) && (((*this).peek() == std::string("x")) || ((*this).peek() == std::string("X")))) {
+            (*this).advance();
+            while (is_hex_digit((*this).peek())) {
+                (*this).advance();
+            }
+            (*this).add_simple_token(TK_INT);
+            return;
+        }
         while (is_digit((*this).peek())) {
             (*this).advance();
         }
@@ -1019,9 +1046,10 @@ struct TypeNode {
     struct USize {};
     struct CString {};
     struct Ptr { std::shared_ptr<TypeNode> inner; };
+    struct Bytes {};
 
     std::string _tag;
-    std::variant<TypeNode::None, TypeNode::Int, TypeNode::Float, TypeNode::Str, TypeNode::Bool, TypeNode::Void, TypeNode::Auto, TypeNode::Dynamic, TypeNode::NullType, TypeNode::Custom, TypeNode::Array, TypeNode::HashSet, TypeNode::HashMap, TypeNode::Nullable, TypeNode::Int8, TypeNode::Int16, TypeNode::Int32, TypeNode::Float32, TypeNode::USize, TypeNode::CString, TypeNode::Ptr> _data;
+    std::variant<TypeNode::None, TypeNode::Int, TypeNode::Float, TypeNode::Str, TypeNode::Bool, TypeNode::Void, TypeNode::Auto, TypeNode::Dynamic, TypeNode::NullType, TypeNode::Custom, TypeNode::Array, TypeNode::HashSet, TypeNode::HashMap, TypeNode::Nullable, TypeNode::Int8, TypeNode::Int16, TypeNode::Int32, TypeNode::Float32, TypeNode::USize, TypeNode::CString, TypeNode::Ptr, TypeNode::Bytes> _data;
 
     static TypeNode make_None() { return {"None", None{}}; }
     static TypeNode make_Int() { return {"Int", Int{}}; }
@@ -1044,6 +1072,7 @@ struct TypeNode {
     static TypeNode make_USize() { return {"USize", USize{}}; }
     static TypeNode make_CString() { return {"CString", CString{}}; }
     static TypeNode make_Ptr(TypeNode inner) { return {"Ptr", Ptr{std::make_shared<TypeNode>(std::move(inner))}}; }
+    static TypeNode make_Bytes() { return {"Bytes", Bytes{}}; }
 
     std::string operator[](const std::string& key) const {
         if (key == "_tag") return _tag;
@@ -1628,6 +1657,9 @@ struct CppCodegen {
                 auto& _v = std::get<std::decay_t<decltype(_match_14)>::Ptr>(_match_14._data);
                 auto& inner = *_v.inner;
                 return ((std::string("") + ((*this).emit_type(inner))) + std::string("*"));
+            }
+            else if (std::holds_alternative<std::decay_t<decltype(_match_14)>::Bytes>(_match_14._data)) {
+                return std::string("std::vector<uint8_t>");
             }
             else {
                 return std::string("auto");
@@ -2324,6 +2356,9 @@ struct CppCodegen {
                         }
                         else if (std::holds_alternative<std::decay_t<decltype(_match_25)>::Str>(_match_25._data)) {
                             return std::string("string");
+                        }
+                        else if (std::holds_alternative<std::decay_t<decltype(_match_25)>::Bytes>(_match_25._data)) {
+                            return std::string("bytes");
                         }
                         else if (std::holds_alternative<std::decay_t<decltype(_match_25)>::Custom>(_match_25._data)) {
                             auto& _v = std::get<std::decay_t<decltype(_match_25)>::Custom>(_match_25._data);
@@ -4280,6 +4315,9 @@ struct Checker {
                 auto& inner = *_v.inner;
                 return ((std::string("ptr[") + ((*this).type_name(inner))) + std::string("]"));
             }
+            else if (std::holds_alternative<std::decay_t<decltype(_match_81)>::Bytes>(_match_81._data)) {
+                return std::string("bytes");
+            }
             else {
                 return std::string("unknown");
             }
@@ -5225,7 +5263,7 @@ struct Parser {
 
     bool is_type_at_pos(int64_t pos) {
         auto t = (*this).peek_at(pos).token_type;
-        std::vector<std::string> type_tokens = std::vector{TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID, TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64, TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR};
+        std::vector<std::string> type_tokens = std::vector{TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID, TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64, TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR, TK_BYTES};
         return lv_contains(type_tokens, t);
     }
 
@@ -5256,16 +5294,23 @@ struct Parser {
                 return pos;
             }
         }
-        if ((tt == TK_IDENTIFIER) && ((*this).peek_at((pos + INT64_C(1))).token_type == TK_LEFT_BRACKET)) {
-            int64_t try_pos = (pos + INT64_C(2));
-            try_pos = (*this).skip_type_tokens(try_pos);
-            while (((*this).peek_at(try_pos).token_type == TK_COMMA)) {
-                try_pos = (try_pos + INT64_C(1));
+        if ((tt == TK_IDENTIFIER)) {
+            int64_t id_pos = (pos + INT64_C(1));
+            while (((*this).peek_at(id_pos).token_type == TK_DOUBLE_COLON) && ((*this).peek_at((id_pos + INT64_C(1))).token_type == TK_IDENTIFIER)) {
+                id_pos = (id_pos + INT64_C(2));
+            }
+            if (((*this).peek_at(id_pos).token_type == TK_LEFT_BRACKET)) {
+                int64_t try_pos = (id_pos + INT64_C(1));
                 try_pos = (*this).skip_type_tokens(try_pos);
+                while (((*this).peek_at(try_pos).token_type == TK_COMMA)) {
+                    try_pos = (try_pos + INT64_C(1));
+                    try_pos = (*this).skip_type_tokens(try_pos);
+                }
+                if (((*this).peek_at(try_pos).token_type == TK_RIGHT_BRACKET)) {
+                    return (try_pos + INT64_C(1));
+                }
             }
-            if (((*this).peek_at(try_pos).token_type == TK_RIGHT_BRACKET)) {
-                return (try_pos + INT64_C(1));
-            }
+            return id_pos;
         }
         return (pos + INT64_C(1));
     }
@@ -5385,46 +5430,56 @@ struct Parser {
                                                                                     t = TypeNode::make_CString();
                                                                                 }
                                                                                 else {
-                                                                                    if ((*this).match_any(std::vector{TK_PTR})) {
-                                                                                        (*this).consume(TK_LEFT_BRACKET, std::string("Expect '[' after 'ptr'."));
-                                                                                        TypeNode inner = (*this).parse_type();
-                                                                                        (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after ptr type."));
-                                                                                        t = TypeNode::make_Ptr(inner);
+                                                                                    if ((*this).match_any(std::vector{TK_BYTES})) {
+                                                                                        t = TypeNode::make_Bytes();
                                                                                     }
                                                                                     else {
-                                                                                        if ((*this).match_any(std::vector{TK_IDENTIFIER})) {
-                                                                                            std::string custom_name = (*this).previous().lexeme;
-                                                                                            std::vector<TypeNode> type_args = {};
-                                                                                            if ((*this).check(TK_LEFT_BRACKET)) {
-                                                                                                int64_t save_pos = this->current;
-                                                                                                (*this).advance();
-                                                                                                bool is_type_args = true;
-                                                                                                try {
-                                                                                                    TypeNode first_arg = (*this).parse_type();
-                                                                                                    type_args.push_back(first_arg);
-                                                                                                    while ((*this).match_any(std::vector{TK_COMMA})) {
-                                                                                                        type_args.push_back((*this).parse_type());
-                                                                                                    }
-                                                                                                    if ((!(*this).check(TK_RIGHT_BRACKET))) {
-                                                                                                        is_type_args = false;
-                                                                                                    }
-                                                                                                }
-                                                                                                 catch (const std::exception& e) {
-                                                                                                    is_type_args = false;
-                                                                                                }
-                                                                                                if (is_type_args) {
-                                                                                                    (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type arguments."));
-                                                                                                }
-                                                                                                else {
-                                                                                                    type_args = {};
-                                                                                                    this->current = save_pos;
-                                                                                                }
-                                                                                            }
-                                                                                            t = TypeNode::make_Custom(custom_name, type_args);
+                                                                                        if ((*this).match_any(std::vector{TK_PTR})) {
+                                                                                            (*this).consume(TK_LEFT_BRACKET, std::string("Expect '[' after 'ptr'."));
+                                                                                            TypeNode inner = (*this).parse_type();
+                                                                                            (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after ptr type."));
+                                                                                            t = TypeNode::make_Ptr(inner);
                                                                                         }
                                                                                         else {
-                                                                                            auto tok = (*this).peek();
-                                                                                            throw std::runtime_error(((((((std::string("Expect type. Got ") + (tok.token_type)) + std::string(" at ")) + (tok.line)) + std::string(":")) + (tok.col)) + std::string("")));
+                                                                                            if ((*this).match_any(std::vector{TK_IDENTIFIER})) {
+                                                                                                std::string custom_name = (*this).previous().lexeme;
+                                                                                                while ((*this).check(TK_DOUBLE_COLON)) {
+                                                                                                    (*this).advance();
+                                                                                                    auto part = (*this).consume(TK_IDENTIFIER, std::string("Expect type name after '::'."));
+                                                                                                    custom_name = ((custom_name + std::string("::")) + part.lexeme);
+                                                                                                }
+                                                                                                std::vector<TypeNode> type_args = {};
+                                                                                                if ((*this).check(TK_LEFT_BRACKET)) {
+                                                                                                    int64_t save_pos = this->current;
+                                                                                                    (*this).advance();
+                                                                                                    bool is_type_args = true;
+                                                                                                    try {
+                                                                                                        TypeNode first_arg = (*this).parse_type();
+                                                                                                        type_args.push_back(first_arg);
+                                                                                                        while ((*this).match_any(std::vector{TK_COMMA})) {
+                                                                                                            type_args.push_back((*this).parse_type());
+                                                                                                        }
+                                                                                                        if ((!(*this).check(TK_RIGHT_BRACKET))) {
+                                                                                                            is_type_args = false;
+                                                                                                        }
+                                                                                                    }
+                                                                                                     catch (const std::exception& e) {
+                                                                                                        is_type_args = false;
+                                                                                                    }
+                                                                                                    if (is_type_args) {
+                                                                                                        (*this).consume(TK_RIGHT_BRACKET, std::string("Expect ']' after type arguments."));
+                                                                                                    }
+                                                                                                    else {
+                                                                                                        type_args = {};
+                                                                                                        this->current = save_pos;
+                                                                                                    }
+                                                                                                }
+                                                                                                t = TypeNode::make_Custom(custom_name, type_args);
+                                                                                            }
+                                                                                            else {
+                                                                                                auto tok = (*this).peek();
+                                                                                                throw std::runtime_error(((((((std::string("Expect type. Got ") + (tok.token_type)) + std::string(" at ")) + (tok.line)) + std::string(":")) + (tok.col)) + std::string("")));
+                                                                                            }
                                                                                         }
                                                                                     }
                                                                                 }
@@ -5513,6 +5568,9 @@ struct Parser {
                 auto& _v = std::get<std::decay_t<decltype(_match_100)>::Ptr>(_match_100._data);
                 auto& inner = *_v.inner;
                 return ((std::string("") + ((*this).type_to_string(inner))) + std::string("*"));
+            }
+            else if (std::holds_alternative<std::decay_t<decltype(_match_100)>::Bytes>(_match_100._data)) {
+                return std::string("std::vector<uint8_t>");
             }
             else {
                 return std::string("auto");
@@ -5818,6 +5876,10 @@ struct Parser {
         }
         if ((*this).match_any(std::vector{TK_IDENTIFIER})) {
             return Expr::make_Variable((*this).previous());
+        }
+        if ((*this).check(TK_BYTES) && ((*this).peek_at(INT64_C(1)).token_type == TK_DOUBLE_COLON)) {
+            auto tok = (*this).advance();
+            return Expr::make_Variable(Token(TK_IDENTIFIER, tok.lexeme, tok.line, tok.col));
         }
         if ((*this).match_any(std::vector{TK_THIS})) {
             return Expr::make_This((*this).previous());
@@ -6314,7 +6376,7 @@ struct Parser {
     }
 
     Stmt extend_declaration(std::string visibility) {
-        if ((!(*this).match_any(std::vector{TK_IDENTIFIER, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_STRING_TYPE}))) {
+        if ((!(*this).match_any(std::vector{TK_IDENTIFIER, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_STRING_TYPE, TK_BYTES}))) {
             throw std::runtime_error(std::string("Expect type name after 'extend'."));
         }
         auto target = (*this).previous();
@@ -6351,11 +6413,22 @@ struct Parser {
         return Stmt::make_Extend(target, methods, visibility);
     }
 
+    Token consume_module_name() {
+        if ((*this).match_any(std::vector{TK_IDENTIFIER})) {
+            return (*this).previous();
+        }
+        if ((*this).match_any(std::vector{TK_BYTES})) {
+            auto tok = (*this).previous();
+            return Token(TK_IDENTIFIER, tok.lexeme, tok.line, tok.col);
+        }
+        throw std::runtime_error(((((((std::string("Expect module name. Got ") + ((*this).peek().token_type)) + std::string(" at ")) + ((*this).peek().line)) + std::string(":")) + ((*this).peek().col)) + std::string("")));
+    }
+
     Stmt import_statement() {
         std::vector<Token> path = {};
-        path.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect module name.")));
+        path.push_back((*this).consume_module_name());
         while ((*this).match_any(std::vector{TK_DOUBLE_COLON})) {
-            path.push_back((*this).consume(TK_IDENTIFIER, std::string("Expect module name.")));
+            path.push_back((*this).consume_module_name());
         }
         std::string alias = std::string("");
         if ((*this).match_any(std::vector{TK_AS})) {

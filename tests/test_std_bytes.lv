@@ -1,0 +1,149 @@
+import std::bytes
+
+void fn test_create():
+    bytes buf = bytes::create(4)
+    lv_assert(buf.len() == 4, "create size 4")
+    bytes empty = bytes::create(0)
+    lv_assert(empty.len() == 0, "create size 0")
+    print("PASS: create")
+
+void fn test_from_to_string():
+    bytes hello = bytes::from_string("Hello")
+    lv_assert(hello.len() == 5, "from_string length")
+    string back = hello.to_string()
+    lv_assert(back == "Hello", "to_string roundtrip")
+    print("PASS: from/to string")
+
+void fn test_hex_encoding():
+    bytes hello = bytes::from_string("Hello")
+    string hex = hello.to_hex()
+    lv_assert(hex == "48656c6c6f", "to_hex")
+    bytes decoded = bytes::from_hex("48656c6c6f")
+    string back = decoded.to_string()
+    lv_assert(back == "Hello", "from_hex roundtrip")
+    print("PASS: hex encoding")
+
+void fn test_get_set():
+    bytes buf = bytes::create(3)
+    buf.set(0, 0x41)
+    buf.set(1, 0x42)
+    buf.set(2, 0x43)
+    lv_assert(buf.get(0) == 0x41, "get byte 0")
+    lv_assert(buf.get(1) == 0x42, "get byte 1")
+    lv_assert(buf.get(2) == 0x43, "get byte 2")
+    print("PASS: get/set")
+
+void fn test_push_len_clear():
+    bytes buf = bytes::create(0)
+    buf.push(0x01)
+    buf.push(0x02)
+    buf.push(0x03)
+    lv_assert(buf.len() == 3, "push length")
+    buf.clear()
+    lv_assert(buf.len() == 0, "after clear")
+    print("PASS: push/len/clear")
+
+void fn test_u16_be():
+    bytes buf = bytes::create(2)
+    buf.write_u16_be(0, 0x01BB)
+    lv_assert(buf.read_u16_be(0) == 443, "u16 be port 443")
+    lv_assert(buf.get(0) == 0x01, "u16 be high byte")
+    lv_assert(buf.get(1) == 0xBB, "u16 be low byte")
+    print("PASS: u16 big-endian")
+
+void fn test_u32_be():
+    bytes buf = bytes::create(4)
+    buf.write_u32_be(0, 0x01020304)
+    lv_assert(buf.read_u32_be(0) == 16909060, "u32 be roundtrip")
+    lv_assert(buf.get(0) == 0x01, "u32 be byte 0")
+    lv_assert(buf.get(3) == 0x04, "u32 be byte 3")
+    print("PASS: u32 big-endian")
+
+void fn test_u16_le():
+    bytes buf = bytes::create(2)
+    buf.write_u16_le(0, 0x0102)
+    lv_assert(buf.read_u16_le(0) == 258, "u16 le roundtrip")
+    lv_assert(buf.get(0) == 0x02, "u16 le low byte first")
+    lv_assert(buf.get(1) == 0x01, "u16 le high byte second")
+    print("PASS: u16 little-endian")
+
+void fn test_u32_le():
+    bytes buf = bytes::create(4)
+    buf.write_u32_le(0, 0x01020304)
+    lv_assert(buf.read_u32_le(0) == 16909060, "u32 le roundtrip")
+    lv_assert(buf.get(0) == 0x04, "u32 le byte 0 (lowest)")
+    lv_assert(buf.get(3) == 0x01, "u32 le byte 3 (highest)")
+    print("PASS: u32 little-endian")
+
+void fn test_slice():
+    bytes hello = bytes::from_string("Hello World")
+    bytes sub = hello.slice(0, 5)
+    lv_assert(sub.len() == 5, "slice length")
+    lv_assert(sub.to_string() == "Hello", "slice content")
+    bytes sub2 = hello.slice(6, 11)
+    lv_assert(sub2.to_string() == "World", "slice content 2")
+    print("PASS: slice")
+
+void fn test_concat():
+    bytes a = bytes::from_string("AB")
+    bytes b = bytes::from_string("CD")
+    bytes combined = a.concat(b)
+    lv_assert(combined.len() == 4, "concat length")
+    lv_assert(combined.to_string() == "ABCD", "concat content")
+    print("PASS: concat")
+
+void fn test_equals():
+    bytes a = bytes::from_string("test")
+    bytes b = bytes::from_string("test")
+    bytes c = bytes::from_string("other")
+    lv_assert(a.equals(b) == true, "equal bytes")
+    lv_assert(a.equals(c) == false, "not equal bytes")
+    print("PASS: equals")
+
+void fn test_fill():
+    bytes buf = bytes::create(4)
+    buf.fill(0xFF)
+    lv_assert(buf.get(0) == 255, "fill byte 0")
+    lv_assert(buf.get(3) == 255, "fill byte 3")
+    print("PASS: fill")
+
+void fn test_combined_workflow():
+    // Simulate building a simple binary packet: [u16 length][payload]
+    bytes payload = bytes::from_string("Hi")
+    bytes header = bytes::create(2)
+    header.write_u16_be(0, payload.len())
+    bytes packet = header.concat(payload)
+    lv_assert(packet.len() == 4, "packet length")
+    int plen = packet.read_u16_be(0)
+    lv_assert(plen == 2, "header stores payload length")
+    bytes extracted = packet.slice(2, 4)
+    lv_assert(extracted.to_string() == "Hi", "extracted payload")
+    print("PASS: combined workflow")
+
+void fn test_free_functions():
+    bytes a = bytes::from_string("AB")
+    bytes b = bytes::from_string("AB")
+    bytes c = bytes::from_string("XY")
+    lv_assert(bytes::equals(a, b) == true, "free equals true")
+    lv_assert(bytes::equals(a, c) == false, "free equals false")
+    bytes combined = bytes::concat(a, c)
+    lv_assert(combined.to_string() == "ABXY", "free concat")
+    print("PASS: free functions")
+
+void fn main():
+    test_create()
+    test_from_to_string()
+    test_hex_encoding()
+    test_get_set()
+    test_push_len_clear()
+    test_u16_be()
+    test_u32_be()
+    test_u16_le()
+    test_u32_le()
+    test_slice()
+    test_concat()
+    test_equals()
+    test_fill()
+    test_combined_workflow()
+    test_free_functions()
+    println("All std::bytes tests passed!")

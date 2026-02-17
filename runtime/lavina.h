@@ -13,3 +13,4 @@
 #include "liblavina/math.h"
 #include "liblavina/net.h"
 #include "liblavina/thread.h"
+#include "liblavina/bytes.h"
