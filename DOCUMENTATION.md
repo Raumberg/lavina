@@ -12,20 +12,22 @@
 8. [Enums and Pattern Matching](#enums-and-pattern-matching)
 9. [Generics](#generics)
 10. [References and Ownership](#references-and-ownership)
-11. [Lambdas](#lambdas)
-12. [Collections](#collections)
-13. [Bytes](#bytes)
-14. [Strings](#strings)
-15. [Error Handling](#error-handling)
-16. [Imports and Modules](#imports-and-modules)
-17. [Operator Overloading](#operator-overloading)
-18. [Compile-Time Evaluation](#compile-time-evaluation)
-19. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
-20. [Standard Library](#standard-library)
-21. [Networking](#networking)
-22. [Threading](#threading)
-23. [Extension Methods](#extension-methods)
-24. [Compiler and Bootstrap](#compiler-and-bootstrap)
+11. [Type Casting](#type-casting)
+12. [Lambdas](#lambdas)
+13. [Collections](#collections)
+14. [Bytes](#bytes)
+15. [Strings](#strings)
+16. [Multiline Expressions](#multiline-expressions)
+17. [Error Handling](#error-handling)
+18. [Imports and Modules](#imports-and-modules)
+19. [Operator Overloading](#operator-overloading)
+20. [Compile-Time Evaluation](#compile-time-evaluation)
+21. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
+22. [Standard Library](#standard-library)
+23. [Networking](#networking)
+24. [Threading](#threading)
+25. [Extension Methods](#extension-methods)
+26. [Compiler and Bootstrap](#compiler-and-bootstrap)
 
 ---
 
@@ -150,6 +152,66 @@ string fn greet(string name):
 
 void fn say_hello():
     print("hello")
+```
+
+### Default Parameters
+
+Parameters can have default values. Parameters with defaults must come after required parameters:
+
+```lavina
+string fn greet(string name, string greeting = "Hello"):
+    return "${greeting}, ${name}!"
+
+greet("Alice")               // "Hello, Alice!"
+greet("Alice", "Hi")         // "Hi, Alice!"
+```
+
+Multiple defaults:
+
+```lavina
+void fn connect(string host, int port = 8080, bool ssl = false):
+    // host is required, port and ssl are optional
+    pass
+
+connect("localhost")                    // port=8080, ssl=false
+connect("localhost", 443)               // ssl=false
+connect("localhost", 443, true)         // all specified
+```
+
+### Named Arguments
+
+At the call site, arguments can be passed by name using `name = value` syntax. Named arguments can appear in any order, but must come after all positional arguments:
+
+```lavina
+connect("localhost", ssl = true, port = 443)
+connect("localhost", port = 9000)
+```
+
+Named arguments work with both functions and struct constructors (see [Structs](#structs)).
+
+### Trailing Commas
+
+Trailing commas are allowed in function parameters, function calls, array literals, and hashmap literals:
+
+```lavina
+void fn example(
+    int x,
+    int y,
+    int z,
+):
+    pass
+
+example(
+    1,
+    2,
+    3,
+)
+
+auto items = [
+    "first",
+    "second",
+    "third",
+]
 ```
 
 ### Recursion
@@ -300,6 +362,31 @@ Struct instances are constructed by passing field values in order:
 ```lavina
 auto p = Point(1.0, 2.0)
 print(p.x)  // 1.0
+```
+
+### Constructor with Default Parameters
+
+Struct constructors support default parameter values and named arguments:
+
+```lavina
+struct Config:
+    string host
+    int port
+    bool debug
+
+    constructor(
+        string host = "localhost",
+        int port = 8080,
+        bool debug = false,
+    ):
+        this.host = host
+        this.port = port
+        this.debug = debug
+
+auto c1 = Config()                              // all defaults
+auto c2 = Config("0.0.0.0", 443)               // debug=false
+auto c3 = Config(port = 9000, debug = true)     // named args, host="localhost"
+auto c4 = Config("myhost", port = 3000)         // mixed positional + named
 ```
 
 ### Struct Methods
@@ -531,6 +618,49 @@ for ref! item in items:    // mutable reference
 ```lavina
 auto data = [1, 2, 3]
 auto moved = own data    // data is moved into moved
+```
+
+---
+
+## Type Casting
+
+The `as` keyword performs postfix type casting. It uses smart conversions based on the source and target types:
+
+```lavina
+// String ↔ numeric conversions
+string s = "42"
+int n = s as int          // string → int (parses the string)
+float f = s as float      // string → float
+
+int x = 100
+string sx = x as string   // int → string ("100")
+
+float pi = 3.14
+string sp = pi as string  // float → string
+int ip = pi as int        // float → int (truncates)
+```
+
+### Sized Integer Casts
+
+For FFI interop, cast between integer sizes:
+
+```lavina
+int big = 1000
+int32 small = big as int32     // int → int32
+int16 tiny = big as int16      // int → int16
+usize sz = big as usize        // int → usize
+
+int back = small as int        // int32 → int
+```
+
+### Casting from Expressions
+
+The `as` keyword works on any expression, including method calls and indexing:
+
+```lavina
+vector[string] args = os::args()
+int port = args.at(1) as int     // method call result → int
+string first = args[0] as string // indexing result (already string)
 ```
 
 ---
@@ -768,13 +898,46 @@ parts.join(", ")               // "a, b, c"
 
 ---
 
+## Multiline Expressions
+
+Inside square brackets `[]` and curly braces `{}`, indentation is ignored. This allows writing long expressions across multiple lines without worrying about Lavina's indentation rules:
+
+```lavina
+auto config = {
+    "host": "localhost",
+    "port": 8080,
+    "debug": true,
+}
+
+auto matrix = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+]
+```
+
+This also works for multiline function calls when combined with trailing commas:
+
+```lavina
+auto result = build_request(
+    auth_uuid,
+    "example.com",
+    443,
+    payload,
+)
+```
+
+**Note**: Parentheses `()` do **not** suppress indentation — this is intentional because block lambdas use `(params):` followed by indented bodies, which require indentation tracking.
+
+---
+
 ## Error Handling
 
 ### Try / Catch
 
 ```lavina
 try:
-    auto data = fs_read("file.txt")
+    auto data = fs::read("file.txt")
     process(data)
 catch err:
     print("Error: ${err.what()}")
@@ -988,14 +1151,17 @@ extern "httplib.h":
 Embed raw C++ code as an escape hatch:
 
 ```lavina
-int fn str_to_int(string s):
+string fn to_lower(string s):
+    string result = s
     cpp {
-        return std::stoll(s);
+        std::transform(result.begin(), result.end(), result.begin(), ::tolower);
     }
-    return 0
+    return result
 ```
 
-The C++ code has access to all variables in scope. The `return 0` after the `cpp` block is needed to satisfy the Lavina type checker.
+The C++ code has access to all variables in scope. The `return result` after the `cpp` block is needed to satisfy the Lavina type checker.
+
+**Note**: For string-to-number conversions, prefer `as int` or `as float` instead of cpp blocks (see [Type Casting](#type-casting)).
 
 ---
 
@@ -1010,36 +1176,58 @@ The C++ code has access to all variables in scope. The `return 0` after the `cpp
 
 ### Filesystem
 
-| Function | Description |
-|----------|-------------|
-| `fs_read(path)` | Read file contents as string. Throws on error. |
-| `fs_write(path, content)` | Write string to file. Throws on error. |
-| `fs_append(path, content)` | Append string to file. |
-| `fs_exists(path)` | Check if file exists. Returns `bool`. |
-| `fs_remove(path)` | Delete a file. Returns `bool`. |
-| `fs_is_dir(path)` | Check if path is a directory. Returns `bool`. |
-| `fs_listdir(path)` | List directory entries. Returns `vector[string]`. |
-| `fs_read_lines(path)` | Read file as vector of lines. |
+Use `import std::fs` or the built-in functions directly:
+
+| Module Function | Built-in | Description |
+|----------------|----------|-------------|
+| `fs::read(path)` | `__fs_read(path)` | Read file contents as string. |
+| `fs::write(path, content)` | `__fs_write(path, content)` | Write string to file. |
+| `fs::append(path, content)` | `__fs_append(path, content)` | Append string to file. |
+| `fs::exists(path)` | `__fs_exists(path)` | Check if file exists. |
+| `fs::remove(path)` | `__fs_remove(path)` | Delete a file. |
+| `fs::is_dir(path)` | `__fs_is_dir(path)` | Check if path is a directory. |
+| `fs::list_dir(path)` | `__fs_listdir(path)` | List directory entries. |
+| `fs::read_lines(path)` | `__fs_read_lines(path)` | Read file as vector of lines. |
+
+```lavina
+import std::fs
+
+string content = fs::read("config.txt")
+fs::write("output.txt", "hello")
+auto entries = fs::list_dir(".")
+```
 
 ### OS
 
-| Function | Description |
-|----------|-------------|
-| `os_exec(cmd)` | Execute shell command. Returns exit code (`int`). |
-| `os_args()` | Get command-line arguments as `vector[string]`. |
-| `os_env(name)` | Get environment variable. Returns `""` if not set. |
-| `os_clock()` | Milliseconds since epoch (`int`). |
-| `os_sleep(ms)` | Sleep for given milliseconds. |
-| `os_cwd()` | Get current working directory. |
-| `exit(code)` | Exit the process with given code. |
+Use `import std::os` or the built-in functions directly:
+
+| Module Function | Built-in | Description |
+|----------------|----------|-------------|
+| `os::args()` | `__os_args()` | Get command-line arguments as `vector[string]`. |
+| `os::exec(cmd)` | `__os_exec(cmd)` | Execute shell command. Returns exit code. |
+| `os::env(name)` | `__os_env(name)` | Get environment variable. |
+| `os::time_ms()` | `__os_clock()` | Milliseconds since epoch. |
+| `os::sleep(ms)` | `__os_sleep(ms)` | Sleep for given milliseconds. |
+| `os::cwd()` | `__os_cwd()` | Get current working directory. |
+| `exit(code)` | `exit(code)` | Exit the process with given code. |
+
+```lavina
+import std::os
+
+auto args = os::args()
+string cwd = os::cwd()
+```
 
 ### Conversion
 
 | Function | Description |
 |----------|-------------|
 | `to_string(value)` | Convert `int`, `float`, `bool` to `string`. |
-| `to_int(value)` | Parse string to `int`. |
-| `to_float(value)` | Parse string to `float`. |
+| `value as int` | Parse string to `int`, or convert float to int. |
+| `value as float` | Parse string to `float`, or convert int to float. |
+| `value as string` | Convert int, float, bool to `string`. |
+
+See [Type Casting](#type-casting) for full details on the `as` keyword.
 
 ### Utility
 
@@ -1363,6 +1551,21 @@ string greeting = "hello"
 print(greeting.shout())       // hello!
 ```
 
+### Method Chaining
+
+Extend methods support chaining — you can call one extend method on the result of another:
+
+```lavina
+import std::collections
+
+vector[int] nums = [1, 2, 3, 4, 5]
+
+// Chain multiple operations
+int result = nums.map((int x) => x * x).filter((int x) => x > 5).reduce((int acc, int x) => acc + x, 0)
+
+auto first_three_doubled = nums.map((int x) => x * 2).take(3)
+```
+
 Extend methods work on: `vector`, `hashmap`, `hashset`, `string`, `bytes`, and custom types (structs/enums by name).
 
 Use `this` inside extend methods to refer to the object. Built-in methods (`.push()`, `.sort()`, etc.) take priority over extend methods.
@@ -1414,7 +1617,7 @@ The compiler maintains C++ snapshots in `stages/`. Each snapshot is a complete s
 make bootstrap   # Build from latest stage, verify fixed point
 make snapshot    # Save new stage after codegen changes
 make evolve      # Handle codegen output format changes (2-pass)
-make test        # Run test suite (42 tests)
+make test        # Run test suite (45 tests)
 ```
 
 **Fixed point verification**: The bootstrap compiles `src/main.lv` twice — once with the previous stage and once with the newly built compiler. The outputs must be identical, proving the compiler correctly compiles itself.
