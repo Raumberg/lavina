@@ -24,10 +24,17 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <climits>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #endif
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>
 #endif
 #if defined(_WIN32)
 #include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
 #endif

@@ -1,0 +1,89 @@
+// std::net — TCP/UDP networking
+
+// ── TCP ──────────────────────────────────────────────────────
+
+public int fn tcp_listen(string host, int port):
+    return __net_tcp_listen(host, port)
+
+public int fn tcp_accept(int server_fd):
+    return __net_tcp_accept(server_fd)
+
+public int fn tcp_connect(string host, int port):
+    return __net_tcp_connect(host, port)
+
+public int fn tcp_send(int fd, string data):
+    return __net_tcp_send(fd, data)
+
+public string fn tcp_recv(int fd, int max_bytes):
+    return __net_tcp_recv(fd, max_bytes)
+
+public void fn tcp_close(int fd):
+    __net_tcp_close(fd)
+
+// ── UDP ──────────────────────────────────────────────────────
+
+public int fn udp_create(string host, int port):
+    return __net_udp_create(host, port)
+
+public int fn udp_send(int fd, string data, string host, int port):
+    return __net_udp_send(fd, data, host, port)
+
+public string fn udp_recv(int fd, int max_bytes):
+    return __net_udp_recv(fd, max_bytes)
+
+public void fn udp_close(int fd):
+    __net_udp_close(fd)
+
+// ── Utility ──────────────────────────────────────────────────
+
+public string fn resolve(string hostname):
+    return __net_resolve(hostname)
+
+// ── High-level types ─────────────────────────────────────────
+
+public struct TcpStream:
+    int fd
+
+    constructor(int fd):
+        this.fd = fd
+
+    int fn send(string data):
+        return __net_tcp_send(this.fd, data)
+
+    string fn recv(int max_bytes):
+        return __net_tcp_recv(this.fd, max_bytes)
+
+    void fn close():
+        __net_tcp_close(this.fd)
+
+public struct TcpListener:
+    int fd
+
+    constructor(string host, int port):
+        this.fd = __net_tcp_listen(host, port)
+
+    TcpStream fn accept():
+        int client_fd = __net_tcp_accept(this.fd)
+        return TcpStream(client_fd)
+
+    void fn close():
+        __net_tcp_close(this.fd)
+
+public struct UdpSocket:
+    int fd
+
+    constructor(string host, int port):
+        this.fd = __net_udp_create(host, port)
+
+    int fn send(string data, string host, int port):
+        return __net_udp_send(this.fd, data, host, port)
+
+    string fn recv(int max_bytes):
+        return __net_udp_recv(this.fd, max_bytes)
+
+    void fn close():
+        __net_udp_close(this.fd)
+
+public TcpStream fn connect(string host, int port):
+    int fd = __net_tcp_connect(host, port)
+    return TcpStream(fd)

@@ -94,16 +94,21 @@ class Parser:
             pos = this.skip_type_tokens(pos)
             pos += 1
             return pos
-        // Check for Identifier[Type, Type, ...] (generic type args)
-        if tt == TK_IDENTIFIER and this.peek_at(pos + 1).token_type == TK_LEFT_BRACKET:
-            // Could be generic type args — skip Ident [ Type , Type ]
-            int try_pos = pos + 2
-            try_pos = this.skip_type_tokens(try_pos)
-            while this.peek_at(try_pos).token_type == TK_COMMA:
-                try_pos += 1
+        // Skip module-qualified identifiers: module::Type
+        if tt == TK_IDENTIFIER:
+            int id_pos = pos + 1
+            while this.peek_at(id_pos).token_type == TK_DOUBLE_COLON and this.peek_at(id_pos + 1).token_type == TK_IDENTIFIER:
+                id_pos += 2
+            // Check for generic type args: Ident[Type, Type, ...]
+            if this.peek_at(id_pos).token_type == TK_LEFT_BRACKET:
+                int try_pos = id_pos + 1
                 try_pos = this.skip_type_tokens(try_pos)
-            if this.peek_at(try_pos).token_type == TK_RIGHT_BRACKET:
-                return try_pos + 1
+                while this.peek_at(try_pos).token_type == TK_COMMA:
+                    try_pos += 1
+                    try_pos = this.skip_type_tokens(try_pos)
+                if this.peek_at(try_pos).token_type == TK_RIGHT_BRACKET:
+                    return try_pos + 1
+            return id_pos
         return pos + 1
 
     // Note: checks for comptime at offset 0 because this is also called from
@@ -187,6 +192,11 @@ class Parser:
             t = TypeNode::Ptr(inner)
         elif this.match_any([TK_IDENTIFIER]):
             string custom_name = this.previous().lexeme
+            // Handle module-qualified types: module::Type
+            while this.check(TK_DOUBLE_COLON):
+                this.advance()
+                auto part = this.consume(TK_IDENTIFIER, "Expect type name after '::'.")
+                custom_name = custom_name + "::" + part.lexeme
             vector[TypeNode] type_args = []
             if this.check(TK_LEFT_BRACKET):
                 // Peek ahead to see if this is a type arg list (Type, Type]) vs index

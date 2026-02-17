@@ -56,7 +56,7 @@ evolve: $(BOOTSTRAP_SRC)
 
 # ── Run test suite ───────────────────────────────────────────
 
-SKIP_WINDOWS_TESTS = test_std_fs test_std_os test_stdlib
+SKIP_WINDOWS_TESTS = test_std_fs test_std_os test_std_net test_stdlib
 
 test:
 	@if [ ! -f /tmp/lavina_next ]; then echo "Run 'make bootstrap' first"; exit 1; fi

@@ -11,3 +11,4 @@
 #include "liblavina/os.h"
 #include "liblavina/util.h"
 #include "liblavina/math.h"
+#include "liblavina/net.h"
