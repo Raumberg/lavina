@@ -27,6 +27,8 @@ class CppCodegen:
     vector[vector[Stmt]] lambda_blocks
     hashmap[string, vector[Stmt]] extend_methods
     bool in_extend
+    hashmap[string, vector[Param]] fn_params
+    hashmap[string, vector[Expr]] fn_defaults
 
     constructor():
         this.output = ""
@@ -50,6 +52,8 @@ class CppCodegen:
         this.lambda_blocks = []
         this.extend_methods = {}
         this.in_extend = false
+        this.fn_params = {}
+        this.fn_defaults = {}
 
     void fn set_modules(ref vector[string] short_names, ref vector[string] full_names, ref vector[string] aliases, ref vector[vector[Stmt]] stmts):
         this.module_short_names = short_names
@@ -360,8 +364,8 @@ class CppCodegen:
                 if op.token_type == TK_OR:
                     op_str = "||"
                 return "${l} ${op_str} ${r}"
-            Call(callee, paren, args):
-                return this.emit_call_expr(callee, args, m)
+            Call(callee, paren, args, arg_names):
+                return this.emit_call_expr(callee, args, arg_names, m)
             Index(object, bracket, index):
                 return "${this.emit_expr(object, m)}[${this.emit_expr(index, m)}]"
             IndexSet(object, bracket, index, value):
@@ -492,7 +496,61 @@ class CppCodegen:
             _:
                 return false
 
-    string fn emit_call_expr(ref Expr callee, ref vector[Expr] args, bool in_method):
+    // Resolve named arguments: reorder args to match param positions, fill defaults
+    vector[string] fn resolve_named_args(ref vector[Expr] args, ref vector[string] arg_names, ref vector[Param] params, ref vector[Expr] defaults, bool in_method):
+        // Check if any named args are present
+        bool has_named = false
+        for ref n in arg_names:
+            if n != "":
+                has_named = true
+        // Fast path: all positional, fill missing defaults
+        if not has_named:
+            vector[string] result = []
+            for ref a in args:
+                result.push(this.emit_expr(a, in_method))
+            // Append defaults for missing trailing args
+            int i = args.len()
+            while i < params.len():
+                if i < defaults.len():
+                    result.push(this.emit_expr(defaults[i], in_method))
+                i = i + 1
+            return result
+        // Mixed positional + named args
+        // Step 1: count positional args (those before the first named arg)
+        int positional_count = 0
+        int ai = 0
+        while ai < arg_names.len():
+            if arg_names[ai] != "":
+                ai = arg_names.len()
+            else:
+                positional_count = positional_count + 1
+                ai = ai + 1
+        // Step 2: build result for each param position
+        vector[string] result = []
+        int pi = 0
+        while pi < params.len():
+            if pi < positional_count:
+                // Covered by positional arg
+                result.push(this.emit_expr(args[pi], in_method))
+            else:
+                // Look for named arg matching this param
+                bool found = false
+                int ni = positional_count
+                while ni < arg_names.len():
+                    if arg_names[ni] == params[pi].name.lexeme:
+                        result.push(this.emit_expr(args[ni], in_method))
+                        found = true
+                        ni = arg_names.len()
+                    else:
+                        ni = ni + 1
+                if not found:
+                    // Use default value
+                    if pi < defaults.len():
+                        result.push(this.emit_expr(defaults[pi], in_method))
+            pi = pi + 1
+        return result
+
+    string fn emit_call_expr(ref Expr callee, ref vector[Expr] args, ref vector[string] arg_names, bool in_method):
         match callee:
             Get(object, name):
                 string obj = this.emit_expr(object, in_method)
@@ -519,6 +577,22 @@ class CppCodegen:
                         pass
                 return "${obj}::${name.lexeme}(${arg_strs.join(", ")})"
             Variable(tok):
+                // Check if we have param info for named arg / default resolution
+                if this.fn_params.has(tok.lexeme):
+                    vector[Param] fparams = this.fn_params[tok.lexeme]
+                    vector[Expr] fdefaults = []
+                    if this.fn_defaults.has(tok.lexeme):
+                        fdefaults = this.fn_defaults[tok.lexeme]
+                    vector[string] arg_strs = this.resolve_named_args(args, arg_names, fparams, fdefaults, in_method)
+                    if this.extern_fn_params.has(tok.lexeme):
+                        vector[Param] eparams = this.extern_fn_params[tok.lexeme]
+                        for i in 0..arg_strs.len():
+                            if i < eparams.len():
+                                arg_strs[i] = this.wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type)
+                    string fn_name = tok.lexeme
+                    if this.extern_fn_names.has(tok.lexeme):
+                        fn_name = this.extern_fn_names[tok.lexeme]
+                    return "${fn_name}(${arg_strs.join(", ")})"
                 vector[string] arg_strs = []
                 for ref a in args:
                     arg_strs.push(this.emit_expr(a, in_method))
@@ -620,23 +694,79 @@ class CppCodegen:
             Variable(tok):
                 if this.var_types.has(tok.lexeme):
                     TypeNode t = this.var_types[tok.lexeme]
-                    match t:
-                        Array(inner):
-                            return "vector"
-                        HashMap(k, v):
-                            return "hashmap"
-                        HashSet(inner):
-                            return "hashset"
-                        Str():
-                            return "string"
-                        Bytes():
-                            return "bytes"
-                        Custom(name, type_args):
-                            return name
-                        _:
-                            return ""
+                    return this.type_node_to_category(t)
+            Call(callee, paren, args, arg_names):
+                // Infer type from method call for chaining: obj.method(...).method2(...)
+                match callee:
+                    Get(inner_obj, method_name):
+                        string obj_cat = this.get_type_category(inner_obj)
+                        if obj_cat != "":
+                            return this.infer_method_return_category(obj_cat, method_name.lexeme)
+                    _:
+                        pass
             _:
                 pass
+        return ""
+
+    string fn type_node_to_category(ref TypeNode t):
+        match t:
+            Array(inner):
+                return "vector"
+            HashMap(k, v):
+                return "hashmap"
+            HashSet(inner):
+                return "hashset"
+            Str():
+                return "string"
+            Bytes():
+                return "bytes"
+            Custom(name, type_args):
+                return name
+            _:
+                return ""
+
+    string fn infer_method_return_category(ref string obj_cat, ref string method):
+        // Extend methods that preserve type (collection -> same collection)
+        if obj_cat == "vector":
+            if method == "map" or method == "filter" or method == "take" or method == "drop":
+                return "vector"
+            if method == "zip" or method == "enumerate":
+                return "vector"
+        if obj_cat == "hashset":
+            if method == "union_with" or method == "intersect" or method == "difference":
+                return "hashset"
+        // bytes methods that return bytes
+        if obj_cat == "bytes":
+            if method == "slice" or method == "concat":
+                return "bytes"
+        // string methods that return string
+        if obj_cat == "string":
+            if method == "substring" or method == "trim" or method == "to_lower" or method == "to_upper":
+                return "string"
+        // Cross-type methods
+        if obj_cat == "bytes":
+            if method == "to_string" or method == "to_hex":
+                return "string"
+        if obj_cat == "string":
+            if method == "split":
+                return "vector"
+        if obj_cat == "vector":
+            if method == "join":
+                return "string"
+        // Extend method lookup: check the extend block for this type
+        if this.extend_methods.has(obj_cat):
+            vector[Stmt] methods = this.extend_methods[obj_cat]
+            for ref ext_m in methods:
+                match ext_m:
+                    Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp, m_defs):
+                        if mname.lexeme == method:
+                            string ret_cat = this.type_node_to_category(mret)
+                            if ret_cat != "":
+                                return ret_cat
+                            // Auto return type: assume same type as input for collection methods
+                            return obj_cat
+                    _:
+                        pass
         return ""
 
     TypeNode fn infer_source_type(ref Expr e):
@@ -708,7 +838,7 @@ class CppCodegen:
             vector[Stmt] methods = this.extend_methods[type_cat]
             for ref ext_m in methods:
                 match ext_m:
-                    Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp):
+                    Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp, m_defaults):
                         if mname.lexeme == method:
                             if args.len() > 0:
                                 return "__ext_${type_cat}_${method}(${obj}, ${args.join(", ")})"
@@ -719,13 +849,13 @@ class CppCodegen:
 
     void fn emit_extend_method(ref string type_key, ref Stmt method):
         match method:
-            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp):
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp, m_defaults):
                 vector[string] saved_dyn = this.dynamic_vars
                 string ret_type = this.emit_type(mret)
                 string param_str = this.emit_params(mparams, true)
-                string all_params = "auto& self"
+                string all_params = "auto&& self"
                 if param_str != "":
-                    all_params = "auto& self, ${param_str}"
+                    all_params = "auto&& self, ${param_str}"
                 this.output +="${this.indent()}${ret_type} __ext_${type_key}_${mname.lexeme}(${all_params}) {\n"
                 this.indent_level += 1
                 bool saved_extend = this.in_extend
@@ -844,8 +974,8 @@ class CppCodegen:
                     exc_name = exception_name
                 this.output +="${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_block_or_stmt(catch_body, m)
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
-                this.emit_function(name, params, return_type, body, type_params, comptime_mode)
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
+                this.emit_function(name, params, return_type, body, type_params, comptime_mode, param_defaults)
             Class(name, body, visibility):
                 vector[string] empty_tp = []
                 this.emit_class(name, body, empty_tp)
@@ -944,7 +1074,9 @@ class CppCodegen:
                 this.indent_level -= 1
                 this.output +="${this.indent()}}\n"
 
-    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode):
+    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode, ref vector[Expr] defaults):
+        this.fn_params[name.lexeme] = params
+        this.fn_defaults[name.lexeme] = defaults
         vector[string] saved_dynamic = this.dynamic_vars
         this.output +=this.template_prefix(type_params)
         string ret_type = this.emit_type(return_type)
@@ -1018,7 +1150,7 @@ class CppCodegen:
 
     void fn emit_class_method(ref Token class_name, ref Stmt method):
         match method:
-            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp):
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp, m_defs2):
                 vector[string] saved_dyn = this.dynamic_vars
                 string ret_type = this.emit_type(mret)
                 string mparam_str = this.emit_params(mparams, true)
@@ -1045,6 +1177,7 @@ class CppCodegen:
     void fn emit_class(ref Token name, ref vector[Stmt] body, ref vector[string] type_params):
         vector[Stmt] init_body = []
         vector[Param] init_params = []
+        vector[Expr] init_defaults = []
         bool has_init = false
         vector[Stmt] methods = []
         vector[string] let_field_names = []
@@ -1052,11 +1185,12 @@ class CppCodegen:
 
         for ref st in body:
             match st:
-                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp):
+                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp, fn_defaults):
                     if fname.lexeme == "constructor":
                         has_init = true
                         init_body = fbody
                         init_params = params
+                        init_defaults = fn_defaults
                     else:
                         methods.push(st)
                 Let(fname, var_type, init, visibility, is_ref, is_mut):
@@ -1101,6 +1235,8 @@ class CppCodegen:
         this.indent_level += 1
         this.emit_class_fields(init_field_names, init_field_types, let_field_names, let_field_types)
         if has_init:
+            this.fn_params[name.lexeme] = init_params
+            this.fn_defaults[name.lexeme] = init_defaults
             this.emit_constructor(name, init_params, init_body)
         for ref m in methods:
             this.emit_class_method(name, m)
@@ -1111,7 +1247,7 @@ class CppCodegen:
         bool has_to_string = false
         for ref m in methods:
             match m:
-                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp, m_defs):
                     if mname.lexeme == "to_string":
                         has_to_string = true
                 _:
@@ -1159,7 +1295,7 @@ class CppCodegen:
                 return this.infer_expr_type(right, param_names, param_types)
             Grouping(inner):
                 return this.infer_expr_type(inner, param_names, param_types)
-            Call(callee, paren, args):
+            Call(callee, paren, args, arg_names):
                 match callee:
                     Variable(tok):
                         if this.is_known_enum(tok.lexeme):
@@ -1299,7 +1435,7 @@ class CppCodegen:
         bool has_to_string = false
         for ref m in methods:
             match m:
-                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp, m_defs):
                     if mname.lexeme == "to_string":
                         has_to_string = true
                 _:
@@ -1381,7 +1517,7 @@ class CppCodegen:
 
     void fn emit_using_if_public(ref string ns, ref Stmt stmt):
         match stmt:
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
             Class(name, body, visibility):
@@ -1412,7 +1548,7 @@ class CppCodegen:
 
         for ref stmt in this.module_stmts[index]:
             match stmt:
-                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                     if name.lexeme == "main":
                         pass
                     else:
@@ -1506,7 +1642,7 @@ class CppCodegen:
 
         for ref stmt in stmts:
             match stmt:
-                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                     if name.lexeme == "main":
                         this.has_main = true
                         this.output +="int main(int argc, char* argv[]) {\n"

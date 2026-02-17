@@ -1,0 +1,44 @@
+// Test trailing commas in all comma-separated list contexts
+
+int fn add(int a, int b, int c):
+    return a + b + c
+
+void fn main():
+    // Trailing comma in vector literal
+    vector[int] nums = [1, 2, 3,]
+    lv_assert(len(nums) == 3, "vector trailing comma")
+
+    // Trailing comma in multiline vector
+    vector[int] nums2 = [
+        10,
+        20,
+        30,
+    ]
+    lv_assert(len(nums2) == 3, "multiline vector trailing comma")
+    lv_assert(nums2[2] == 30, "multiline vector last elem")
+
+    // Trailing comma in function call
+    lv_assert(add(1, 2, 3,) == 6, "fn call trailing comma")
+
+    // Trailing comma in multiline function call
+    int result = add(
+        10,
+        20,
+        30,
+    )
+    lv_assert(result == 60, "multiline fn call trailing comma")
+
+    // Trailing comma in hashmap literal
+    hashmap[string, int] scores = {"alice": 100, "bob": 200,}
+    lv_assert(scores["alice"] == 100, "hashmap trailing comma")
+    lv_assert(scores.len() == 2, "hashmap trailing comma len")
+
+    // Trailing comma in multiline hashmap
+    hashmap[string, int] scores2 = {
+        "x": 1,
+        "y": 2,
+        "z": 3,
+    }
+    lv_assert(scores2.len() == 3, "multiline hashmap trailing comma")
+
+    println("All trailing comma tests passed!")

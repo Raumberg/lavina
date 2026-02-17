@@ -187,3 +187,13 @@ void fn main():
     vector[int] step2 = step1.filter((int x) => x > 5)
     int chained = step2.reduce((int acc, int x) => acc + x, 0)
     lv_assert(chained == 50, "dot chained map->filter->reduce")
+
+    // Direct chaining without intermediate variables
+    int direct_chain = nums.map((int x) => x * x).filter((int x) => x > 5).reduce((int acc, int x) => acc + x, 0)
+    lv_assert(direct_chain == 50, "direct chaining map->filter->reduce")
+
+    // Two-level chaining
+    auto two_chain = nums.map((int x) => x + 10).take(3)
+    lv_assert(two_chain.len() == 3, "two chain length")
+    lv_assert(two_chain[0] == 11, "two chain [0]")
+    lv_assert(two_chain[2] == 13, "two chain [2]")

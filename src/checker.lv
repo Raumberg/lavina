@@ -361,7 +361,7 @@ class Checker:
                 return this.infer_type(right)
             Logical(left, op, right):
                 return TypeNode::Bool()
-            Call(callee, paren, args):
+            Call(callee, paren, args, arg_names):
                 return this.infer_call_type(callee)
             Grouping(inner):
                 return this.infer_type(inner)
@@ -432,10 +432,11 @@ class Checker:
         // Runtime functions that are always available
         // Public API: functions users call directly (no __ prefix)
         // All __ prefixed runtime functions are auto-resolved by resolve()
-        vector[string] builtins = ["print", "println", "lv_assert", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs", "cast"]
+        vector[string] builtins = ["print", "println", "lv_assert", "to_string", "input", "typeof", "len", "exit", "abs", "cast"]
         vector[Param] empty_params = []
         for ref name in builtins:
-            this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params)
+            vector[Expr] empty_defaults = []
+            this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params, empty_defaults)
 
     void fn check(ref vector[Stmt] stmts):
         this.register_builtins()
@@ -450,8 +451,8 @@ class Checker:
 
     void fn collect_decl(ref Stmt s):
         match s:
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
-                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params)
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
+                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params, param_defaults)
             Class(name, body, visibility):
                 this.known_classes[name.lexeme] = body
             Enum(name, variants, methods, visibility, enum_tp):
@@ -460,6 +461,14 @@ class Checker:
                 this.declare(name.lexeme, const_type, "const", false, false, name)
             Struct(name, body, visibility, struct_tp):
                 this.known_classes[name.lexeme] = body
+                // Register constructor params for arg count validation
+                for ref st in body:
+                    match st:
+                        Function(fname, fparams, fret, fbody, fi, fc, fs, fv, ftp, f_defaults):
+                            if fname.lexeme == "constructor":
+                                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, TypeNode::Custom(name.lexeme, []), fparams, f_defaults)
+                        _:
+                            pass
             Namespace(name, body, visibility):
                 for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
@@ -532,7 +541,7 @@ class Checker:
                 for ref st in statements:
                     this.check_stmt(st)
                 this.pop_scope()
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                 this.check_function(name, params, return_type, body)
             Class(name, body, visibility):
                 this.check_class(name, body)
@@ -595,7 +604,7 @@ class Checker:
         this.declare("this", TypeNode::Custom(name.lexeme, []), "var", false, false, name)
         for ref s in body:
             match s:
-                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp):
+                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp, fn_defaults):
                     this.check_function(fname, params, return_type, fbody)
                 Let(lname, var_type, initializer, visibility, is_ref, is_mut):
                     this.check_expr(initializer)
@@ -624,11 +633,11 @@ class Checker:
                 this.check_expr(right)
             Grouping(inner):
                 this.check_expr(inner)
-            Call(callee, paren, args):
+            Call(callee, paren, args, arg_names):
                 this.check_expr(callee)
                 for ref a in args:
                     this.check_expr(a)
-                this.check_call_args(callee, args, paren)
+                this.check_call_args(callee, args, arg_names, paren)
             Assign(name, value):
                 this.check_expr(value)
                 if not this.resolve(name.lexeme):
@@ -689,14 +698,32 @@ class Checker:
             _:
                 pass
 
-    void fn check_call_args(ref Expr callee, ref vector[Expr] args, ref Token paren):
+    void fn check_call_args(ref Expr callee, ref vector[Expr] args, ref vector[string] arg_names, ref Token paren):
         match callee:
             Variable(name):
                 if this.known_funcs.has(name.lexeme):
                     ExternFn fi = this.known_funcs[name.lexeme]
                     // Skip arg count check for builtins (registered with 0 params)
-                    if fi.params.len() > 0 and args.len() != fi.params.len():
-                        this.error("Function '${name.lexeme}' expects ${fi.params.len()} args, got ${args.len()}", paren)
+                    if fi.params.len() == 0:
+                        return
+                    // Count required params (those without defaults)
+                    int required = 0
+                    int di = 0
+                    while di < fi.param_defaults.len():
+                        match fi.param_defaults[di]:
+                            None():
+                                required = required + 1
+                            _:
+                                pass
+                        di = di + 1
+                    // If no defaults info, all params are required
+                    if fi.param_defaults.len() == 0:
+                        required = fi.params.len()
+                    if args.len() < required or args.len() > fi.params.len():
+                        if required == fi.params.len():
+                            this.error("Function '${name.lexeme}' expects ${fi.params.len()} args, got ${args.len()}", paren)
+                        else:
+                            this.error("Function '${name.lexeme}' expects ${required}-${fi.params.len()} args, got ${args.len()}", paren)
                     return
             _:
                 pass

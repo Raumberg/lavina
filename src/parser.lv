@@ -12,12 +12,14 @@ class Parser:
     int current
     bool in_class_body
     vector[vector[Stmt]] lambda_blocks
+    vector[Expr] last_param_defaults
 
     constructor(vector[Token] tokens):
         this.tokens = tokens
         this.current = 0
         this.in_class_body = false
         this.lambda_blocks = []
+        this.last_param_defaults = []
 
     // ── Helpers ─────────────────────────────────────────────
 
@@ -444,21 +446,37 @@ class Parser:
                 pass
 
         vector[Expr] args = []
+        vector[string] arg_names = []
         this.skip_formatting()
         if not this.check(TK_RIGHT_PAREN):
             this.match_any([TK_REF, TK_REF_MUT])
-            args.push(this.expression())
+            Expr arg_expr = this.expression()
+            // Detect named argument: name = value parsed as Assign(name, value)
+            match arg_expr:
+                Assign(aname, avalue):
+                    arg_names.push(aname.lexeme)
+                    args.push(avalue)
+                _:
+                    arg_names.push("")
+                    args.push(arg_expr)
             this.skip_formatting()
             while this.match_any([TK_COMMA]):
                 this.skip_formatting()
                 if this.check(TK_RIGHT_PAREN):
                     break
                 this.match_any([TK_REF, TK_REF_MUT])
-                args.push(this.expression())
+                arg_expr = this.expression()
+                match arg_expr:
+                    Assign(aname, avalue):
+                        arg_names.push(aname.lexeme)
+                        args.push(avalue)
+                    _:
+                        arg_names.push("")
+                        args.push(arg_expr)
                 this.skip_formatting()
         this.skip_formatting()
         auto paren = this.consume(TK_RIGHT_PAREN, "Expect ')' after arguments.")
-        return Expr::Call(callee, paren, args)
+        return Expr::Call(callee, paren, args, arg_names)
 
     Expr fn primary():
         if this.match_any([TK_FALSE]):
@@ -539,13 +557,18 @@ class Parser:
 
     vector[Param] fn parse_param_list():
         vector[Param] params = []
+        this.last_param_defaults = []
         this.skip_formatting()
         if not this.check(TK_RIGHT_PAREN):
             bool p_mut = this.match_any([TK_REF_MUT])
             bool p_ref = p_mut or this.match_any([TK_REF])
             TypeNode param_type = this.parse_type()
             auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+            Expr default_val = Expr::None()
+            if this.match_any([TK_EQUAL]):
+                default_val = this.expression()
             params.push(Param(param_name, param_type, p_ref, p_mut))
+            this.last_param_defaults.push(default_val)
             this.skip_formatting()
             while this.match_any([TK_COMMA]):
                 this.skip_formatting()
@@ -555,7 +578,11 @@ class Parser:
                 p_ref = p_mut or this.match_any([TK_REF])
                 param_type = this.parse_type()
                 param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+                default_val = Expr::None()
+                if this.match_any([TK_EQUAL]):
+                    default_val = this.expression()
                 params.push(Param(param_name, param_type, p_ref, p_mut))
+                this.last_param_defaults.push(default_val)
                 this.skip_formatting()
         this.skip_formatting()
         return params
@@ -796,11 +823,12 @@ class Parser:
 
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
         vector[Param] params = this.parse_param_list()
+        vector[Expr] defaults = this.last_param_defaults
         this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
 
         this.consume(TK_COLON, "Expect ':' before function body.")
         vector[Stmt] body = this.block()
-        return Stmt::Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params)
+        return Stmt::Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, defaults)
 
     Stmt fn class_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect class name.")
@@ -1019,11 +1047,12 @@ class Parser:
                 auto name_tok = this.advance()
                 this.consume(TK_LEFT_PAREN, "Expect '(' after ${ctor_name}.")
                 vector[Param] params = this.parse_param_list()
+                vector[Expr] ctor_defaults = this.last_param_defaults
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
                 this.consume(TK_COLON, "Expect ':' before body.")
                 vector[Stmt] body = this.block()
                 vector[string] empty_tp = []
-                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp)
+                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp, ctor_defaults)
 
         if this.match_any([TK_REF_MUT]):
             return this.var_declaration_with_ref(visibility, true, true)
@@ -1089,7 +1118,8 @@ class Parser:
                 string fn_cpp_name = fn_name.lexeme
                 if this.match_any([TK_EQUAL]):
                     fn_cpp_name = this.consume(TK_STRING, "Expect C++ name string.").lexeme
-                functions.push(ExternFn(fn_name.lexeme, fn_cpp_name, ret_type, params))
+                vector[Expr] ext_defaults = this.last_param_defaults
+                functions.push(ExternFn(fn_name.lexeme, fn_cpp_name, ret_type, params, ext_defaults))
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end extern body.")

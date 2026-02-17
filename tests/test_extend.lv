@@ -34,3 +34,16 @@ void fn main():
     // Test extend string: shout
     string greeting = "hello"
     lv_assert(greeting.shout() == "hello!", "shout")
+
+    // Test extend chaining: double_all then sum
+    int chain_sum = nums.double_all().sum()
+    lv_assert(chain_sum == 30, "chain double_all().sum()")
+
+    // Test extend chaining: square then double_all
+    auto chain_sq_dbl = nums.square().double_all()
+    lv_assert(chain_sq_dbl[0] == 2, "chain square().double_all() [0]")
+    lv_assert(chain_sq_dbl[2] == 18, "chain square().double_all() [2]")
+
+    // Test extend chaining: three levels
+    int triple_chain = nums.double_all().square().sum()
+    lv_assert(triple_chain == 220, "chain 3 levels: 2+4+6+8+10 squared = 4+16+36+64+100")
