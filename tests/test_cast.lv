@@ -1,5 +1,9 @@
 // Test 'as' keyword for type casting
 
+import std::bytes
+
+// ── Numeric casts (existing) ─────────────────────────────────
+
 void fn test_int_to_float():
     int x = 42
     float y = x as float
@@ -35,10 +39,81 @@ void fn test_expr_cast():
     float c = (a + b) as float
     lv_assert(c > 29.99 and c < 30.01, "expr cast (10+20) as float")
 
+// ── Cross-family casts (new) ─────────────────────────────────
+
+void fn test_string_to_int():
+    string s = "123"
+    int x = s as int
+    lv_assert(x == 123, "string->int")
+
+void fn test_string_to_int32():
+    string s = "42"
+    int32 x = s as int32
+    lv_assert(x == 42, "string->int32")
+
+void fn test_string_to_float():
+    string s = "3.14"
+    float x = s as float
+    lv_assert(x > 3.13 and x < 3.15, "string->float")
+
+void fn test_int_to_string():
+    int x = 42
+    string s = x as string
+    lv_assert(s == "42", "int->string")
+
+void fn test_float_to_string():
+    float x = 2.5
+    string s = x as string
+    lv_assert(s.len() > 0, "float->string non-empty")
+
+void fn test_bool_to_string():
+    bool b = true
+    string s = b as string
+    lv_assert(s == "true", "bool->string")
+    bool f = false
+    string s2 = f as string
+    lv_assert(s2 == "false", "false->string")
+
+void fn test_string_to_bytes():
+    string s = "hello"
+    bytes b = s as bytes
+    lv_assert(b.len() == 5, "string->bytes len")
+    lv_assert(b.get(0) == 0x68, "string->bytes byte 0")
+
+void fn test_bytes_to_string():
+    bytes b = bytes::from_string("world")
+    string s = b as string
+    lv_assert(s == "world", "bytes->string")
+
+void fn test_cross_family_chained():
+    int x = 42
+    string s = x as string
+    int y = s as int
+    lv_assert(y == 42, "int->string->int roundtrip")
+
+void fn test_literal_cast():
+    int x = "99" as int
+    lv_assert(x == 99, "literal string->int")
+    string s = 77 as string
+    lv_assert(s == "77", "literal int->string")
+
 void fn main():
+    // Numeric
     test_int_to_float()
     test_float_to_int()
     test_int_sizes()
     test_float_sizes()
     test_chained()
     test_expr_cast()
+    // Cross-family
+    test_string_to_int()
+    test_string_to_int32()
+    test_string_to_float()
+    test_int_to_string()
+    test_float_to_string()
+    test_bool_to_string()
+    test_string_to_bytes()
+    test_bytes_to_string()
+    test_cross_family_chained()
+    test_literal_cast()
+    println("All cast tests passed!")

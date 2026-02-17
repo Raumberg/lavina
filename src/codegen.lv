@@ -423,6 +423,39 @@ class CppCodegen:
                 string t = this.emit_type(target_type)
                 if this.is_dynamic_expression(expr):
                     return "std::any_cast<${t}>(${ex})"
+                TypeNode src = this.infer_source_type(expr)
+                // string -> int/float
+                if this.is_string_type(src):
+                    if this.is_integer_type(target_type):
+                        match target_type:
+                            Int():
+                                return "__str_to_int(${ex})"
+                            _:
+                                return "static_cast<${t}>(__str_to_int(${ex}))"
+                    if this.is_float_type(target_type):
+                        match target_type:
+                            Float():
+                                return "__str_to_float(${ex})"
+                            _:
+                                return "static_cast<${t}>(__str_to_float(${ex}))"
+                    if this.is_bytes_type(target_type):
+                        return "__bytes_from_string(${ex})"
+                // numeric/bool -> string
+                if this.is_string_type(target_type):
+                    if this.is_integer_type(src) or this.is_float_type(src):
+                        return "to_string(${ex})"
+                    match src:
+                        Bool():
+                            return "to_string(${ex})"
+                        _:
+                            pass
+                // bytes -> string
+                if this.is_bytes_type(src) and this.is_string_type(target_type):
+                    return "__bytes_to_string(${ex})"
+                // string -> bytes
+                if this.is_string_type(src) and this.is_bytes_type(target_type):
+                    return "__bytes_from_string(${ex})"
+                // bytes <-> string (already handled above but keep for safety)
                 return "static_cast<${t}>(${ex})"
             Throw(expr):
                 return "throw std::runtime_error(${this.emit_expr(expr, m)})"
@@ -605,6 +638,69 @@ class CppCodegen:
             _:
                 pass
         return ""
+
+    TypeNode fn infer_source_type(ref Expr e):
+        match e:
+            Literal(kind, value):
+                if kind == "int":
+                    return TypeNode::Int()
+                elif kind == "float":
+                    return TypeNode::Float()
+                elif kind == "string":
+                    return TypeNode::Str()
+                elif kind == "bool":
+                    return TypeNode::Bool()
+                return TypeNode::Auto()
+            Variable(tok):
+                if this.var_types.has(tok.lexeme):
+                    return this.var_types[tok.lexeme]
+                return TypeNode::Auto()
+            Grouping(inner):
+                return this.infer_source_type(inner)
+            Cast(expr, target_type):
+                return target_type
+            Unary(op, right):
+                return this.infer_source_type(right)
+            _:
+                return TypeNode::Auto()
+
+    bool fn is_integer_type(ref TypeNode t):
+        match t:
+            Int():
+                return true
+            Int8():
+                return true
+            Int16():
+                return true
+            Int32():
+                return true
+            USize():
+                return true
+            _:
+                return false
+
+    bool fn is_float_type(ref TypeNode t):
+        match t:
+            Float():
+                return true
+            Float32():
+                return true
+            _:
+                return false
+
+    bool fn is_string_type(ref TypeNode t):
+        match t:
+            Str():
+                return true
+            _:
+                return false
+
+    bool fn is_bytes_type(ref TypeNode t):
+        match t:
+            Bytes():
+                return true
+            _:
+                return false
 
     string fn try_extend_method(ref Expr object, ref string method, ref string obj, ref vector[string] args):
         string type_cat = this.get_type_category(object)

@@ -44,7 +44,7 @@ struct VlessRequest:
 
 // ── Parse VLESS request ─────────────────────────────────────
 
-VlessRequest fn parse_request(bytes data):
+VlessRequest fn parse_request(ref bytes data):
     // Minimum: 1(ver) + 16(uuid) + 1(addons_len) + 1(cmd) + 2(port) + 1(addr_type) + 1(addr) = 23
     if data.len() < 23:
         throw "VLESS: request too short"
@@ -122,7 +122,7 @@ void fn relay(int from_fd, int to_fd):
 
 // ── Handle one VLESS connection ─────────────────────────────
 
-void fn handle_client(int client_fd, bytes auth_uuid):
+void fn handle_client(int client_fd, ref bytes auth_uuid):
     // Read initial data (VLESS header + first payload chunk)
     bytes data = net::tcp_recv_bytes(client_fd, 65536)
     if data.len() == 0:
@@ -215,7 +215,7 @@ void fn main():
     if args.len() >= 3:
         listen_host = args.at(2)
     if args.len() >= 4:
-        listen_port = __str_to_int(args.at(3))
+        listen_port = args.at(3) as int
 
     // Parse auth UUID
     bytes auth_uuid = uuid::parse(uuid_str)

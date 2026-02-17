@@ -20,10 +20,10 @@ extend bytes:
     void fn fill(int val):
         __bytes_fill(this, val)
 
-    bool fn equals(bytes other):
+    bool fn equals(ref bytes other):
         return __bytes_equals(this, other)
 
-    bytes fn concat(bytes other):
+    bytes fn concat(ref bytes other):
         return __bytes_concat(this, other)
 
     // Big-endian
@@ -57,14 +57,14 @@ extend bytes:
 public bytes fn create(int size):
     return __bytes_create(size)
 
-public bytes fn from_string(string s):
+public bytes fn from_string(ref string s):
     return __bytes_from_string(s)
 
-public bytes fn from_hex(string hex):
+public bytes fn from_hex(ref string hex):
     return __bytes_from_hex(hex)
 
-public bytes fn concat(bytes a, bytes b):
+public bytes fn concat(ref bytes a, ref bytes b):
     return __bytes_concat(a, b)
 
-public bool fn equals(bytes a, bytes b):
+public bool fn equals(ref bytes a, ref bytes b):
     return __bytes_equals(a, b)

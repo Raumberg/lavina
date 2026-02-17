@@ -1,13 +1,13 @@
 // std::uuid — UUID v4 generation and parsing
 
-public bytes fn parse(string s):
+public bytes fn parse(ref string s):
     return __uuid_parse(s)
 
-public string fn to_string(bytes uuid_bytes):
+public string fn to_string(ref bytes uuid_bytes):
     return __uuid_to_string(uuid_bytes)
 
 public bytes fn random():
     return __uuid_random()
 
-public bool fn equals(bytes a, bytes b):
+public bool fn equals(ref bytes a, ref bytes b):
     return __uuid_equals(a, b)

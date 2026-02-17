@@ -35,7 +35,7 @@ struct VlessRequest:
 
 // ── Parse / build ───────────────────────────────────────────
 
-VlessRequest fn parse_request(bytes data):
+VlessRequest fn parse_request(ref bytes data):
     if data.len() < 23:
         throw "VLESS: request too short"
     VlessRequest req = VlessRequest()
@@ -84,7 +84,7 @@ void fn relay(int from_fd, int to_fd):
             break
         net::tcp_send_bytes(to_fd, chunk)
 
-void fn handle_vless_client(int client_fd, bytes auth_uuid):
+void fn handle_vless_client(int client_fd, ref bytes auth_uuid):
     bytes data = net::tcp_recv_bytes(client_fd, 65536)
     if data.len() == 0:
         net::tcp_close(client_fd)

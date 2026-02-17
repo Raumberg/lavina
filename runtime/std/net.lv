@@ -11,7 +11,7 @@ public int fn tcp_accept(int server_fd):
 public int fn tcp_connect(string host, int port):
     return __net_tcp_connect(host, port)
 
-public int fn tcp_send(int fd, string data):
+public int fn tcp_send(int fd, ref string data):
     return __net_tcp_send(fd, data)
 
 public string fn tcp_recv(int fd, int max_bytes):
@@ -20,7 +20,7 @@ public string fn tcp_recv(int fd, int max_bytes):
 public void fn tcp_close(int fd):
     __net_tcp_close(fd)
 
-public int fn tcp_send_bytes(int fd, bytes data):
+public int fn tcp_send_bytes(int fd, ref bytes data):
     return __net_tcp_send_bytes(fd, data)
 
 public bytes fn tcp_recv_bytes(int fd, int max_bytes):
@@ -56,13 +56,13 @@ public struct TcpStream:
     constructor(int fd):
         this.fd = fd
 
-    int fn send(string data):
+    int fn send(ref string data):
         return __net_tcp_send(this.fd, data)
 
     string fn recv(int max_bytes):
         return __net_tcp_recv(this.fd, max_bytes)
 
-    int fn send_bytes(bytes data):
+    int fn send_bytes(ref bytes data):
         return __net_tcp_send_bytes(this.fd, data)
 
     bytes fn recv_bytes(int max_bytes):
