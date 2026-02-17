@@ -1,20 +1,25 @@
 #pragma once
 #include "core.h"
 
+#if defined(_WIN32)
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
+
 // ── Cross-platform socket compatibility ────────────────────────
 #if defined(_WIN32)
 using socket_t = SOCKET;
 #define LV_INVALID_SOCKET INVALID_SOCKET
 #define LV_SOCKET_ERROR SOCKET_ERROR
 
-struct _LvWinsockInit {
-    _LvWinsockInit() {
+inline void _lv_ensure_winsock() {
+    static bool initialized = false;
+    if (!initialized) {
         WSADATA wsa;
         WSAStartup(MAKEWORD(2, 2), &wsa);
+        initialized = true;
     }
-    ~_LvWinsockInit() { WSACleanup(); }
-};
-static _LvWinsockInit _lv_winsock_init;
+}
 
 inline void _lv_close_socket(socket_t s) { closesocket(s); }
 #else
@@ -30,6 +35,9 @@ inline void _lv_close_socket(socket_t s) { close(s); }
 // Create a TCP server socket: bind + listen on host:port
 // Returns socket fd (as int64_t for Lavina compatibility)
 inline int64_t __net_tcp_listen(const std::string& host, int64_t port) {
+#if defined(_WIN32)
+    _lv_ensure_winsock();
+#endif
     struct addrinfo hints{}, *res;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -80,6 +88,9 @@ inline int64_t __net_tcp_accept(int64_t server_fd) {
 // Connect to a remote TCP server
 // Returns socket fd
 inline int64_t __net_tcp_connect(const std::string& host, int64_t port) {
+#if defined(_WIN32)
+    _lv_ensure_winsock();
+#endif
     struct addrinfo hints{}, *res;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;
@@ -184,6 +195,9 @@ inline void __net_tcp_close(int64_t fd) {
 // Create and bind a UDP socket on host:port
 // Returns socket fd
 inline int64_t __net_udp_create(const std::string& host, int64_t port) {
+#if defined(_WIN32)
+    _lv_ensure_winsock();
+#endif
     struct addrinfo hints{}, *res;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
@@ -258,6 +272,9 @@ inline void __net_udp_close(int64_t fd) {
 
 // DNS resolution: hostname -> IP address string
 inline std::string __net_resolve(const std::string& hostname) {
+#if defined(_WIN32)
+    _lv_ensure_winsock();
+#endif
     struct addrinfo hints{}, *res;
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_STREAM;

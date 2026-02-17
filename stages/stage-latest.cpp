@@ -7316,6 +7316,9 @@ int main(int argc, char* argv[]) {
             compile_cmd = (compile_cmd + ((std::string(" -l") + (ll)) + std::string("")));
         }
     }
+    #if defined(_WIN32)
+    compile_cmd += " -lws2_32";
+    #endif
     int64_t compile_result = __os_exec(compile_cmd);
     if ((compile_result != INT64_C(0))) {
         print(std::string("Compilation failed"));
