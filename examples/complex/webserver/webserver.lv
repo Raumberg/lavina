@@ -1,3 +1,5 @@
+import std::fs
+
 extern "httplib.h":
     type Server = "httplib::Server"
     type Request = "httplib::Request"
@@ -10,10 +12,10 @@ struct Todo:
     string title
     bool done
 
-    constructor(int id, string title):
+    constructor(int id, string title, bool done = false):
         this.id = id
         this.title = title
-        this.done = false
+        this.done = done
 
     string fn to_string():
         string done_str = "false"
@@ -54,18 +56,12 @@ string fn parse_json_title(ref string body):
         return ""
     return rest.substring(0, end_quote)
 
-int fn str_to_int(string s):
-    cpp {
-        return std::stoll(s);
-    }
-    return 0
-
 // ── Main ────────────────────────────────────────────────────
 
 void fn main():
     vector[Todo] todos = []
     int next_id = 1
-    string html = __fs_read("index.html")
+    string html = fs::read("index.html")
 
     Server svr
 
@@ -94,7 +90,7 @@ void fn main():
     // Toggle a todo
     svr.Put("/api/todos/:id/toggle", (ref Request req, ref! Response res):
         string id_str = req.path_params.at("id")
-        int id = str_to_int(id_str)
+        int id = id_str as int
         for i in 0..todos.len():
             if todos[i].id == id:
                 todos[i].done = not todos[i].done
@@ -106,7 +102,7 @@ void fn main():
     // Delete a todo
     svr.Delete("/api/todos/:id", (ref Request req, ref! Response res):
         string id_str = req.path_params.at("id")
-        int id = str_to_int(id_str)
+        int id = id_str as int
         for i in 0..todos.len():
             if todos[i].id == id:
                 todos.remove(i)

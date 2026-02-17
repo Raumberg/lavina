@@ -1,6 +1,9 @@
 // lvg — lavina grep (colorized)
 // Usage: lvg <pattern> [path] [--ext .lv] [-i] [-c]
 
+import std::os
+import std::fs
+
 int match_count = 0
 int file_count = 0
 
@@ -76,7 +79,7 @@ string fn highlight(string line, string pattern):
 string last_file = ""
 
 void fn search_file(string path, string pattern):
-    auto lines = __fs_read_lines(path)
+    auto lines = fs::read_lines(path)
     int local_count = 0
 
     int line_num = 1
@@ -100,7 +103,7 @@ void fn search_file(string path, string pattern):
 
                 string colored_line = highlight(line, pattern)
                 if flag_line_numbers:
-                    print("  ${C_LINE}${__int_to_str(line_num)}${C_DIM}:${C_RESET} ${colored_line}")
+                    print("  ${C_LINE}${to_string(line_num)}${C_DIM}:${C_RESET} ${colored_line}")
                 else:
                     print("  ${colored_line}")
         line_num += 1
@@ -108,16 +111,16 @@ void fn search_file(string path, string pattern):
     if local_count > 0:
         file_count += 1
         if flag_count_only:
-            print("${C_FILE}${path}${C_DIM}:${C_RESET} ${C_BOLD}${__int_to_str(local_count)}${C_RESET} matches")
+            print("${C_FILE}${path}${C_DIM}:${C_RESET} ${C_BOLD}${to_string(local_count)}${C_RESET} matches")
 
 void fn search_dir(string path, string pattern):
-    auto entries = __fs_listdir(path)
+    auto entries = fs::list_dir(path)
     for ref name in entries:
         if name.substring(0, 1) == ".":
             continue
 
         string full = "${path}/${name}"
-        if __fs_is_dir(full):
+        if fs::is_dir(full):
             search_dir(full, pattern)
         else:
             if is_binary_ext(name):
@@ -133,7 +136,7 @@ void fn search_dir(string path, string pattern):
 void fn main():
     init_colors()
 
-    auto args = __os_args()
+    auto args = os::args()
     if args.len() < 2:
         print("Usage: lvg <pattern> [path] [--ext .lv] [-i] [-c]")
         exit(1)
@@ -156,10 +159,10 @@ void fn main():
             path = args[i]
             i += 1
 
-    if __fs_is_dir(path):
+    if fs::is_dir(path):
         search_dir(path, pattern)
     else:
         search_file(path, pattern)
 
     print("")
-    print("${C_SUMMARY}${__int_to_str(match_count)} matches${C_RESET} in ${C_SUMMARY}${__int_to_str(file_count)} files${C_RESET}")
+    print("${C_SUMMARY}${to_string(match_count)} matches${C_RESET} in ${C_SUMMARY}${to_string(file_count)} files${C_RESET}")

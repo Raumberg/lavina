@@ -24,6 +24,10 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <climits>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #endif
 #if defined(__APPLE__)
 #include <mach-o/dyld.h>

@@ -71,5 +71,4 @@ int fn main():
     lv_assert(rf >= 0.0, "random_float >= 0")
     lv_assert(rf <= 1.0, "random_float <= 1")
 
-    print("All std::math tests passed!")
     return 0

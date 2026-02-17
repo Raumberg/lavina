@@ -1,11 +1,14 @@
 // tree — recursive directory listing utility
 // Usage: tree [path]
 
+import std::os
+import std::fs
+
 int dir_count = 0
 int file_count = 0
 
-void fn print_tree(string path, string prefix):
-    auto entries = __fs_listdir(path)
+void fn print_tree(string path, string prefix = ""):
+    auto entries = fs::list_dir(path)
 
     int i = 0
     int total = entries.len()
@@ -23,10 +26,10 @@ void fn print_tree(string path, string prefix):
             child_prefix = "    "
 
         string full_path = "${path}/${name}"
-        if __fs_is_dir(full_path):
+        if fs::is_dir(full_path):
             print("${prefix}${connector}${name}/")
             dir_count += 1
-            print_tree(full_path, "${prefix}${child_prefix}")
+            print_tree(full_path, prefix = "${prefix}${child_prefix}")
         else:
             print("${prefix}${connector}${name}")
             file_count += 1
@@ -35,11 +38,11 @@ void fn print_tree(string path, string prefix):
 
 void fn main():
     string root = "."
-    auto args = __os_args()
+    auto args = os::args()
     if args.len() > 1:
         root = args[1]
 
     print(root)
-    print_tree(root, "")
+    print_tree(root)
     print("")
-    print("${__int_to_str(dir_count)} directories, ${__int_to_str(file_count)} files")
+    print("${dir_count as string} directories, ${file_count as string} files")

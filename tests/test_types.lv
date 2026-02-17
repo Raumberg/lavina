@@ -5,32 +5,32 @@ void fn test_int_types():
     int16 b = 1000
     int32 c = 100000
     int64 d = 9999999
-    print("int8: " + a)
-    print("int16: " + b)
-    print("int32: " + c)
-    print("int64: " + d)
+    lv_assert(a == 42, "int8 value")
+    lv_assert(b == 1000, "int16 value")
+    lv_assert(c == 100000, "int32 value")
+    lv_assert(d == 9999999, "int64 value")
 
 void fn test_float_types():
     float32 x = 3.14
     float64 y = 2.718
-    print("float32: " + x)
-    print("float64: " + y)
+    lv_assert(x > 3.13 and x < 3.15, "float32 value")
+    lv_assert(y > 2.71 and y < 2.72, "float64 value")
 
 void fn test_usize():
     usize idx = 0
     vector[string] items = ["a", "b", "c"]
-    print("usize idx: " + idx)
+    lv_assert(idx == 0, "usize value")
+    lv_assert(items.len() == 3, "usize vector len")
 
 void fn test_cross_type():
     int32 a = 10
     int b = a
     float32 c = 1.5
     float d = c
-    print("int32->int: " + b)
-    print("float32->float: " + d)
+    lv_assert(b == 10, "int32->int promotion")
+    lv_assert(d > 1.49 and d < 1.51, "float32->float promotion")
 
-void fn test_print_all_types():
-    // print() with each type directly
+void fn test_type_values():
     int8 a = 8
     int16 b = 16
     int32 c = 32
@@ -38,18 +38,13 @@ void fn test_print_all_types():
     float32 e = 3.2
     float64 f = 6.4
     usize g = 99
-    print(a)
-    print(b)
-    print(c)
-    print(d)
-    print(e)
-    print(f)
-    print(g)
-    print(true)
-    // println
-    println(42)
-    println("hello")
-    println()
+    lv_assert(a == 8, "int8 val")
+    lv_assert(b == 16, "int16 val")
+    lv_assert(c == 32, "int32 val")
+    lv_assert(d == 64, "int64 val")
+    lv_assert(e > 3.1 and e < 3.3, "float32 val")
+    lv_assert(f > 6.3 and f < 6.5, "float64 val")
+    lv_assert(g == 99, "usize val")
 
 void fn test_to_string_all_types():
     lv_assert(to_string(42) == "42", "to_string int")
@@ -66,6 +61,5 @@ void fn main():
     test_float_types()
     test_usize()
     test_cross_type()
-    test_print_all_types()
+    test_type_values()
     test_to_string_all_types()
-    print("All type tests passed!")

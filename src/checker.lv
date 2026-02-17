@@ -1,4 +1,4 @@
-import ast
+import type_utils
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Type Checker
@@ -48,9 +48,6 @@ class Checker:
 
     void fn error(ref string msg, ref Token t):
         this.errors.push("[${t.line}:${t.col}] Error: ${msg}")
-
-    void fn error_msg(ref string msg):
-        this.errors.push("Error: ${msg}")
 
     void fn warn(ref string msg, ref Token t):
         this.warnings.push("[${t.line}:${t.col}] Warning: ${msg}")
@@ -163,58 +160,18 @@ class Checker:
             _:
                 pass
         // Same type check
-        string e = this.type_name(expected)
-        string a = this.type_name(actual)
+        string e = type_to_display(expected)
+        string a = type_to_display(actual)
         if e == a:
             return true
         // Integer family compatibility
-        bool e_is_int = false
-        bool a_is_int = false
-        match expected:
-            Int():
-                e_is_int = true
-            Int8():
-                e_is_int = true
-            Int16():
-                e_is_int = true
-            Int32():
-                e_is_int = true
-            USize():
-                e_is_int = true
-            _:
-                pass
-        match actual:
-            Int():
-                a_is_int = true
-            Int8():
-                a_is_int = true
-            Int16():
-                a_is_int = true
-            Int32():
-                a_is_int = true
-            USize():
-                a_is_int = true
-            _:
-                pass
+        bool e_is_int = is_integer_type(expected)
+        bool a_is_int = is_integer_type(actual)
         if e_is_int and a_is_int:
             return true
         // Float family compatibility
-        bool e_is_float = false
-        bool a_is_float = false
-        match expected:
-            Float():
-                e_is_float = true
-            Float32():
-                e_is_float = true
-            _:
-                pass
-        match actual:
-            Float():
-                a_is_float = true
-            Float32():
-                a_is_float = true
-            _:
-                pass
+        bool e_is_float = is_float_type(expected)
+        bool a_is_float = is_float_type(actual)
         if e_is_float and a_is_float:
             return true
         // Float accepts Int
@@ -257,51 +214,6 @@ class Checker:
             _:
                 pass
         return false
-
-    string fn type_name(ref TypeNode t):
-        match t:
-            Int():
-                return "int"
-            Float():
-                return "float"
-            Str():
-                return "string"
-            Bool():
-                return "bool"
-            Void():
-                return "void"
-            Auto():
-                return "auto"
-            Dynamic():
-                return "dynamic"
-            NullType():
-                return "null"
-            Custom(name, _):
-                return name
-            Array(inner):
-                return "vector[${this.type_name(inner)}]"
-            HashSet(inner):
-                return "set[${this.type_name(inner)}]"
-            HashMap(k, v):
-                return "map[${this.type_name(k)}, ${this.type_name(v)}]"
-            Nullable(inner):
-                return "${this.type_name(inner)}?"
-            Int8():
-                return "int8"
-            Int16():
-                return "int16"
-            Int32():
-                return "int32"
-            Float32():
-                return "float32"
-            USize():
-                return "usize"
-            CString():
-                return "cstring"
-            Ptr(inner):
-                return "ptr[${this.type_name(inner)}]"
-            _:
-                return "unknown"
 
     // ── Type inference ─────────────────────────────────────────
 
@@ -359,7 +271,7 @@ class Checker:
                 return this.infer_type(right)
             Logical(left, op, right):
                 return TypeNode::Bool()
-            Call(callee, paren, args):
+            Call(callee, paren, args, arg_names):
                 return this.infer_call_type(callee)
             Grouping(inner):
                 return this.infer_type(inner)
@@ -413,27 +325,17 @@ class Checker:
             _:
                 return TypeNode::Auto()
 
-    // ── Enum helpers ───────────────────────────────────────────
-
-    string fn find_enum_for_variant(ref string variant_name):
-        vector[string] keys = this.known_enums.keys()
-        for ref key in keys:
-            vector[EnumVariantNode] variants = this.known_enums[key]
-            for ref v in variants:
-                if v.name.lexeme == variant_name:
-                    return key
-        return ""
-
     // ── Statement checking ─────────────────────────────────────
 
     void fn register_builtins():
         // Runtime functions that are always available
         // Public API: functions users call directly (no __ prefix)
         // All __ prefixed runtime functions are auto-resolved by resolve()
-        vector[string] builtins = ["print", "println", "lv_assert", "to_string", "to_int", "to_float", "input", "typeof", "len", "exit", "abs", "cast"]
+        vector[string] builtins = ["print", "println", "lv_assert", "to_string", "input", "typeof", "len", "exit", "abs", "cast"]
         vector[Param] empty_params = []
         for ref name in builtins:
-            this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params)
+            vector[Expr] empty_defaults = []
+            this.known_funcs[name] = ExternFn(name, name, TypeNode::Auto(), empty_params, empty_defaults)
 
     void fn check(ref vector[Stmt] stmts):
         this.register_builtins()
@@ -448,8 +350,8 @@ class Checker:
 
     void fn collect_decl(ref Stmt s):
         match s:
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
-                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params)
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
+                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, return_type, params, param_defaults)
             Class(name, body, visibility):
                 this.known_classes[name.lexeme] = body
             Enum(name, variants, methods, visibility, enum_tp):
@@ -458,6 +360,14 @@ class Checker:
                 this.declare(name.lexeme, const_type, "const", false, false, name)
             Struct(name, body, visibility, struct_tp):
                 this.known_classes[name.lexeme] = body
+                // Register constructor params for arg count validation
+                for ref st in body:
+                    match st:
+                        Function(fname, fparams, fret, fbody, fi, fc, fs, fv, ftp, f_defaults):
+                            if fname.lexeme == "constructor":
+                                this.known_funcs[name.lexeme] = ExternFn(name.lexeme, name.lexeme, TypeNode::Custom(name.lexeme, []), fparams, f_defaults)
+                        _:
+                            pass
             Namespace(name, body, visibility):
                 for ref ns_stmt in body:
                     this.collect_decl(ns_stmt)
@@ -485,7 +395,7 @@ class Checker:
                         pass
                     _:
                         if not this.types_compatible(var_type, init_type):
-                            this.error("Cannot assign ${this.type_name(init_type)} to ${this.type_name(var_type)}", name)
+                            this.error("Cannot assign ${type_to_display(init_type)} to ${type_to_display(var_type)}", name)
                 this.declare(name.lexeme, var_type, "var", is_ref, true, name)
             Const(name, const_type, value, visibility, comptime_mode):
                 this.check_expr(value)
@@ -503,7 +413,7 @@ class Checker:
                     _:
                         auto val_type = this.infer_type(value)
                         if not this.types_compatible(this.current_return_type, val_type):
-                            this.error("Return type mismatch: expected ${this.type_name(this.current_return_type)}, got ${this.type_name(val_type)}", keyword)
+                            this.error("Return type mismatch: expected ${type_to_display(this.current_return_type)}, got ${type_to_display(val_type)}", keyword)
             If(condition, then_branch, else_branch):
                 this.check_expr(condition)
                 this.check_stmt(then_branch)
@@ -530,7 +440,7 @@ class Checker:
                 for ref st in statements:
                     this.check_stmt(st)
                 this.pop_scope()
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                 this.check_function(name, params, return_type, body)
             Class(name, body, visibility):
                 this.check_class(name, body)
@@ -572,12 +482,15 @@ class Checker:
             _:
                 pass
 
+    void fn declare_params(ref vector[Param] params):
+        for ref p in params:
+            this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+
     void fn check_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body):
         auto saved_return = this.current_return_type
         this.current_return_type = return_type
         this.push_scope()
-        for ref p in params:
-            this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+        this.declare_params(params)
         for ref s in body:
             this.check_stmt(s)
         this.pop_scope()
@@ -593,7 +506,7 @@ class Checker:
         this.declare("this", TypeNode::Custom(name.lexeme, []), "var", false, false, name)
         for ref s in body:
             match s:
-                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp):
+                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp, fn_defaults):
                     this.check_function(fname, params, return_type, fbody)
                 Let(lname, var_type, initializer, visibility, is_ref, is_mut):
                     this.check_expr(initializer)
@@ -622,11 +535,11 @@ class Checker:
                 this.check_expr(right)
             Grouping(inner):
                 this.check_expr(inner)
-            Call(callee, paren, args):
+            Call(callee, paren, args, arg_names):
                 this.check_expr(callee)
                 for ref a in args:
                     this.check_expr(a)
-                this.check_call_args(callee, args, paren)
+                this.check_call_args(callee, args, arg_names, paren)
             Assign(name, value):
                 this.check_expr(value)
                 if not this.resolve(name.lexeme):
@@ -671,14 +584,12 @@ class Checker:
                 this.check_expr(end)
             Lambda(params, body):
                 this.push_scope()
-                for ref p in params:
-                    this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+                this.declare_params(params)
                 this.check_expr(body)
                 this.pop_scope()
             BlockLambda(params, body_id):
                 this.push_scope()
-                for ref p in params:
-                    this.declare(p.name.lexeme, p.param_type, "param", p.is_ref, true, p.name)
+                this.declare_params(params)
                 this.pop_scope()
             Own(expr):
                 this.check_expr(expr)
@@ -687,14 +598,32 @@ class Checker:
             _:
                 pass
 
-    void fn check_call_args(ref Expr callee, ref vector[Expr] args, ref Token paren):
+    void fn check_call_args(ref Expr callee, ref vector[Expr] args, ref vector[string] arg_names, ref Token paren):
         match callee:
             Variable(name):
                 if this.known_funcs.has(name.lexeme):
                     ExternFn fi = this.known_funcs[name.lexeme]
                     // Skip arg count check for builtins (registered with 0 params)
-                    if fi.params.len() > 0 and args.len() != fi.params.len():
-                        this.error("Function '${name.lexeme}' expects ${fi.params.len()} args, got ${args.len()}", paren)
+                    if fi.params.len() == 0:
+                        return
+                    // Count required params (those without defaults)
+                    int required = 0
+                    int di = 0
+                    while di < fi.param_defaults.len():
+                        match fi.param_defaults[di]:
+                            None():
+                                required = required + 1
+                            _:
+                                pass
+                        di = di + 1
+                    // If no defaults info, all params are required
+                    if fi.param_defaults.len() == 0:
+                        required = fi.params.len()
+                    if args.len() < required or args.len() > fi.params.len():
+                        if required == fi.params.len():
+                            this.error("Function '${name.lexeme}' expects ${fi.params.len()} args, got ${args.len()}", paren)
+                        else:
+                            this.error("Function '${name.lexeme}' expects ${required}-${fi.params.len()} args, got ${args.len()}", paren)
                     return
             _:
                 pass
@@ -709,7 +638,7 @@ class Checker:
                 has_wildcard = true
             else:
                 // Check variant exists
-                string enum_name = this.find_enum_for_variant(arm.pattern_name)
+                string enum_name = find_enum_for_variant(this.known_enums,arm.pattern_name)
                 if enum_name == "":
                     // Not a known variant — might be a binding, skip
                     pass

@@ -4,7 +4,7 @@ void fn modify_vec(ref! vector[int] v):
     v.push(42)
 
 void fn consume_string(string s):
-    print("consumed: " + s)
+    lv_assert(s.len() > 0, "consumed string not empty")
 
 void fn main():
     // Test 1: ref parameter modifies caller's variable
@@ -40,5 +40,3 @@ void fn main():
     lv_assert(vals[0] == 11, "for ref! mutate")
     lv_assert(vals[1] == 21, "for ref! mutate 2")
     lv_assert(vals[2] == 31, "for ref! mutate 3")
-
-    print("All ref/own tests passed!")

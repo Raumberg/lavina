@@ -1,0 +1,162 @@
+// type_utils.lv — shared type predicates and helpers
+import ast
+
+bool fn is_integer_type(ref TypeNode t):
+    match t:
+        Int():
+            return true
+        Int8():
+            return true
+        Int16():
+            return true
+        Int32():
+            return true
+        USize():
+            return true
+        _:
+            return false
+    return false
+
+bool fn is_float_type(ref TypeNode t):
+    match t:
+        Float():
+            return true
+        Float32():
+            return true
+        _:
+            return false
+    return false
+
+bool fn is_string_type(ref TypeNode t):
+    match t:
+        Str():
+            return true
+        _:
+            return false
+    return false
+
+bool fn is_bytes_type(ref TypeNode t):
+    match t:
+        Bytes():
+            return true
+        _:
+            return false
+    return false
+
+// TypeNode → C++ type string
+string fn type_to_cpp(ref TypeNode t):
+    match t:
+        Int():
+            return "int64_t"
+        Float():
+            return "double"
+        Str():
+            return "std::string"
+        Bool():
+            return "bool"
+        Void():
+            return "void"
+        Auto():
+            return "auto"
+        Dynamic():
+            return "std::any"
+        NullType():
+            return "std::nullptr_t"
+        Custom(name, type_args):
+            if type_args.len() > 0:
+                vector[string] ta = []
+                for ref a in type_args:
+                    ta.push(type_to_cpp(a))
+                return "${name}<${ta.join(", ")}>"
+            return name
+        Array(inner):
+            return "std::vector<${type_to_cpp(inner)}>"
+        HashSet(inner):
+            return "std::unordered_set<${type_to_cpp(inner)}>"
+        HashMap(key_type, value_type):
+            return "std::unordered_map<${type_to_cpp(key_type)}, ${type_to_cpp(value_type)}>"
+        Nullable(inner):
+            return "std::optional<${type_to_cpp(inner)}>"
+        Int8():
+            return "int8_t"
+        Int16():
+            return "int16_t"
+        Int32():
+            return "int32_t"
+        Float32():
+            return "float"
+        USize():
+            return "size_t"
+        CString():
+            return "const char*"
+        Ptr(inner):
+            return "${type_to_cpp(inner)}*"
+        Bytes():
+            return "std::vector<uint8_t>"
+        _:
+            return "auto"
+    return "auto"
+
+// TypeNode → Lavina display string (for error messages)
+string fn type_to_display(ref TypeNode t):
+    match t:
+        Int():
+            return "int"
+        Float():
+            return "float"
+        Str():
+            return "string"
+        Bool():
+            return "bool"
+        Void():
+            return "void"
+        Auto():
+            return "auto"
+        Dynamic():
+            return "dynamic"
+        NullType():
+            return "null"
+        Custom(name, _):
+            return name
+        Array(inner):
+            return "vector[${type_to_display(inner)}]"
+        HashSet(inner):
+            return "set[${type_to_display(inner)}]"
+        HashMap(k, v):
+            return "map[${type_to_display(k)}, ${type_to_display(v)}]"
+        Nullable(inner):
+            return "${type_to_display(inner)}?"
+        Int8():
+            return "int8"
+        Int16():
+            return "int16"
+        Int32():
+            return "int32"
+        Float32():
+            return "float32"
+        USize():
+            return "usize"
+        CString():
+            return "cstring"
+        Ptr(inner):
+            return "ptr[${type_to_display(inner)}]"
+        Bytes():
+            return "bytes"
+        _:
+            return "unknown"
+    return "unknown"
+
+string fn find_enum_for_variant(ref! hashmap[string, vector[EnumVariantNode]] known_enums, ref string variant_name):
+    string found = ""
+    int count = 0
+    vector[string] keys = known_enums.keys()
+    for ref key in keys:
+        vector[EnumVariantNode] variants = known_enums[key]
+        for ref v in variants:
+            if v.name.lexeme == variant_name:
+                if count == 0:
+                    found = key
+                count += 1
+    if count == 1:
+        return found
+    return ""

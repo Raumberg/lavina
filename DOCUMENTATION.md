@@ -12,16 +12,22 @@
 8. [Enums and Pattern Matching](#enums-and-pattern-matching)
 9. [Generics](#generics)
 10. [References and Ownership](#references-and-ownership)
-11. [Lambdas](#lambdas)
-12. [Collections](#collections)
-13. [Strings](#strings)
-14. [Error Handling](#error-handling)
-15. [Imports and Modules](#imports-and-modules)
-16. [Operator Overloading](#operator-overloading)
-17. [Compile-Time Evaluation](#compile-time-evaluation)
-18. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
-19. [Standard Library](#standard-library)
-20. [Compiler and Bootstrap](#compiler-and-bootstrap)
+11. [Type Casting](#type-casting)
+12. [Lambdas](#lambdas)
+13. [Collections](#collections)
+14. [Bytes](#bytes)
+15. [Strings](#strings)
+16. [Multiline Expressions](#multiline-expressions)
+17. [Error Handling](#error-handling)
+18. [Imports and Modules](#imports-and-modules)
+19. [Operator Overloading](#operator-overloading)
+20. [Compile-Time Evaluation](#compile-time-evaluation)
+21. [FFI (Foreign Function Interface)](#ffi-foreign-function-interface)
+22. [Standard Library](#standard-library)
+23. [Networking](#networking)
+24. [Threading](#threading)
+25. [Extension Methods](#extension-methods)
+26. [Compiler and Bootstrap](#compiler-and-bootstrap)
 
 ---
 
@@ -39,6 +45,15 @@ Comments use `//`:
 ```lavina
 // This is a comment
 int x = 42  // inline comment
+```
+
+### Number Literals
+
+```lavina
+int x = 42           // decimal
+int y = 0xFF         // hexadecimal (255)
+int port = 0x01BB    // hex (443)
+float pi = 3.14      // float
 ```
 
 Every program needs a `main()` function as its entry point. It can return `int` or `void`.
@@ -64,6 +79,12 @@ Every program needs a `main()` function as its entry point. It can return `int` 
 | `vector[T]` | Dynamic array | `std::vector<T>` |
 | `hashmap[K, V]` | Hash map | `std::unordered_map<K, V>` |
 | `hashset[T]` | Hash set | `std::unordered_set<T>` |
+
+### Binary Types
+
+| Type | Description | C++ mapping |
+|------|-------------|-------------|
+| `bytes` | Byte buffer | `std::vector<uint8_t>` |
 
 ### Special Types
 
@@ -131,6 +152,66 @@ string fn greet(string name):
 
 void fn say_hello():
     print("hello")
+```
+
+### Default Parameters
+
+Parameters can have default values. Parameters with defaults must come after required parameters:
+
+```lavina
+string fn greet(string name, string greeting = "Hello"):
+    return "${greeting}, ${name}!"
+
+greet("Alice")               // "Hello, Alice!"
+greet("Alice", "Hi")         // "Hi, Alice!"
+```
+
+Multiple defaults:
+
+```lavina
+void fn connect(string host, int port = 8080, bool ssl = false):
+    // host is required, port and ssl are optional
+    pass
+
+connect("localhost")                    // port=8080, ssl=false
+connect("localhost", 443)               // ssl=false
+connect("localhost", 443, true)         // all specified
+```
+
+### Named Arguments
+
+At the call site, arguments can be passed by name using `name = value` syntax. Named arguments can appear in any order, but must come after all positional arguments:
+
+```lavina
+connect("localhost", ssl = true, port = 443)
+connect("localhost", port = 9000)
+```
+
+Named arguments work with both functions and struct constructors (see [Structs](#structs)).
+
+### Trailing Commas
+
+Trailing commas are allowed in function parameters, function calls, array literals, and hashmap literals:
+
+```lavina
+void fn example(
+    int x,
+    int y,
+    int z,
+):
+    pass
+
+example(
+    1,
+    2,
+    3,
+)
+
+auto items = [
+    "first",
+    "second",
+    "third",
+]
 ```
 
 ### Recursion
@@ -281,6 +362,31 @@ Struct instances are constructed by passing field values in order:
 ```lavina
 auto p = Point(1.0, 2.0)
 print(p.x)  // 1.0
+```
+
+### Constructor with Default Parameters
+
+Struct constructors support default parameter values and named arguments:
+
+```lavina
+struct Config:
+    string host
+    int port
+    bool debug
+
+    constructor(
+        string host = "localhost",
+        int port = 8080,
+        bool debug = false,
+    ):
+        this.host = host
+        this.port = port
+        this.debug = debug
+
+auto c1 = Config()                              // all defaults
+auto c2 = Config("0.0.0.0", 443)               // debug=false
+auto c3 = Config(port = 9000, debug = true)     // named args, host="localhost"
+auto c4 = Config("myhost", port = 3000)         // mixed positional + named
 ```
 
 ### Struct Methods
@@ -516,6 +622,49 @@ auto moved = own data    // data is moved into moved
 
 ---
 
+## Type Casting
+
+The `as` keyword performs postfix type casting. It uses smart conversions based on the source and target types:
+
+```lavina
+// String ↔ numeric conversions
+string s = "42"
+int n = s as int          // string → int (parses the string)
+float f = s as float      // string → float
+
+int x = 100
+string sx = x as string   // int → string ("100")
+
+float pi = 3.14
+string sp = pi as string  // float → string
+int ip = pi as int        // float → int (truncates)
+```
+
+### Sized Integer Casts
+
+For FFI interop, cast between integer sizes:
+
+```lavina
+int big = 1000
+int32 small = big as int32     // int → int32
+int16 tiny = big as int16      // int → int16
+usize sz = big as usize        // int → usize
+
+int back = small as int        // int32 → int
+```
+
+### Casting from Expressions
+
+The `as` keyword works on any expression, including method calls and indexing:
+
+```lavina
+vector[string] args = os::args()
+int port = args.at(1) as int     // method call result → int
+string first = args[0] as string // indexing result (already string)
+```
+
+---
+
 ## Lambdas
 
 ### Expression Lambdas
@@ -617,6 +766,90 @@ s.len()                        // 2
 
 ---
 
+## Bytes
+
+The `bytes` type is a built-in byte buffer backed by `std::vector<uint8_t>`. It is designed for binary protocol work (network headers, UUID encoding, crypto buffers, etc.).
+
+### Creating Bytes
+
+```lavina
+import std::bytes
+
+bytes buf = bytes::create(64)              // zero-filled buffer of 64 bytes
+bytes hello = bytes::from_string("Hello")  // from UTF-8 string
+bytes raw = bytes::from_hex("48656c6c6f")  // from hex string
+```
+
+### Byte-Level Access
+
+```lavina
+buf.set(0, 0xFF)          // set byte at index
+int val = buf.get(0)       // get byte at index (returns int)
+buf.fill(0x00)             // fill all bytes with value
+```
+
+### Conversions
+
+```lavina
+string s = buf.to_string()    // bytes → string
+string hex = buf.to_hex()     // bytes → hex string ("48656c6c6f")
+```
+
+### Binary Read/Write
+
+Read and write multi-byte integers in big-endian or little-endian byte order:
+
+```lavina
+bytes pkt = bytes::create(8)
+
+// Big-endian (network byte order)
+pkt.write_u16_be(0, 0x01BB)         // write u16 at offset 0
+int port = pkt.read_u16_be(0)       // 443
+pkt.write_u32_be(2, 0x01020304)     // write u32 at offset 2
+int val = pkt.read_u32_be(2)        // 16909060
+
+// Little-endian
+pkt.write_u16_le(0, 0x0102)
+pkt.write_u32_le(2, 0x01020304)
+```
+
+### Operations
+
+```lavina
+// Inherited from vector
+buf.push(0x42)            // append byte
+buf.len()                 // length
+buf.clear()               // clear
+
+// Slice and concat
+bytes sub = buf.slice(0, 5)        // [start, end)
+bytes combined = a.concat(b)       // concatenate two buffers
+bool eq = a.equals(b)              // byte-by-byte comparison
+
+// Free function alternatives
+bytes c = bytes::concat(a, b)
+bool e = bytes::equals(a, b)
+```
+
+### Example: Binary Packet
+
+```lavina
+import std::bytes
+
+// Build a packet: [u16 length][payload]
+bytes payload = bytes::from_string("Hi")
+bytes header = bytes::create(2)
+header.write_u16_be(0, payload.len())
+bytes packet = header.concat(payload)
+
+// Parse it back
+int plen = packet.read_u16_be(0)        // 2
+bytes extracted = packet.slice(2, 4)
+string msg = extracted.to_string()       // "Hi"
+```
+
+---
+
 ## Strings
 
 ### Basics
@@ -665,13 +898,46 @@ parts.join(", ")               // "a, b, c"
 
 ---
 
+## Multiline Expressions
+
+Inside square brackets `[]` and curly braces `{}`, indentation is ignored. This allows writing long expressions across multiple lines without worrying about Lavina's indentation rules:
+
+```lavina
+auto config = {
+    "host": "localhost",
+    "port": 8080,
+    "debug": true,
+}
+
+auto matrix = [
+    [1, 0, 0],
+    [0, 1, 0],
+    [0, 0, 1],
+]
+```
+
+This also works for multiline function calls when combined with trailing commas:
+
+```lavina
+auto result = build_request(
+    auth_uuid,
+    "example.com",
+    443,
+    payload,
+)
+```
+
+**Note**: Parentheses `()` do **not** suppress indentation — this is intentional because block lambdas use `(params):` followed by indented bodies, which require indentation tracking.
+
+---
+
 ## Error Handling
 
 ### Try / Catch
 
 ```lavina
 try:
-    auto data = fs_read("file.txt")
+    auto data = fs::read("file.txt")
     process(data)
 catch err:
     print("Error: ${err.what()}")
@@ -885,14 +1151,17 @@ extern "httplib.h":
 Embed raw C++ code as an escape hatch:
 
 ```lavina
-int fn str_to_int(string s):
+string fn to_lower(string s):
+    string result = s
     cpp {
-        return std::stoll(s);
+        std::transform(result.begin(), result.end(), result.begin(), ::tolower);
     }
-    return 0
+    return result
 ```
 
-The C++ code has access to all variables in scope. The `return 0` after the `cpp` block is needed to satisfy the Lavina type checker.
+The C++ code has access to all variables in scope. The `return result` after the `cpp` block is needed to satisfy the Lavina type checker.
+
+**Note**: For string-to-number conversions, prefer `as int` or `as float` instead of cpp blocks (see [Type Casting](#type-casting)).
 
 ---
 
@@ -907,36 +1176,58 @@ The C++ code has access to all variables in scope. The `return 0` after the `cpp
 
 ### Filesystem
 
-| Function | Description |
-|----------|-------------|
-| `fs_read(path)` | Read file contents as string. Throws on error. |
-| `fs_write(path, content)` | Write string to file. Throws on error. |
-| `fs_append(path, content)` | Append string to file. |
-| `fs_exists(path)` | Check if file exists. Returns `bool`. |
-| `fs_remove(path)` | Delete a file. Returns `bool`. |
-| `fs_is_dir(path)` | Check if path is a directory. Returns `bool`. |
-| `fs_listdir(path)` | List directory entries. Returns `vector[string]`. |
-| `fs_read_lines(path)` | Read file as vector of lines. |
+Use `import std::fs` or the built-in functions directly:
+
+| Module Function | Built-in | Description |
+|----------------|----------|-------------|
+| `fs::read(path)` | `__fs_read(path)` | Read file contents as string. |
+| `fs::write(path, content)` | `__fs_write(path, content)` | Write string to file. |
+| `fs::append(path, content)` | `__fs_append(path, content)` | Append string to file. |
+| `fs::exists(path)` | `__fs_exists(path)` | Check if file exists. |
+| `fs::remove(path)` | `__fs_remove(path)` | Delete a file. |
+| `fs::is_dir(path)` | `__fs_is_dir(path)` | Check if path is a directory. |
+| `fs::list_dir(path)` | `__fs_listdir(path)` | List directory entries. |
+| `fs::read_lines(path)` | `__fs_read_lines(path)` | Read file as vector of lines. |
+
+```lavina
+import std::fs
+
+string content = fs::read("config.txt")
+fs::write("output.txt", "hello")
+auto entries = fs::list_dir(".")
+```
 
 ### OS
 
-| Function | Description |
-|----------|-------------|
-| `os_exec(cmd)` | Execute shell command. Returns exit code (`int`). |
-| `os_args()` | Get command-line arguments as `vector[string]`. |
-| `os_env(name)` | Get environment variable. Returns `""` if not set. |
-| `os_clock()` | Milliseconds since epoch (`int`). |
-| `os_sleep(ms)` | Sleep for given milliseconds. |
-| `os_cwd()` | Get current working directory. |
-| `exit(code)` | Exit the process with given code. |
+Use `import std::os` or the built-in functions directly:
+
+| Module Function | Built-in | Description |
+|----------------|----------|-------------|
+| `os::args()` | `__os_args()` | Get command-line arguments as `vector[string]`. |
+| `os::exec(cmd)` | `__os_exec(cmd)` | Execute shell command. Returns exit code. |
+| `os::env(name)` | `__os_env(name)` | Get environment variable. |
+| `os::time_ms()` | `__os_clock()` | Milliseconds since epoch. |
+| `os::sleep(ms)` | `__os_sleep(ms)` | Sleep for given milliseconds. |
+| `os::cwd()` | `__os_cwd()` | Get current working directory. |
+| `exit(code)` | `exit(code)` | Exit the process with given code. |
+
+```lavina
+import std::os
+
+auto args = os::args()
+string cwd = os::cwd()
+```
 
 ### Conversion
 
 | Function | Description |
 |----------|-------------|
 | `to_string(value)` | Convert `int`, `float`, `bool` to `string`. |
-| `to_int(value)` | Parse string to `int`. |
-| `to_float(value)` | Parse string to `float`. |
+| `value as int` | Parse string to `int`, or convert float to int. |
+| `value as float` | Parse string to `float`, or convert int to float. |
+| `value as string` | Convert int, float, bool to `string`. |
+
+See [Type Casting](#type-casting) for full details on the `as` keyword.
 
 ### Utility
 
@@ -960,6 +1251,324 @@ The C++ code has access to all variables in scope. The `return 0` after the `cpp
 | `sin(n)` / `cos(n)` | Trigonometry. |
 | `random(min, max)` | Random integer in range. |
 | `random_float()` | Random float in [0, 1). |
+
+### Standard Library Modules
+
+The standard library is organized into importable modules:
+
+```lavina
+import std::fs           // fs::read(), fs::write(), ...
+import std::os           // os::args(), os::exec(), ...
+import std::math         // math::PI, math::sqrt(), ...
+import std::collections  // vector/hashset dot-methods + free functions
+import std::bytes        // bytes::create(), buf.get(), buf.write_u16_be(), ...
+import std::net          // net::tcp_listen(), TcpStream, UdpSocket, ...
+import std::thread       // thread::spawn(), Mutex, Pool, ...
+```
+
+**std::collections** provides higher-order functions both as free functions and as dot-notation methods via `extend`:
+
+```lavina
+import std::collections
+
+vector[int] nums = [1, 2, 3, 4, 5]
+
+// Dot-notation (via extend)
+auto doubled = nums.map((int x) => x * 2)
+auto evens = nums.filter((int x) => x % 2 == 0)
+int sum = nums.reduce((int acc, int x) => acc + x, 0)
+
+// Free function style
+auto doubled2 = collections::map(nums, (int x) => x * 2)
+
+// Generators (free functions only)
+auto r = collections::range(0, 10)
+```
+
+Available dot-methods on vectors: `map`, `filter`, `reduce`, `for_each`, `zip`, `take`, `drop`, `enumerate`.
+Available dot-methods on hashsets: `union_with`, `intersect`, `difference`.
+
+**std::bytes** provides byte buffer operations for binary protocols, with both dot-notation methods (via `extend bytes`) and free functions:
+
+```lavina
+import std::bytes
+
+// Construction
+bytes buf = bytes::create(64)
+bytes hello = bytes::from_string("Hello")
+bytes decoded = bytes::from_hex("48656c6c6f")
+
+// Dot-methods (via extend)
+buf.set(0, 0xFF)                    // set byte
+int val = buf.get(0)                // get byte
+buf.fill(0x00)                      // fill all bytes
+string s = buf.to_string()          // convert to string
+string hex = buf.to_hex()           // hex-encode
+
+// Binary read/write (big-endian and little-endian)
+buf.write_u16_be(0, 0x01BB)         // write u16 big-endian
+int port = buf.read_u16_be(0)       // read u16 big-endian (443)
+buf.write_u32_le(0, 0x01020304)     // write u32 little-endian
+
+// Inherited vector methods
+buf.push(0x42)                      // append byte
+buf.len()                           // buffer length
+buf.clear()                         // clear buffer
+
+// Slice, concat, equals
+bytes sub = buf.slice(0, 5)         // slice [start, end)
+bytes combined = a.concat(b)        // concatenate
+bool eq = a.equals(b)               // compare
+
+// Free functions
+bytes c = bytes::concat(a, b)
+bool e = bytes::equals(a, b)
+```
+
+**std::net** provides TCP/UDP networking and DNS resolution:
+
+```lavina
+import std::net
+
+// High-level API with structs
+net::TcpListener server = net::TcpListener("127.0.0.1", 8080)
+net::TcpStream client = net::connect("127.0.0.1", 8080)
+net::TcpStream accepted = server.accept()
+client.send("hello")
+string data = accepted.recv(1024)
+client.close()
+accepted.close()
+server.close()
+
+net::UdpSocket udp = net::UdpSocket("0.0.0.0", 9000)
+udp.send("message", "127.0.0.1", 9001)
+string msg = udp.recv(1024)
+udp.close()
+
+// DNS
+string ip = net::resolve("example.com")
+
+// Low-level API (file descriptor based)
+int fd = net::tcp_listen("0.0.0.0", 8080)
+int conn = net::tcp_accept(fd)
+net::tcp_send(conn, "hello")
+string reply = net::tcp_recv(conn, 1024)
+net::tcp_close(conn)
+```
+
+**std::thread** provides OS threads, mutexes, and thread pools:
+
+```lavina
+import std::thread
+
+// Spawn threads
+int result = 0
+thread::Thread t = thread::spawn(():
+    result = 42
+)
+t.wait()       // join thread
+
+// Mutex for synchronization
+thread::Mutex mtx = thread::Mutex()
+mtx.lock()
+// ... critical section ...
+mtx.unlock()
+mtx.destroy()
+
+// Thread pool
+thread::Pool pool = thread::Pool(4)    // 4 workers
+for i in 0..100:
+    pool.submit(():
+        // task runs on a worker thread
+        pass
+    )
+pool.shutdown()    // wait for all tasks to finish
+
+// Utilities
+thread::sleep(100)                  // sleep 100ms
+int id = thread::current_id()      // current thread ID
+```
+
+---
+
+## Networking
+
+The `std::net` module provides TCP and UDP networking plus DNS resolution, using POSIX sockets (no external dependencies).
+
+### TCP
+
+```lavina
+import std::net
+
+// Server: listen, accept, send/recv
+net::TcpListener server = net::TcpListener("127.0.0.1", 8080)
+net::TcpStream client_conn = server.accept()
+string data = client_conn.recv(1024)
+client_conn.send("echo: ${data}")
+client_conn.close()
+server.close()
+
+// Client: connect, send/recv
+net::TcpStream client = net::connect("127.0.0.1", 8080)
+client.send("hello")
+string response = client.recv(1024)
+client.close()
+```
+
+### UDP
+
+```lavina
+import std::net
+
+net::UdpSocket sock = net::UdpSocket("0.0.0.0", 9000)
+sock.send("ping", "127.0.0.1", 9001)
+string msg = sock.recv(1024)
+sock.close()
+```
+
+### DNS
+
+```lavina
+import std::net
+
+string ip = net::resolve("example.com")    // "93.184.216.34"
+```
+
+### Low-Level API
+
+For direct file descriptor control:
+
+| Function | Description |
+|----------|-------------|
+| `net::tcp_listen(host, port)` | Bind and listen, returns fd |
+| `net::tcp_accept(fd)` | Accept connection, returns fd |
+| `net::tcp_connect(host, port)` | Connect, returns fd |
+| `net::tcp_send(fd, data)` | Send string over TCP |
+| `net::tcp_recv(fd, max)` | Receive string from TCP |
+| `net::tcp_close(fd)` | Close TCP socket |
+| `net::udp_create(host, port)` | Create and bind UDP socket |
+| `net::udp_send(fd, data, host, port)` | Send UDP datagram |
+| `net::udp_recv(fd, max)` | Receive UDP datagram |
+| `net::udp_close(fd)` | Close UDP socket |
+
+---
+
+## Threading
+
+The `std::thread` module provides OS threads, mutexes, and thread pools.
+
+### Spawning Threads
+
+```lavina
+import std::thread
+
+int result = 0
+thread::Thread t = thread::spawn(():
+    result = 42
+)
+t.wait()    // blocks until thread completes
+// result is now 42
+```
+
+Lambdas capture variables by reference (`[&]` in C++), so threads can modify shared state. Always call `.wait()` before the captured variables go out of scope.
+
+```lavina
+t.detach()  // let thread run independently (don't wait)
+```
+
+### Mutex
+
+```lavina
+import std::thread
+
+thread::Mutex mtx = thread::Mutex()
+int counter = 0
+
+for i in 0..10:
+    thread::spawn(():
+        mtx.lock()
+        counter += 1
+        mtx.unlock()
+    )
+
+// ... wait for threads ...
+mtx.destroy()
+```
+
+### Thread Pool
+
+```lavina
+import std::thread
+
+thread::Pool pool = thread::Pool(4)    // 4 worker threads
+
+for i in 0..100:
+    pool.submit(():
+        // runs on a worker thread
+        pass
+    )
+
+pool.shutdown()    // waits for all submitted tasks to finish
+```
+
+### Utilities
+
+| Function | Description |
+|----------|-------------|
+| `thread::sleep(ms)` | Sleep current thread for `ms` milliseconds |
+| `thread::current_id()` | Get current thread's ID (int) |
+
+---
+
+## Extension Methods
+
+The `extend` keyword adds methods to existing types:
+
+```lavina
+extend vector:
+    auto fn double_all():
+        return __lv_col_map(this, (auto x) => x * 2)
+
+    int fn sum():
+        int result = 0
+        for x in this:
+            result += x
+        return result
+
+extend string:
+    string fn shout():
+        return this + "!"
+```
+
+Usage:
+
+```lavina
+vector[int] nums = [1, 2, 3]
+auto d = nums.double_all()    // [2, 4, 6]
+int s = nums.sum()            // 6
+
+string greeting = "hello"
+print(greeting.shout())       // hello!
+```
+
+### Method Chaining
+
+Extend methods support chaining — you can call one extend method on the result of another:
+
+```lavina
+import std::collections
+
+vector[int] nums = [1, 2, 3, 4, 5]
+
+// Chain multiple operations
+int result = nums.map((int x) => x * x).filter((int x) => x > 5).reduce((int acc, int x) => acc + x, 0)
+
+auto first_three_doubled = nums.map((int x) => x * 2).take(3)
+```
+
+Extend methods work on: `vector`, `hashmap`, `hashset`, `string`, `bytes`, and custom types (structs/enums by name).
+
+Use `this` inside extend methods to refer to the object. Built-in methods (`.push()`, `.sort()`, etc.) take priority over extend methods.
 
 ---
 
@@ -1008,7 +1617,7 @@ The compiler maintains C++ snapshots in `stages/`. Each snapshot is a complete s
 make bootstrap   # Build from latest stage, verify fixed point
 make snapshot    # Save new stage after codegen changes
 make evolve      # Handle codegen output format changes (2-pass)
-make test        # Run test suite (22 tests)
+make test        # Run test suite (45 tests)
 ```
 
 **Fixed point verification**: The bootstrap compiles `src/main.lv` twice — once with the previous stage and once with the newly built compiler. The outputs must be identical, proving the compiler correctly compiles itself.

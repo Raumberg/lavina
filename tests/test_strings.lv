@@ -27,5 +27,3 @@ void fn main():
     int x = 42
     string msg = "value is " + x
     lv_assert(msg.contains("42"), "int to string concat")
-
-    print("test_strings: ALL PASSED")

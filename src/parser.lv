@@ -1,4 +1,4 @@
-import ast
+import type_utils
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Parser
@@ -12,12 +12,14 @@ class Parser:
     int current
     bool in_class_body
     vector[vector[Stmt]] lambda_blocks
+    vector[Expr] last_param_defaults
 
     constructor(vector[Token] tokens):
         this.tokens = tokens
         this.current = 0
         this.in_class_body = false
         this.lambda_blocks = []
+        this.last_param_defaults = []
 
     // ── Helpers ─────────────────────────────────────────────
 
@@ -64,47 +66,13 @@ class Parser:
 
     bool fn is_type_at_pos(int pos):
         auto t = this.peek_at(pos).token_type
-        if t == TK_INT_TYPE:
-            return true
-        if t == TK_FLOAT_TYPE:
-            return true
-        if t == TK_STRING_TYPE:
-            return true
-        if t == TK_BOOL:
-            return true
-        if t == TK_VOID:
-            return true
-        if t == TK_AUTO:
-            return true
-        if t == TK_DYNAMIC:
-            return true
-        if t == TK_VECTOR:
-            return true
-        if t == TK_HASHMAP:
-            return true
-        if t == TK_HASHSET:
-            return true
-        if t == TK_IDENTIFIER:
-            return true
-        if t == TK_INT8:
-            return true
-        if t == TK_INT16:
-            return true
-        if t == TK_INT32:
-            return true
-        if t == TK_INT64:
-            return true
-        if t == TK_FLOAT32:
-            return true
-        if t == TK_FLOAT64:
-            return true
-        if t == TK_USIZE:
-            return true
-        if t == TK_CSTRING:
-            return true
-        if t == TK_PTR:
-            return true
-        return false
+        vector[string] type_tokens = [
+            TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID,
+            TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET,
+            TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64,
+            TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR, TK_BYTES
+        ]
+        return type_tokens.contains(t)
 
     int fn skip_type_tokens(int pos):
         auto tt = this.peek_at(pos).token_type
@@ -128,16 +96,21 @@ class Parser:
             pos = this.skip_type_tokens(pos)
             pos += 1
             return pos
-        // Check for Identifier[Type, Type, ...] (generic type args)
-        if tt == TK_IDENTIFIER and this.peek_at(pos + 1).token_type == TK_LEFT_BRACKET:
-            // Could be generic type args — skip Ident [ Type , Type ]
-            int try_pos = pos + 2
-            try_pos = this.skip_type_tokens(try_pos)
-            while this.peek_at(try_pos).token_type == TK_COMMA:
-                try_pos += 1
+        // Skip module-qualified identifiers: module::Type
+        if tt == TK_IDENTIFIER:
+            int id_pos = pos + 1
+            while this.peek_at(id_pos).token_type == TK_DOUBLE_COLON and this.peek_at(id_pos + 1).token_type == TK_IDENTIFIER:
+                id_pos += 2
+            // Check for generic type args: Ident[Type, Type, ...]
+            if this.peek_at(id_pos).token_type == TK_LEFT_BRACKET:
+                int try_pos = id_pos + 1
                 try_pos = this.skip_type_tokens(try_pos)
-            if this.peek_at(try_pos).token_type == TK_RIGHT_BRACKET:
-                return try_pos + 1
+                while this.peek_at(try_pos).token_type == TK_COMMA:
+                    try_pos += 1
+                    try_pos = this.skip_type_tokens(try_pos)
+                if this.peek_at(try_pos).token_type == TK_RIGHT_BRACKET:
+                    return try_pos + 1
+            return id_pos
         return pos + 1
 
     // Note: checks for comptime at offset 0 because this is also called from
@@ -214,6 +187,8 @@ class Parser:
             t = TypeNode::USize()
         elif this.match_any([TK_CSTRING]):
             t = TypeNode::CString()
+        elif this.match_any([TK_BYTES]):
+            t = TypeNode::Bytes()
         elif this.match_any([TK_PTR]):
             this.consume(TK_LEFT_BRACKET, "Expect '[' after 'ptr'.")
             TypeNode inner = this.parse_type()
@@ -221,6 +196,11 @@ class Parser:
             t = TypeNode::Ptr(inner)
         elif this.match_any([TK_IDENTIFIER]):
             string custom_name = this.previous().lexeme
+            // Handle module-qualified types: module::Type
+            while this.check(TK_DOUBLE_COLON):
+                this.advance()
+                auto part = this.consume(TK_IDENTIFIER, "Expect type name after '::'.")
+                custom_name = custom_name + "::" + part.lexeme
             vector[TypeNode] type_args = []
             if this.check(TK_LEFT_BRACKET):
                 // Peek ahead to see if this is a type arg list (Type, Type]) vs index
@@ -231,6 +211,8 @@ class Parser:
                     TypeNode first_arg = this.parse_type()
                     type_args.push(first_arg)
                     while this.match_any([TK_COMMA]):
+                        if this.check(TK_RIGHT_BRACKET):
+                            break
                         type_args.push(this.parse_type())
                     if not this.check(TK_RIGHT_BRACKET):
                         is_type_args = false
@@ -249,46 +231,6 @@ class Parser:
         if this.match_any([TK_QUESTION]):
             t = TypeNode::Nullable(t)
         return t
-
-    string fn type_to_string(ref TypeNode t):
-        match t:
-            Int():
-                return "int64_t"
-            Float():
-                return "double"
-            Str():
-                return "std::string"
-            Bool():
-                return "bool"
-            Void():
-                return "void"
-            Auto():
-                return "auto"
-            Custom(name, type_args):
-                if type_args.len() > 0:
-                    vector[string] ta = []
-                    for ref a in type_args:
-                        ta.push(this.type_to_string(a))
-                    return "${name}<${ta.join(", ")}>"
-                return name
-            Array(inner):
-                return "std::vector<${this.type_to_string(inner)}>"
-            Int8():
-                return "int8_t"
-            Int16():
-                return "int16_t"
-            Int32():
-                return "int32_t"
-            Float32():
-                return "float"
-            USize():
-                return "size_t"
-            CString():
-                return "const char*"
-            Ptr(inner):
-                return "${this.type_to_string(inner)}*"
-            _:
-                return "auto"
 
     // ── Expression parsing ──────────────────────────────────
 
@@ -407,10 +349,12 @@ class Parser:
                     vector[string] type_strs = []
                     try:
                         TypeNode first_t = this.parse_type()
-                        type_strs.push(this.type_to_string(first_t))
+                        type_strs.push(type_to_cpp(first_t))
                         while this.match_any([TK_COMMA]):
+                            if this.check(TK_RIGHT_BRACKET):
+                                break
                             TypeNode next_t = this.parse_type()
-                            type_strs.push(this.type_to_string(next_t))
+                            type_strs.push(type_to_cpp(next_t))
                         if not this.check(TK_RIGHT_BRACKET):
                             is_type_args = false
                     catch e:
@@ -460,14 +404,37 @@ class Parser:
                 pass
 
         vector[Expr] args = []
+        vector[string] arg_names = []
+        this.skip_formatting()
         if not this.check(TK_RIGHT_PAREN):
             this.match_any([TK_REF, TK_REF_MUT])
-            args.push(this.expression())
+            Expr arg_expr = this.expression()
+            // Detect named argument: name = value parsed as Assign(name, value)
+            match arg_expr:
+                Assign(aname, avalue):
+                    arg_names.push(aname.lexeme)
+                    args.push(avalue)
+                _:
+                    arg_names.push("")
+                    args.push(arg_expr)
+            this.skip_formatting()
             while this.match_any([TK_COMMA]):
+                this.skip_formatting()
+                if this.check(TK_RIGHT_PAREN):
+                    break
                 this.match_any([TK_REF, TK_REF_MUT])
-                args.push(this.expression())
+                arg_expr = this.expression()
+                match arg_expr:
+                    Assign(aname, avalue):
+                        arg_names.push(aname.lexeme)
+                        args.push(avalue)
+                    _:
+                        arg_names.push("")
+                        args.push(arg_expr)
+                this.skip_formatting()
+        this.skip_formatting()
         auto paren = this.consume(TK_RIGHT_PAREN, "Expect ')' after arguments.")
-        return Expr::Call(callee, paren, args)
+        return Expr::Call(callee, paren, args, arg_names)
 
     Expr fn primary():
         if this.match_any([TK_FALSE]):
@@ -484,12 +451,17 @@ class Parser:
             return Expr::Literal("string", this.previous().lexeme)
         if this.match_any([TK_IDENTIFIER]):
             return Expr::Variable(this.previous())
+        if this.check(TK_BYTES) and this.peek_at(1).token_type == TK_DOUBLE_COLON:
+            auto tok = this.advance()
+            return Expr::Variable(Token(TK_IDENTIFIER, tok.lexeme, tok.line, tok.col))
         if this.match_any([TK_THIS]):
             return Expr::This(this.previous())
         if this.match_any([TK_LEFT_PAREN]):
             if this.try_parse_lambda():
                 return this.parse_lambda()
+            this.skip_formatting()
             Expr expr = this.expression()
+            this.skip_formatting()
             this.consume(TK_RIGHT_PAREN, "Expect ')' after expression.")
             return Expr::Grouping(expr)
         if this.match_any([TK_LEFT_BRACKET]):
@@ -501,6 +473,8 @@ class Parser:
                 this.skip_formatting()
                 while this.match_any([TK_COMMA]):
                     this.skip_formatting()
+                    if this.check(TK_RIGHT_BRACKET):
+                        break
                     elements.push(this.expression())
                     this.skip_formatting()
             this.skip_formatting()
@@ -522,6 +496,8 @@ class Parser:
                 values.push(value)
                 while this.match_any([TK_COMMA]):
                     this.skip_formatting()
+                    if this.check(TK_RIGHT_BRACE):
+                        break
                     key = this.expression()
                     this.skip_formatting()
                     this.consume(TK_COLON, "Expect ':' after map key.")
@@ -537,20 +513,47 @@ class Parser:
         auto t = this.peek()
         throw "Expect expression. Got ${t.token_type} at ${t.line}:${t.col}"
 
+    vector[string] fn parse_type_params():
+        vector[string] type_params = []
+        if this.match_any([TK_LEFT_BRACKET]):
+            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            while this.match_any([TK_COMMA]):
+                if this.check(TK_RIGHT_BRACKET):
+                    break
+                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
+            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        return type_params
+
     vector[Param] fn parse_param_list():
         vector[Param] params = []
+        this.last_param_defaults = []
+        this.skip_formatting()
         if not this.check(TK_RIGHT_PAREN):
             bool p_mut = this.match_any([TK_REF_MUT])
             bool p_ref = p_mut or this.match_any([TK_REF])
             TypeNode param_type = this.parse_type()
             auto param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+            Expr default_val = Expr::None()
+            if this.match_any([TK_EQUAL]):
+                default_val = this.expression()
             params.push(Param(param_name, param_type, p_ref, p_mut))
+            this.last_param_defaults.push(default_val)
+            this.skip_formatting()
             while this.match_any([TK_COMMA]):
+                this.skip_formatting()
+                if this.check(TK_RIGHT_PAREN):
+                    break
                 p_mut = this.match_any([TK_REF_MUT])
                 p_ref = p_mut or this.match_any([TK_REF])
                 param_type = this.parse_type()
                 param_name = this.consume(TK_IDENTIFIER, "Expect parameter name.")
+                default_val = Expr::None()
+                if this.match_any([TK_EQUAL]):
+                    default_val = this.expression()
                 params.push(Param(param_name, param_type, p_ref, p_mut))
+                this.last_param_defaults.push(default_val)
+                this.skip_formatting()
+        this.skip_formatting()
         return params
 
     // ── Lambda parsing ────────────────────────────────────
@@ -708,6 +711,8 @@ class Parser:
                         if not this.check(TK_RIGHT_PAREN):
                             bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
                             while this.match_any([TK_COMMA]):
+                                if this.check(TK_RIGHT_PAREN):
+                                    break
                                 bindings.push(this.consume(TK_IDENTIFIER, "Expect binding name.").lexeme)
                         this.consume(TK_RIGHT_PAREN, "Expect ')' after bindings.")
                 this.consume(TK_COLON, "Expect ':' after match pattern.")
@@ -776,20 +781,16 @@ class Parser:
             this.consume(TK_FN, "Expect 'fn' keyword after return type.")
             name = this.consume(TK_IDENTIFIER, "Expect function name.")
 
-        vector[string] type_params = []
-        if this.match_any([TK_LEFT_BRACKET]):
-            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            while this.match_any([TK_COMMA]):
-                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        vector[string] type_params = this.parse_type_params()
 
         this.consume(TK_LEFT_PAREN, "Expect '(' after function name.")
         vector[Param] params = this.parse_param_list()
+        vector[Expr] defaults = this.last_param_defaults
         this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
 
         this.consume(TK_COLON, "Expect ':' before function body.")
         vector[Stmt] body = this.block()
-        return Stmt::Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params)
+        return Stmt::Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, defaults)
 
     Stmt fn class_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect class name.")
@@ -802,12 +803,7 @@ class Parser:
 
     Stmt fn struct_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect struct name.")
-        vector[string] type_params = []
-        if this.match_any([TK_LEFT_BRACKET]):
-            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            while this.match_any([TK_COMMA]):
-                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        vector[string] type_params = this.parse_type_params()
         this.consume(TK_COLON, "Expect ':' after struct name.")
         auto old = this.in_class_body
         this.in_class_body = true
@@ -817,12 +813,7 @@ class Parser:
 
     Stmt fn enum_declaration(string visibility):
         auto name = this.consume(TK_IDENTIFIER, "Expect enum name.")
-        vector[string] type_params = []
-        if this.match_any([TK_LEFT_BRACKET]):
-            type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            while this.match_any([TK_COMMA]):
-                type_params.push(this.consume(TK_IDENTIFIER, "Expect type parameter name.").lexeme)
-            this.consume(TK_RIGHT_BRACKET, "Expect ']' after type parameters.")
+        vector[string] type_params = this.parse_type_params()
         this.consume(TK_COLON, "Expect ':' after enum name.")
 
         this.match_any([TK_NEWLINE])
@@ -852,6 +843,8 @@ class Parser:
                     fields.push(this.parse_type())
                     fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                     while this.match_any([TK_COMMA]):
+                        if this.check(TK_RIGHT_PAREN):
+                            break
                         fields.push(this.parse_type())
                         fnames.push(this.consume(TK_IDENTIFIER, "Expect field name.").lexeme)
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after variant fields.")
@@ -885,11 +878,45 @@ class Parser:
         this.consume(TK_DEDENT, "Expect dedent to end enum body.")
         return Stmt::Enum(name, variants, methods, visibility, type_params)
 
+    Stmt fn extend_declaration(string visibility):
+        if not this.match_any([TK_IDENTIFIER, TK_VECTOR, TK_HASHMAP, TK_HASHSET, TK_STRING_TYPE, TK_BYTES]):
+            throw "Expect type name after 'extend'."
+        auto target = this.previous()
+        this.consume(TK_COLON, "Expect ':' after extend target.")
+        this.match_any([TK_NEWLINE])
+        this.consume(TK_INDENT, "Expect indentation to start extend body.")
+        vector[Stmt] methods = []
+        auto old = this.in_class_body
+        this.in_class_body = true
+        while not this.check(TK_DEDENT) and not this.is_at_end():
+            if this.match_any([TK_NEWLINE]):
+                pass
+            elif this.is_function_start():
+                int method_ct = 0
+                if this.match_any([TK_COMPTIME_STRICT]):
+                    method_ct = 2
+                elif this.match_any([TK_COMPTIME]):
+                    method_ct = 1
+                methods.push(this.function_declaration("public", false, method_ct))
+            else:
+                throw "Only method declarations allowed in extend block"
+        this.consume(TK_DEDENT, "Expect dedent to end extend body.")
+        this.in_class_body = old
+        return Stmt::Extend(target, methods, visibility)
+
+    Token fn consume_module_name():
+        if this.match_any([TK_IDENTIFIER]):
+            return this.previous()
+        if this.match_any([TK_BYTES]):
+            auto tok = this.previous()
+            return Token(TK_IDENTIFIER, tok.lexeme, tok.line, tok.col)
+        throw "Expect module name. Got ${this.peek().token_type} at ${this.peek().line}:${this.peek().col}"
+
     Stmt fn import_statement():
         vector[Token] path = []
-        path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
+        path.push(this.consume_module_name())
         while this.match_any([TK_DOUBLE_COLON]):
-            path.push(this.consume(TK_IDENTIFIER, "Expect module name."))
+            path.push(this.consume_module_name())
 
         string alias = ""
         if this.match_any([TK_AS]):
@@ -947,6 +974,9 @@ class Parser:
         if this.match_any([TK_ENUM]):
             return this.enum_declaration(visibility)
 
+        if this.match_any([TK_EXTEND]):
+            return this.extend_declaration(visibility)
+
         if this.match_any([TK_TRY]):
             return this.try_statement()
 
@@ -965,11 +995,12 @@ class Parser:
                 auto name_tok = this.advance()
                 this.consume(TK_LEFT_PAREN, "Expect '(' after ${ctor_name}.")
                 vector[Param] params = this.parse_param_list()
+                vector[Expr] ctor_defaults = this.last_param_defaults
                 this.consume(TK_RIGHT_PAREN, "Expect ')' after parameters.")
                 this.consume(TK_COLON, "Expect ':' before body.")
                 vector[Stmt] body = this.block()
                 vector[string] empty_tp = []
-                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp)
+                return Stmt::Function(name_tok, params, TypeNode::Void(), body, false, 0, is_static, visibility, empty_tp, ctor_defaults)
 
         if this.match_any([TK_REF_MUT]):
             return this.var_declaration_with_ref(visibility, true, true)
@@ -1035,7 +1066,8 @@ class Parser:
                 string fn_cpp_name = fn_name.lexeme
                 if this.match_any([TK_EQUAL]):
                     fn_cpp_name = this.consume(TK_STRING, "Expect C++ name string.").lexeme
-                functions.push(ExternFn(fn_name.lexeme, fn_cpp_name, ret_type, params))
+                vector[Expr] ext_defaults = this.last_param_defaults
+                functions.push(ExternFn(fn_name.lexeme, fn_cpp_name, ret_type, params, ext_defaults))
                 this.match_any([TK_NEWLINE])
 
         this.consume(TK_DEDENT, "Expect dedent to end extern body.")

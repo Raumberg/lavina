@@ -236,5 +236,3 @@ void fn main():
             lv_assert(r._tag == "Leaf", "tree right is leaf")
         _:
             lv_assert(false, "should be node")
-
-    print("All generics tests passed!")

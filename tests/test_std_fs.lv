@@ -4,48 +4,40 @@ void fn test_write_and_read():
     fs::write("/tmp/lv_test_fs.txt", "hello lavina")
     string content = fs::read("/tmp/lv_test_fs.txt")
     lv_assert(content == "hello lavina", "write/read failed")
-    print("PASS: write and read")
 
 void fn test_exists():
     lv_assert(fs::exists("/tmp/lv_test_fs.txt"), "exists failed")
     lv_assert(not fs::exists("/tmp/lv_nonexistent_xyz.txt"), "not exists failed")
-    print("PASS: exists")
 
 void fn test_append():
     fs::append("/tmp/lv_test_fs.txt", "\nline2")
     string content = fs::read("/tmp/lv_test_fs.txt")
     lv_assert(content == "hello lavina\nline2", "append failed")
-    print("PASS: append")
 
 void fn test_read_lines():
     vector[string] lines = fs::read_lines("/tmp/lv_test_fs.txt")
     lv_assert(lines.len() == 2, "read_lines count failed")
     lv_assert(lines[0] == "hello lavina", "read_lines[0] failed")
     lv_assert(lines[1] == "line2", "read_lines[1] failed")
-    print("PASS: read_lines")
 
 void fn test_size():
     int s = fs::size("/tmp/lv_test_fs.txt")
     lv_assert(s > 0, "size failed")
-    print("PASS: size = " + s)
 
 void fn test_copy():
     fs::copy("/tmp/lv_test_fs.txt", "/tmp/lv_test_fs_copy.txt")
     string content = fs::read("/tmp/lv_test_fs_copy.txt")
     lv_assert(content == "hello lavina\nline2", "copy failed")
-    print("PASS: copy")
 
 void fn test_rename():
     fs::rename("/tmp/lv_test_fs_copy.txt", "/tmp/lv_test_fs_moved.txt")
     lv_assert(fs::exists("/tmp/lv_test_fs_moved.txt"), "rename dest failed")
     lv_assert(not fs::exists("/tmp/lv_test_fs_copy.txt"), "rename src still exists")
-    print("PASS: rename")
 
 void fn test_mkdir_and_is_dir():
     fs::mkdir("/tmp/lv_test_dir")
     lv_assert(fs::exists("/tmp/lv_test_dir"), "mkdir failed")
     lv_assert(fs::is_dir("/tmp/lv_test_dir"), "is_dir failed")
-    print("PASS: mkdir and is_dir")
 
 void fn test_list_dir():
     fs::write("/tmp/lv_test_dir/a.txt", "a")
@@ -54,19 +46,16 @@ void fn test_list_dir():
     lv_assert(entries.len() == 2, "list_dir count failed")
     lv_assert(entries[0] == "a.txt", "list_dir[0] failed")
     lv_assert(entries[1] == "b.txt", "list_dir[1] failed")
-    print("PASS: list_dir")
 
 void fn test_basename_dirname():
     string b = fs::basename("/tmp/lv_test_fs.txt")
     string d = fs::dirname("/tmp/lv_test_fs.txt")
     lv_assert(b == "lv_test_fs.txt", "basename failed: " + b)
     lv_assert(d == "/tmp", "dirname failed: " + d)
-    print("PASS: basename = " + b + ", dirname = " + d)
 
 void fn test_absolute():
     string abs = fs::absolute("/tmp/lv_test_fs.txt")
     lv_assert(abs.starts_with("/"), "absolute failed: " + abs)
-    print("PASS: absolute = " + abs)
 
 void fn cleanup():
     fs::remove("/tmp/lv_test_fs.txt")
@@ -88,4 +77,3 @@ void fn main():
     test_basename_dirname()
     test_absolute()
     cleanup()
-    print("All std::fs tests passed!")

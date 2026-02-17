@@ -1,0 +1,4 @@
+// Negative test: calling undefined function should fail compilation
+
+void fn main():
+    int result = nonexistent_function(42)

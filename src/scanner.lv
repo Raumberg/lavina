@@ -76,6 +76,7 @@ const string TK_STATIC = "Static"
 const string TK_CLASS = "Class"
 const string TK_STRUCT = "Struct"
 const string TK_ENUM = "Enum"
+const string TK_EXTEND = "Extend"
 const string TK_THIS = "This"
 const string TK_TRY = "Try"
 const string TK_CATCH = "Catch"
@@ -99,6 +100,7 @@ const string TK_FLOAT64 = "Float64"
 const string TK_USIZE = "USize"
 const string TK_CSTRING = "CString"
 const string TK_PTR = "Ptr"
+const string TK_BYTES = "Bytes"
 const string TK_CPP = "Cpp"
 const string TK_AMPERSAND = "Ampersand"
 const string TK_EXTERN = "Extern"
@@ -236,6 +238,8 @@ string fn lookup_keyword(ref string w):
         return TK_CSTRING
     elif w == "ptr":
         return TK_PTR
+    elif w == "bytes":
+        return TK_BYTES
     elif w == "cpp":
         return TK_CPP
     elif w == "extern":
@@ -244,6 +248,8 @@ string fn lookup_keyword(ref string w):
         return TK_LINK
     elif w == "operator":
         return TK_OPERATOR
+    elif w == "extend":
+        return TK_EXTEND
     return ""
 
 // ── Helper functions ────────────────────────────────────────────
@@ -259,6 +265,15 @@ bool fn is_alpha(auto c):
 
 bool fn is_digit(auto c):
     if c >= "0" and c <= "9":
+        return true
+    return false
+
+bool fn is_hex_digit(auto c):
+    if is_digit(c):
+        return true
+    if c >= "a" and c <= "f":
+        return true
+    if c >= "A" and c <= "F":
         return true
     return false
 
@@ -285,6 +300,7 @@ class Scanner:
     bool at_line_start
     bool in_string_interp
     int interp_brace_depth
+    int bracket_depth
 
     constructor(string source):
         this.source = source
@@ -300,6 +316,7 @@ class Scanner:
         this.at_line_start = true
         this.in_string_interp = false
         this.interp_brace_depth = 0
+        this.bracket_depth = 0
 
     bool fn is_at_end():
         return this.current >= this.source.len()
@@ -346,6 +363,11 @@ class Scanner:
     // ── Indentation handling ────────────────────────────────────
 
     void fn handle_indentation():
+        if this.bracket_depth > 0:
+            while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
+                this.advance()
+            this.at_line_start = false
+            return
         int indent = 0
         while not this.is_at_end() and (this.peek() == " " or this.peek() == "\t"):
             auto c = this.advance()
@@ -402,6 +424,14 @@ class Scanner:
         this.add_token(TK_STRING, value)
 
     void fn scan_number():
+        // Check for hex literal: 0x...
+        if this.source.charAt(this.start) == "0" and (this.peek() == "x" or this.peek() == "X"):
+            this.advance()
+            while is_hex_digit(this.peek()):
+                this.advance()
+            this.add_simple_token(TK_INT)
+            return
+
         while is_digit(this.peek()):
             this.advance()
 
@@ -486,10 +516,14 @@ class Scanner:
         elif c == ")":
             this.add_simple_token(TK_RIGHT_PAREN)
         elif c == "[":
+            this.bracket_depth += 1
             this.add_simple_token(TK_LEFT_BRACKET)
         elif c == "]":
+            if this.bracket_depth > 0:
+                this.bracket_depth -= 1
             this.add_simple_token(TK_RIGHT_BRACKET)
         elif c == "{":
+            this.bracket_depth += 1
             if this.in_string_interp:
                 this.interp_brace_depth += 1
             this.add_simple_token(TK_LEFT_BRACE)
@@ -502,6 +536,8 @@ class Scanner:
                     this.add_token(TK_PLUS, "+")
                     this.scan_string()
                     return
+            if this.bracket_depth > 0:
+                this.bracket_depth -= 1
             this.add_simple_token(TK_RIGHT_BRACE)
         elif c == ",":
             this.add_simple_token(TK_COMMA)
@@ -581,10 +617,12 @@ class Scanner:
         elif c == " " or c == "\r" or c == "\t":
             pass
         elif c == "\n":
-            this.add_token(TK_NEWLINE, "\n")
+            if this.bracket_depth == 0:
+                this.add_token(TK_NEWLINE, "\n")
             this.line += 1
             this.column = 1
-            this.at_line_start = true
+            if this.bracket_depth == 0:
+                this.at_line_start = true
         elif c == "\"":
             this.scan_string()
         elif is_digit(c):
