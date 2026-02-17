@@ -128,6 +128,52 @@ inline std::string __net_tcp_recv(int64_t fd, int64_t max_bytes) {
     return std::string(buf.data(), static_cast<size_t>(received));
 }
 
+// Send raw bytes on a connected TCP socket
+// Returns number of bytes sent
+inline int64_t __net_tcp_send_bytes(int64_t fd, const lv_bytes& data) {
+    auto sent = send(static_cast<socket_t>(fd),
+                     reinterpret_cast<const char*>(data.data()),
+                     static_cast<int>(data.size()), 0);
+    if (sent == LV_SOCKET_ERROR) {
+        throw std::runtime_error("tcp_send_bytes: send() failed");
+    }
+    return static_cast<int64_t>(sent);
+}
+
+// Receive raw bytes from a connected TCP socket
+// Returns received data as bytes (empty on connection close)
+inline lv_bytes __net_tcp_recv_bytes(int64_t fd, int64_t max_bytes) {
+    lv_bytes buf(static_cast<size_t>(max_bytes));
+    auto received = recv(static_cast<socket_t>(fd),
+                         reinterpret_cast<char*>(buf.data()),
+                         static_cast<int>(buf.size()), 0);
+    if (received == LV_SOCKET_ERROR) {
+        throw std::runtime_error("tcp_recv_bytes: recv() failed");
+    }
+    buf.resize(static_cast<size_t>(received));
+    return buf;
+}
+
+// Receive exactly N bytes (blocks until all received or connection closes)
+// Returns bytes received (may be shorter if connection closed early)
+inline lv_bytes __net_tcp_recv_exact(int64_t fd, int64_t n) {
+    lv_bytes result;
+    result.reserve(static_cast<size_t>(n));
+    size_t remaining = static_cast<size_t>(n);
+    while (remaining > 0) {
+        char tmp[4096];
+        int chunk = static_cast<int>(remaining < 4096 ? remaining : 4096);
+        auto received = recv(static_cast<socket_t>(fd), tmp, chunk, 0);
+        if (received == LV_SOCKET_ERROR) {
+            throw std::runtime_error("tcp_recv_exact: recv() failed");
+        }
+        if (received == 0) break; // connection closed
+        result.insert(result.end(), tmp, tmp + received);
+        remaining -= static_cast<size_t>(received);
+    }
+    return result;
+}
+
 // Close a TCP socket
 inline void __net_tcp_close(int64_t fd) {
     _lv_close_socket(static_cast<socket_t>(fd));

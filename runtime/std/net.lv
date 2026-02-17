@@ -20,6 +20,15 @@ public string fn tcp_recv(int fd, int max_bytes):
 public void fn tcp_close(int fd):
     __net_tcp_close(fd)
 
+public int fn tcp_send_bytes(int fd, bytes data):
+    return __net_tcp_send_bytes(fd, data)
+
+public bytes fn tcp_recv_bytes(int fd, int max_bytes):
+    return __net_tcp_recv_bytes(fd, max_bytes)
+
+public bytes fn tcp_recv_exact(int fd, int n):
+    return __net_tcp_recv_exact(fd, n)
+
 // ── UDP ──────────────────────────────────────────────────────
 
 public int fn udp_create(string host, int port):
@@ -52,6 +61,15 @@ public struct TcpStream:
 
     string fn recv(int max_bytes):
         return __net_tcp_recv(this.fd, max_bytes)
+
+    int fn send_bytes(bytes data):
+        return __net_tcp_send_bytes(this.fd, data)
+
+    bytes fn recv_bytes(int max_bytes):
+        return __net_tcp_recv_bytes(this.fd, max_bytes)
+
+    bytes fn recv_exact(int n):
+        return __net_tcp_recv_exact(this.fd, n)
 
     void fn close():
         __net_tcp_close(this.fd)

@@ -1,0 +1,272 @@
+// End-to-end test for VLESS proxy
+// 1. Start an echo TCP server on port 19876
+// 2. Start the VLESS handler on port 19877
+// 3. Connect to VLESS, send a VLESS request targeting the echo server
+// 4. Verify data round-trips correctly
+
+import std::bytes
+import std::net
+import std::uuid
+import std::thread
+import std::os
+
+// ── Constants ────────────────────────────────────────────────
+
+comptime int VLESS_VERSION = 0
+comptime int CMD_TCP = 1
+comptime int ADDR_IPV4 = 1
+comptime int ADDR_DOMAIN = 2
+
+// ── Parsed VLESS request ────────────────────────────────────
+
+struct VlessRequest:
+    int command
+    string address
+    int port
+    int payload_offset
+    bytes client_uuid
+
+    constructor():
+        this.command = 0
+        this.address = ""
+        this.port = 0
+        this.payload_offset = 0
+        this.client_uuid = bytes::create(0)
+
+// ── Parse / build ───────────────────────────────────────────
+
+VlessRequest fn parse_request(bytes data):
+    if data.len() < 23:
+        throw "VLESS: request too short"
+    VlessRequest req = VlessRequest()
+    int offset = 0
+    int version = data.get(offset)
+    offset = offset + 1
+    req.client_uuid = data.slice(offset, offset + 16)
+    offset = offset + 16
+    int addons_len = data.get(offset)
+    offset = offset + 1
+    offset = offset + addons_len
+    req.command = data.get(offset)
+    offset = offset + 1
+    req.port = data.read_u16_be(offset)
+    offset = offset + 2
+    int addr_type = data.get(offset)
+    offset = offset + 1
+    if addr_type == ADDR_IPV4:
+        int a = data.get(offset)
+        int b = data.get(offset + 1)
+        int c = data.get(offset + 2)
+        int d = data.get(offset + 3)
+        req.address = "${a}.${b}.${c}.${d}"
+        offset = offset + 4
+    elif addr_type == ADDR_DOMAIN:
+        int domain_len = data.get(offset)
+        offset = offset + 1
+        bytes domain_bytes = data.slice(offset, offset + domain_len)
+        req.address = domain_bytes.to_string()
+        offset = offset + domain_len
+    else:
+        throw "VLESS: unknown address type"
+    req.payload_offset = offset
+    return req
+
+bytes fn build_response():
+    bytes resp = bytes::create(2)
+    resp.set(0, 0)
+    resp.set(1, 0)
+    return resp
+
+void fn relay(int from_fd, int to_fd):
+    while true:
+        bytes chunk = net::tcp_recv_bytes(from_fd, 8192)
+        if chunk.len() == 0:
+            break
+        net::tcp_send_bytes(to_fd, chunk)
+
+void fn handle_vless_client(int client_fd, bytes auth_uuid):
+    bytes data = net::tcp_recv_bytes(client_fd, 65536)
+    if data.len() == 0:
+        net::tcp_close(client_fd)
+        return
+    VlessRequest req = VlessRequest()
+    try:
+        req = parse_request(data)
+    catch:
+        println("  VLESS: parse failed")
+        net::tcp_close(client_fd)
+        return
+    if uuid::equals(req.client_uuid, auth_uuid) == false:
+        println("  VLESS: auth failed")
+        net::tcp_close(client_fd)
+        return
+    if req.command != CMD_TCP:
+        println("  VLESS: bad command")
+        net::tcp_close(client_fd)
+        return
+    int remote_fd = 0
+    try:
+        remote_fd = net::tcp_connect(req.address, req.port)
+    catch:
+        println("  VLESS: connect failed to ${req.address}:${req.port}")
+        net::tcp_close(client_fd)
+        return
+    bytes resp_header = build_response()
+    net::tcp_send_bytes(client_fd, resp_header)
+    if req.payload_offset < data.len():
+        bytes initial_payload = data.slice(req.payload_offset, data.len())
+        net::tcp_send_bytes(remote_fd, initial_payload)
+    thread::Thread t = thread::spawn(():
+        try:
+            relay(remote_fd, client_fd)
+        catch:
+            pass
+    )
+    try:
+        relay(client_fd, remote_fd)
+    catch:
+        pass
+    t.wait()
+    net::tcp_close(remote_fd)
+    net::tcp_close(client_fd)
+
+// ── Build a VLESS request ────────────────────────────────────
+
+bytes fn build_vless_request(bytes auth_uuid, string host, int port, bytes payload):
+    bytes domain_bytes = bytes::from_string(host)
+    int header_len = 1 + 16 + 1 + 1 + 2 + 1 + 1 + domain_bytes.len() + payload.len()
+    bytes req = bytes::create(header_len)
+    int offset = 0
+
+    // Version
+    req.set(offset, VLESS_VERSION)
+    offset = offset + 1
+
+    // UUID (copy 16 bytes)
+    int i = 0
+    while i < 16:
+        req.set(offset + i, auth_uuid.get(i))
+        i = i + 1
+    offset = offset + 16
+
+    // Addons length = 0
+    req.set(offset, 0)
+    offset = offset + 1
+
+    // Command = TCP
+    req.set(offset, CMD_TCP)
+    offset = offset + 1
+
+    // Port (big-endian)
+    req.write_u16_be(offset, port)
+    offset = offset + 2
+
+    // Address type = domain
+    req.set(offset, ADDR_DOMAIN)
+    offset = offset + 1
+
+    // Domain length + domain
+    req.set(offset, domain_bytes.len())
+    offset = offset + 1
+    i = 0
+    while i < domain_bytes.len():
+        req.set(offset + i, domain_bytes.get(i))
+        i = i + 1
+    offset = offset + domain_bytes.len()
+
+    // Payload
+    i = 0
+    while i < payload.len():
+        req.set(offset + i, payload.get(i))
+        i = i + 1
+
+    return req
+
+// ── Tests ────────────────────────────────────────────────────
+
+void fn test_request_builder():
+    bytes test_uuid = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    bytes payload = bytes::from_string("Hello")
+    bytes req = build_vless_request(test_uuid, "127.0.0.1", 80, payload)
+
+    lv_assert(req.get(0) == 0, "version is 0")
+    lv_assert(req.get(1) == 0x55, "uuid byte 0")
+    lv_assert(req.get(17) == 0, "addons len = 0")
+    lv_assert(req.get(18) == CMD_TCP, "command = TCP")
+    lv_assert(req.read_u16_be(19) == 80, "port = 80")
+    lv_assert(req.get(21) == ADDR_DOMAIN, "addr type = domain")
+    lv_assert(req.get(22) == 9, "domain len = 9")
+    println("PASS: request builder")
+
+void fn test_parse_roundtrip():
+    bytes test_uuid = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    bytes payload = bytes::from_string("Hello")
+    bytes raw = build_vless_request(test_uuid, "example.com", 443, payload)
+
+    VlessRequest req = parse_request(raw)
+    lv_assert(req.command == CMD_TCP, "parsed command = TCP")
+    lv_assert(req.port == 443, "parsed port = 443")
+    lv_assert(req.address == "example.com", "parsed address")
+    lv_assert(uuid::equals(req.client_uuid, test_uuid), "parsed uuid matches")
+
+    bytes parsed_payload = raw.slice(req.payload_offset, raw.len())
+    lv_assert(parsed_payload.to_string() == "Hello", "parsed payload")
+    println("PASS: parse roundtrip")
+
+void fn test_end_to_end():
+    bytes auth_uuid = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    int echo_port = 19876
+    int vless_port = 19877
+
+    // 1. Start echo server
+    thread::Thread echo_thread = thread::spawn(():
+        int srv = net::tcp_listen("127.0.0.1", echo_port)
+        int cli = net::tcp_accept(srv)
+        bytes data = net::tcp_recv_bytes(cli, 4096)
+        net::tcp_send_bytes(cli, data)
+        net::tcp_close(cli)
+        net::tcp_close(srv)
+    )
+
+    thread::sleep(100)
+
+    // 2. Start VLESS server (single connection for test)
+    thread::Thread vless_thread = thread::spawn(():
+        int srv = net::tcp_listen("127.0.0.1", vless_port)
+        int cli = net::tcp_accept(srv)
+        handle_vless_client(cli, auth_uuid)
+        net::tcp_close(srv)
+    )
+
+    thread::sleep(100)
+
+    // 3. Connect to VLESS server and send request
+    int fd = net::tcp_connect("127.0.0.1", vless_port)
+
+    bytes payload = bytes::from_string("Hello VLESS!")
+    bytes req = build_vless_request(auth_uuid, "127.0.0.1", echo_port, payload)
+    net::tcp_send_bytes(fd, req)
+
+    // 4. Read VLESS response
+    bytes resp = net::tcp_recv_bytes(fd, 4096)
+    lv_assert(resp.len() >= 2, "got response")
+    lv_assert(resp.get(0) == 0, "response version = 0")
+    lv_assert(resp.get(1) == 0, "response addons_len = 0")
+
+    bytes echo_data = resp.slice(2, resp.len())
+    if echo_data.len() == 0:
+        echo_data = net::tcp_recv_bytes(fd, 4096)
+
+    lv_assert(echo_data.to_string() == "Hello VLESS!", "echo data matches")
+
+    net::tcp_close(fd)
+    vless_thread.wait()
+    echo_thread.wait()
+
+    println("PASS: end-to-end proxy")
+
+void fn main():
+    test_request_builder()
+    test_parse_roundtrip()
+    test_end_to_end()
+    println("All VLESS tests passed!")
