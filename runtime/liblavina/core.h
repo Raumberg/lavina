@@ -25,16 +25,18 @@
 #include <iomanip>
 #include <ctime>
 #if defined(__unix__) || defined(__APPLE__)
+#define RAND_PLATFORM_UNIX
 #include <sys/wait.h>
 #include <unistd.h>
 #include <climits>
-#include <openssl/sha.h>
-#include <openssl/md5.h>
 #endif
 #if defined(__APPLE__)
+#define RAND_PLATFORM_MACOS
 #include <mach-o/dyld.h>
 #endif
 #if defined(_WIN32)
+#define RAND_PLATFORM_WINDOWS
 #include <windows.h>
+#include <bcrypt.h>
 #include <wincrypt.h>
 #endif
