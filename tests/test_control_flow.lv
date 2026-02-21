@@ -42,5 +42,3 @@ void fn main():
             continue
         even_sum += j
     lv_assert(even_sum == 30, "continue skips odds")
-
-    print("test_control_flow: ALL PASSED")

@@ -269,6 +269,14 @@ int fn main():
             compile_cmd += " ${ll}"
         else:
             compile_cmd += " -l${ll}"
+
+    // Windows (MSYS2) needs ws2_32 for Winsock
+    cpp {
+        #if defined(_WIN32)
+        compile_cmd += " -lws2_32";
+        #endif
+    }
+    
     int compile_result = __os_exec(compile_cmd)
     if compile_result != 0:
         print("Compilation failed")

@@ -1,32 +1,148 @@
 void fn main():
-    // Vector basics
+    // ── Vector basics ─────────────────────────────────
     vector[int] v = [1, 2, 3]
     lv_assert(len(v) == 3, "vector length")
     lv_assert(v[0] == 1, "vector index 0")
     lv_assert(v[2] == 3, "vector index 2")
 
-    // Vector push
-    v.push_back(4)
-    lv_assert(len(v) == 4, "after push_back")
+    // push / pop
+    v.push(4)
+    lv_assert(len(v) == 4, "after push")
     lv_assert(v[3] == 4, "pushed element")
 
-    // Vector pop
     auto last = v.pop()
     lv_assert(last == 4, "popped value")
     lv_assert(len(v) == 3, "after pop")
 
-    // Vector contains
+    // contains
     lv_assert(v.contains(2), "contains 2")
     lv_assert(!v.contains(99), "not contains 99")
 
-    // Hashmap
+    // is_empty
+    lv_assert(!v.is_empty(), "vector not empty")
+    vector[int] empty_v = []
+    lv_assert(empty_v.is_empty(), "empty vector is_empty")
+
+    // remove by index
+    vector[int] rv = [10, 20, 30, 40]
+    rv.remove(1)
+    lv_assert(rv.len() == 3, "vector remove length")
+    lv_assert(rv[0] == 10, "vector remove [0]")
+    lv_assert(rv[1] == 30, "vector remove [1] shifted")
+
+    // reverse
+    vector[int] rev = [1, 2, 3]
+    rev.reverse()
+    lv_assert(rev[0] == 3, "reverse [0]")
+    lv_assert(rev[2] == 1, "reverse [2]")
+
+    // join
+    vector[string] words = ["hello", "world"]
+    lv_assert(words.join(" ") == "hello world", "join strings")
+
+    vector[int] digits = [1, 2, 3]
+    lv_assert(digits.join("-") == "1-2-3", "join ints")
+    lv_assert(digits.join("") == "123", "join no sep")
+
+    // clear
+    vector[int] cv = [1, 2, 3]
+    cv.clear()
+    lv_assert(cv.len() == 0, "vector clear")
+    lv_assert(cv.is_empty(), "vector clear is_empty")
+
+    // sort
+    vector[int] unsorted = [5, 1, 4, 2, 3]
+    unsorted.sort()
+    lv_assert(unsorted[0] == 1, "sort [0]")
+    lv_assert(unsorted[4] == 5, "sort [4]")
+
+    // indexOf
+    vector[int] idx_v = [10, 20, 30, 20]
+    lv_assert(idx_v.indexOf(20) == 1, "indexOf found")
+    lv_assert(idx_v.indexOf(99) == -1, "indexOf missing")
+
+    // unique
+    vector[int] dup = [1, 2, 2, 3, 1]
+    auto uniq = dup.unique()
+    lv_assert(uniq.len() == 3, "unique length")
+    lv_assert(uniq[0] == 1, "unique preserves order [0]")
+    lv_assert(uniq[1] == 2, "unique preserves order [1]")
+    lv_assert(uniq[2] == 3, "unique preserves order [2]")
+
+    // slice
+    vector[int] sl_v = [10, 20, 30, 40, 50]
+    auto sl = sl_v.slice(1, 4)
+    lv_assert(sl.len() == 3, "slice length")
+    lv_assert(sl[0] == 20, "slice [0]")
+    lv_assert(sl[2] == 40, "slice [2]")
+
+    // slice edge cases
+    auto sl_empty = sl_v.slice(3, 3)
+    lv_assert(sl_empty.len() == 0, "slice empty range")
+    auto sl_clamp = sl_v.slice(0, 100)
+    lv_assert(sl_clamp.len() == 5, "slice clamped end")
+
+    // flatten
+    vector[vector[int]] nested = [[1, 2], [3], [4, 5, 6]]
+    auto flat = nested.flatten()
+    lv_assert(flat.len() == 6, "flatten length")
+    lv_assert(flat[0] == 1, "flatten [0]")
+    lv_assert(flat[5] == 6, "flatten [5]")
+
+    // flatten empty inner
+    vector[vector[int]] nested2 = [[], [1], []]
+    auto flat2 = nested2.flatten()
+    lv_assert(flat2.len() == 1, "flatten with empties")
+
+    // ── Hashmap ───────────────────────────────────────
     hashmap[string, int] m = {"x": 10, "y": 20}
     lv_assert(m["x"] == 10, "map lookup x")
     lv_assert(m["y"] == 20, "map lookup y")
+
+    // insert
     m["z"] = 30
     lv_assert(m["z"] == 30, "map insert z")
+    lv_assert(m.len() == 3, "map length after insert")
 
-    // Hashset
+    // has
+    lv_assert(m.has("x"), "map has x")
+    lv_assert(!m.has("w"), "map not has w")
+
+    // overwrite
+    m["x"] = 100
+    lv_assert(m["x"] == 100, "map overwrite")
+    lv_assert(m.len() == 3, "map length unchanged after overwrite")
+
+    // keys / values
+    hashmap[string, int] m2 = {"a": 1, "b": 2}
+    auto ks = m2.keys()
+    lv_assert(ks.len() == 2, "keys length")
+    // keys order is unspecified, check both exist
+    lv_assert(ks.contains("a"), "keys contains a")
+    lv_assert(ks.contains("b"), "keys contains b")
+
+    auto vs = m2.values()
+    lv_assert(vs.len() == 2, "values length")
+    lv_assert(vs.contains(1), "values contains 1")
+    lv_assert(vs.contains(2), "values contains 2")
+
+    // remove
+    m2.remove("a")
+    lv_assert(m2.len() == 1, "map remove length")
+    lv_assert(!m2.has("a"), "map remove deleted")
+    lv_assert(m2.has("b"), "map remove kept")
+
+    // is_empty
+    lv_assert(!m2.is_empty(), "map not empty")
+    m2.remove("b")
+    lv_assert(m2.is_empty(), "map empty after remove all")
+
+    // clear
+    hashmap[string, int] m3 = {"x": 1, "y": 2}
+    m3.clear()
+    lv_assert(m3.len() == 0, "map clear")
+
+    // ── Hashset ───────────────────────────────────────
     hashset[string] s = []
     s.add("a")
     s.add("b")
@@ -35,4 +151,19 @@ void fn main():
     lv_assert(s.contains("a"), "set contains a")
     lv_assert(!s.contains("c"), "set not contains c")
 
-    print("test_collections: ALL PASSED")
+    // remove
+    s.remove("a")
+    lv_assert(s.len() == 1, "set remove length")
+    lv_assert(!s.contains("a"), "set remove deleted")
+    lv_assert(s.contains("b"), "set remove kept")
+
+    // is_empty / clear
+    lv_assert(!s.is_empty(), "set not empty")
+    s.clear()
+    lv_assert(s.is_empty(), "set empty after clear")
+    lv_assert(s.len() == 0, "set clear length")
+
+    // add after clear
+    s.add("x")
+    lv_assert(s.len() == 1, "set add after clear")
+    lv_assert(s.contains("x"), "set contains after clear")

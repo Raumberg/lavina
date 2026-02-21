@@ -1,0 +1,61 @@
+// Multiline function declaration
+int fn add_three(
+    int a,
+    int b,
+    int c
+):
+    return a + b + c
+
+void fn main():
+    // Multiline vector literal
+    vector[int] nums = [
+        1, 2, 3,
+        4, 5, 6
+    ]
+    lv_assert(len(nums) == 6, "multiline vector length")
+    lv_assert(nums[0] == 1, "multiline vector [0]")
+    lv_assert(nums[5] == 6, "multiline vector [5]")
+
+    // Multiline vector single element per line
+    vector[string] words = [
+        "hello",
+        "world"
+    ]
+    lv_assert(len(words) == 2, "multiline vector strings")
+
+    // Multiline function call
+    lv_assert(
+        nums[0] == 1,
+        "multiline function call"
+    )
+
+    // Multiline function declaration
+    lv_assert(add_three(1, 2, 3) == 6, "multiline fn decl")
+    lv_assert(
+        add_three(
+            10,20,30
+        ) == 60,
+        "multiline nested call"
+    )
+
+    // Multiline hashmap
+    hashmap[string, int] scores = {
+        "alice": 100,
+        "bob": 200,
+        "charlie": 300
+    }
+    lv_assert(scores["alice"] == 100, "multiline hashmap")
+    lv_assert(scores.len() == 3, "multiline hashmap len")
+
+    // Nested multiline
+    vector[vector[int]] matrix = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+    ]
+    lv_assert(matrix[0][0] == 1, "nested [0][0]")
+    lv_assert(matrix[2][2] == 9, "nested [2][2]")
+
+    // Single-line still works
+    vector[int] simple = [1, 2, 3]
+    lv_assert(len(simple) == 3, "single-line vector")

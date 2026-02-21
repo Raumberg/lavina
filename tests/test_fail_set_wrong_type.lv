@@ -1,0 +1,5 @@
+// Negative test: assigning hashset to vector should fail
+
+void fn main():
+    hashset[int] s = []
+    vector[int] v = s

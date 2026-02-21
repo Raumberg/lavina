@@ -12,6 +12,7 @@ syn region lavinaInterp start='\${' end='}' contained contains=TOP
 
 " Numbers
 syn match lavinaFloat "\<\d\+\.\d\+\>"
+syn match lavinaHex "\<0[xX][0-9a-fA-F]\+\>"
 syn match lavinaInt "\<\d\+\>"
 
 " Control flow
@@ -27,10 +28,10 @@ syn keyword lavinaLogical and or not
 syn keyword lavinaKeyword fn constructor public private static inline const let comptime namespace ref own cpp extern link type operator
 
 " Storage
-syn keyword lavinaStorage class struct enum
+syn keyword lavinaStorage class struct enum extend
 
 " Types
-syn keyword lavinaType int float string bool void auto dynamic vector hashmap hashset null int8 int16 int32 int64 float32 float64 usize cstring ptr
+syn keyword lavinaType int float string bool void auto dynamic vector hashmap hashset bytes null int8 int16 int32 int64 float32 float64 usize cstring ptr
 
 " Constants
 syn keyword lavinaConstant true false null
@@ -39,7 +40,7 @@ syn keyword lavinaThis this
 " Functions (name after fn)
 syn match lavinaFuncDef "\<fn\s\+\zs\w\+"
 " Class/struct/enum name in definitions
-syn match lavinaTypeDef "\<\(class\|struct\|enum\)\s\+\zs\w\+"
+syn match lavinaTypeDef "\<\(class\|struct\|enum\|extend\)\s\+\zs\w\+"
 " User types: PascalCase identifiers (starts with uppercase)
 syn match lavinaUserType "\<[A-Z][a-zA-Z0-9_]*\>"
 
@@ -55,6 +56,7 @@ hi def link lavinaString String
 hi def link lavinaEscape SpecialChar
 hi def link lavinaInterp Special
 hi def link lavinaFloat Float
+hi def link lavinaHex Number
 hi def link lavinaInt Number
 hi def link lavinaControl Conditional
 hi def link lavinaImport Include

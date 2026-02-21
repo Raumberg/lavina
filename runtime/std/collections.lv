@@ -1,0 +1,81 @@
+// std::collections — higher-order functions, utilities, and set operations
+
+// ── Vector extensions ────────────────────────────────────
+
+extend vector:
+    auto fn map(auto f):
+        return __lv_col_map(this, f)
+
+    auto fn filter(auto f):
+        return __lv_col_filter(this, f)
+
+    auto fn reduce(auto f, auto init):
+        return __lv_col_reduce(this, f, init)
+
+    void fn for_each(auto f):
+        __lv_col_for_each(this, f)
+
+    auto fn zip(auto other):
+        return __lv_col_zip(this, other)
+
+    auto fn take(int n):
+        return __lv_col_take(this, n)
+
+    auto fn drop(int n):
+        return __lv_col_drop(this, n)
+
+    auto fn enumerate():
+        return __lv_col_enumerate(this)
+
+// ── Hashset extensions ───────────────────────────────────
+
+extend hashset:
+    auto fn union_with(auto other):
+        return __lv_col_set_union(this, other)
+
+    auto fn intersect(auto other):
+        return __lv_col_set_intersection(this, other)
+
+    auto fn difference(auto other):
+        return __lv_col_set_difference(this, other)
+
+// ── Free functions (generators, standalone utilities) ────
+
+public auto fn map(auto v, auto f):
+    return __lv_col_map(v, f)
+
+public auto fn filter(auto v, auto f):
+    return __lv_col_filter(v, f)
+
+public auto fn reduce(auto v, auto f, auto init):
+    return __lv_col_reduce(v, f, init)
+
+public void fn for_each(auto v, auto f):
+    __lv_col_for_each(v, f)
+
+public auto fn zip(auto a, auto b):
+    return __lv_col_zip(a, b)
+
+public auto fn take(auto v, int n):
+    return __lv_col_take(v, n)
+
+public auto fn drop(auto v, int n):
+    return __lv_col_drop(v, n)
+
+public auto fn enumerate(auto v):
+    return __lv_col_enumerate(v)
+
+public vector[int] fn range(int start, int end):
+    return __lv_col_range(start, end)
+
+public vector[int] fn range_step(int start, int end, int step):
+    return __lv_col_range_step(start, end, step)
+
+public auto fn set_union(auto a, auto b):
+    return __lv_col_set_union(a, b)
+
+public auto fn set_intersection(auto a, auto b):
+    return __lv_col_set_intersection(a, b)
+
+public auto fn set_difference(auto a, auto b):
+    return __lv_col_set_difference(a, b)

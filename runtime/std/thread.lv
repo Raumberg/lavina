@@ -1,0 +1,56 @@
+// std::thread — threading, mutexes, and thread pools
+
+// ── Thread ───────────────────────────────────────────────────
+
+public struct Thread:
+    int id
+
+    constructor(int id):
+        this.id = id
+
+    void fn wait():
+        __thread_wait(this.id)
+
+    void fn detach():
+        __thread_detach(this.id)
+
+public Thread fn spawn(auto f):
+    int id = __thread_spawn(f)
+    return Thread(id)
+
+public void fn sleep(int ms):
+    __thread_sleep(ms)
+
+public int fn current_id():
+    return __thread_current_id()
+
+// ── Mutex ────────────────────────────────────────────────────
+
+public struct Mutex:
+    int id
+
+    constructor():
+        this.id = __mutex_create()
+
+    void fn lock():
+        __mutex_lock(this.id)
+
+    void fn unlock():
+        __mutex_unlock(this.id)
+
+    void fn destroy():
+        __mutex_destroy(this.id)
+
+// ── Pool ─────────────────────────────────────────────────────
+
+public struct Pool:
+    int id
+
+    constructor(int size):
+        this.id = __pool_create(size)
+
+    void fn submit(auto f):
+        __pool_submit(this.id, f)
+
+    void fn shutdown():
+        __pool_shutdown(this.id)

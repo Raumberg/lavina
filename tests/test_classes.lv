@@ -28,5 +28,3 @@ void fn main():
     auto c2 = Counter(100)
     lv_assert(c2.get() == 100, "second instance")
     lv_assert(c.get() == 10, "first instance unchanged")
-
-    print("test_classes: ALL PASSED")

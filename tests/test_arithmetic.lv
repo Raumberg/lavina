@@ -41,5 +41,3 @@ void fn main():
     lv_assert(!(true && false), "&& false")
     lv_assert(true || false, "|| true")
     lv_assert(!(false || false), "|| false")
-
-    print("test_arithmetic: ALL PASSED")

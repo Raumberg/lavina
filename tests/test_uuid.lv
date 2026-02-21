@@ -1,0 +1,63 @@
+import std::uuid
+import std::bytes
+
+void fn test_parse():
+    bytes id = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    lv_assert(id.len() == 16, "uuid is 16 bytes")
+    lv_assert(id.get(0) == 0x55, "byte 0")
+    lv_assert(id.get(1) == 0x0e, "byte 1")
+    lv_assert(id.get(15) == 0x00, "byte 15")
+    print("PASS: parse")
+
+void fn test_parse_no_dashes():
+    bytes id = uuid::parse("550e8400e29b41d4a716446655440000")
+    lv_assert(id.len() == 16, "no-dash uuid is 16 bytes")
+    lv_assert(id.get(0) == 0x55, "no-dash byte 0")
+    print("PASS: parse no dashes")
+
+void fn test_to_string():
+    bytes id = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    string s = uuid::to_string(id)
+    lv_assert(s == "550e8400-e29b-41d4-a716-446655440000", "to_string roundtrip")
+    print("PASS: to_string")
+
+void fn test_random():
+    bytes id1 = uuid::random()
+    bytes id2 = uuid::random()
+    lv_assert(id1.len() == 16, "random uuid is 16 bytes")
+    lv_assert(id2.len() == 16, "random uuid2 is 16 bytes")
+    // Version nibble (byte 6 high nibble) must be 4
+    int version_byte = id1.get(6)
+    int version = version_byte / 16
+    lv_assert(version == 4, "version is 4")
+    // Variant (byte 8 high 2 bits) must be 10
+    int variant_byte = id1.get(8)
+    int variant = variant_byte / 64
+    lv_assert(variant == 2, "variant is 10xx")
+    // Two random UUIDs should be different
+    lv_assert(uuid::equals(id1, id2) == false, "random uuids differ")
+    print("PASS: random")
+
+void fn test_equals():
+    bytes a = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    bytes b = uuid::parse("550e8400-e29b-41d4-a716-446655440000")
+    bytes c = uuid::parse("00000000-0000-0000-0000-000000000000")
+    lv_assert(uuid::equals(a, b) == true, "same uuids equal")
+    lv_assert(uuid::equals(a, c) == false, "different uuids not equal")
+    print("PASS: equals")
+
+void fn test_roundtrip():
+    bytes id = uuid::random()
+    string s = uuid::to_string(id)
+    bytes id2 = uuid::parse(s)
+    lv_assert(uuid::equals(id, id2) == true, "random->string->parse roundtrip")
+    print("PASS: roundtrip")
+
+void fn main():
+    test_parse()
+    test_parse_no_dashes()
+    test_to_string()
+    test_random()
+    test_equals()
+    test_roundtrip()
+    println("All UUID tests passed!")

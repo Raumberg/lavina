@@ -15,10 +15,8 @@ void fn main():
     Vec2 a = Vec2(1.0, 2.0)
     Vec2 b = Vec2(3.0, 4.0)
     Vec2 c = a + b
-    print(c)
     lv_assert(c.x == 4.0, "x should be 4.0")
     lv_assert(c.y == 6.0, "y should be 6.0")
     lv_assert(a == a, "a should equal a")
     string s = "point: ${c}"
-    print(s)
-    print("All operator tests passed!")
+    lv_assert(s.contains("4.0") and s.contains("6.0"), "string interpolation of Vec2")

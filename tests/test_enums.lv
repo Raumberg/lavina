@@ -12,5 +12,3 @@ void fn main():
     lv_assert(r1["_tag"] == "Ok", "Ok tag")
     lv_assert(r2["_tag"] == "Error", "Error tag")
     lv_assert(r3["_tag"] == "Loading", "Loading tag")
-
-    print("test_enums: ALL PASSED")

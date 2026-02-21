@@ -17,5 +17,3 @@ void fn main():
 
     // Full namespace access
     lv_assert(helpers_greeter::greet("Test") == "Hello, Test!", "full namespace greet")
-
-    print("test_modules: ALL PASSED")

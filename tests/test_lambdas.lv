@@ -4,6 +4,9 @@ int fn apply(auto f, int x):
 int fn apply2(auto f, int x, int y):
     return f(x, y)
 
+auto fn transform(auto f, auto g, int x):
+    return g(f(x))
+
 void fn main():
     // Basic lambda call
     auto dbl = (int x) => x * 2
@@ -30,4 +33,52 @@ void fn main():
     auto shifted = (int x) => x + offset
     lv_assert(shifted(5) == 15, "lambda closure")
 
-    print("All lambda tests passed!")
+    // Lambda returning bool
+    auto is_even = (int x) => x % 2 == 0
+    lv_assert(is_even(4), "lambda bool true")
+    lv_assert(!is_even(3), "lambda bool false")
+
+    // Lambda with string
+    auto greet_name = (string name) => "hello " + name
+    lv_assert(greet_name("world") == "hello world", "lambda string concat")
+
+    // Chained lambda calls
+    auto inc = (int x) => x + 1
+    lv_assert(inc(inc(inc(0))) == 3, "chained lambda calls")
+
+    // Lambda composition via higher-order
+    lv_assert(transform((int x) => x * 2, (int x) => x + 1, 5) == 11, "lambda composition")
+
+    // Lambda in multiline function call
+    lv_assert(
+        apply(
+            (int x) => x * x,
+            7
+        ) == 49,
+        "lambda in multiline call"
+    )
+
+    // Multiple lambdas in multiline call
+    lv_assert(
+        transform(
+            (int x) => x + 10,
+            (int x) => x * 2,
+            5
+        ) == 30,
+        "multiple lambdas multiline"
+    )
+
+    // Lambda inside vector literal
+    vector[int] nums = [1, 2, 3, 4, 5]
+    auto double_fn = (int x) => x * 2
+
+    // Lambda with negative result
+    auto negate = (int x) => 0 - x
+    lv_assert(negate(42) == -42, "lambda negate")
+
+    // Lambda capturing mutable variable
+    int total = 0
+    auto accumulate = (int x) => total + x
+    lv_assert(accumulate(5) == 5, "lambda capture before mutation")
+    total = 100
+    lv_assert(accumulate(5) == 105, "lambda capture after mutation")

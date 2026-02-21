@@ -1,0 +1,7 @@
+// Negative test: returning wrong type should fail compilation
+
+int fn get_number():
+    return "not a number"
+
+void fn main():
+    int x = get_number()

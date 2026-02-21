@@ -1,0 +1,5 @@
+// Negative test: assigning hashmap to vector should fail
+
+void fn main():
+    hashmap[string, int] m = {"x": 1}
+    vector[int] v = m

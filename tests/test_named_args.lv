@@ -1,0 +1,121 @@
+// Test named arguments and default parameter values
+
+// ── Default parameter values ──────────────────────────────
+
+int fn add(int a, int b = 10):
+    return a + b
+
+int fn greet_len(string name, string prefix = "Hello", string suffix = "!"):
+    string msg = prefix + " " + name + suffix
+    return msg.len()
+
+// ── Struct with default constructor args ──────────────────
+
+struct Point:
+    int x
+    int y
+    int z
+
+    constructor(int x, int y = 0, int z = 0):
+        this.x = x
+        this.y = y
+        this.z = z
+
+    string fn to_string():
+        return "(${this.x}, ${this.y}, ${this.z})"
+
+// ── Named arguments with reordering ──────────────────────
+
+int fn compute(int a, int b, int c):
+    return a * 100 + b * 10 + c
+
+int fn mixed(int x, int y = 5, int z = 10):
+    return x + y + z
+
+// ── Tests ────────────────────────────────────────────────
+
+void fn test_default_params():
+    // All args provided
+    lv_assert(add(3, 7) == 10, "add(3, 7)")
+    // Using default
+    lv_assert(add(5) == 15, "add(5) uses default b=10")
+    println("PASS: default params")
+
+void fn test_multiple_defaults():
+    // All provided
+    lv_assert(greet_len("World", "Hi", "?") > 0, "all args")
+    // One default
+    lv_assert(greet_len("World", "Hi") > 0, "one default")
+    // Two defaults
+    lv_assert(greet_len("World") > 0, "two defaults")
+    println("PASS: multiple defaults")
+
+void fn test_struct_defaults():
+    // All args
+    Point p1 = Point(1, 2, 3)
+    lv_assert(p1.x == 1, "p1.x")
+    lv_assert(p1.y == 2, "p1.y")
+    lv_assert(p1.z == 3, "p1.z")
+    // One default
+    Point p2 = Point(10, 20)
+    lv_assert(p2.x == 10, "p2.x")
+    lv_assert(p2.y == 20, "p2.y")
+    lv_assert(p2.z == 0, "p2.z default")
+    // Two defaults
+    Point p3 = Point(99)
+    lv_assert(p3.x == 99, "p3.x")
+    lv_assert(p3.y == 0, "p3.y default")
+    lv_assert(p3.z == 0, "p3.z default")
+    println("PASS: struct defaults")
+
+void fn test_named_args():
+    // Named args in order
+    lv_assert(compute(a = 1, b = 2, c = 3) == 123, "named in order")
+    // Named args out of order
+    lv_assert(compute(c = 3, b = 2, a = 1) == 123, "named reordered")
+    // Named args with different order
+    lv_assert(compute(b = 5, a = 2, c = 8) == 258, "named shuffled")
+    println("PASS: named args")
+
+void fn test_mixed_positional_named():
+    // Positional + named
+    lv_assert(compute(1, c = 3, b = 2) == 123, "positional + named")
+    // First two positional, last named
+    lv_assert(compute(4, 5, c = 6) == 456, "two positional + named")
+    println("PASS: mixed positional + named")
+
+void fn test_named_with_defaults():
+    // Using defaults with named args
+    lv_assert(mixed(1) == 16, "mixed(1) defaults")
+    lv_assert(mixed(1, z = 20) == 26, "mixed(1, z=20) skip y")
+    lv_assert(mixed(1, y = 100) == 111, "mixed(1, y=100) skip z")
+    lv_assert(mixed(1, z = 0, y = 0) == 1, "mixed named zeros")
+    println("PASS: named with defaults")
+
+void fn test_struct_named_args():
+    // Named args for struct constructor
+    Point p = Point(x = 5, y = 10, z = 15)
+    lv_assert(p.x == 5, "named struct x")
+    lv_assert(p.y == 10, "named struct y")
+    lv_assert(p.z == 15, "named struct z")
+    // Named + defaults
+    Point p2 = Point(x = 42)
+    lv_assert(p2.x == 42, "named struct default y/z")
+    lv_assert(p2.y == 0, "named struct y default")
+    lv_assert(p2.z == 0, "named struct z default")
+    // Reordered named for struct
+    Point p3 = Point(z = 100, x = 1)
+    lv_assert(p3.x == 1, "reordered struct x")
+    lv_assert(p3.y == 0, "reordered struct y default")
+    lv_assert(p3.z == 100, "reordered struct z")
+    println("PASS: struct named args")
+
+void fn main():
+    test_default_params()
+    test_multiple_defaults()
+    test_struct_defaults()
+    test_named_args()
+    test_mixed_positional_named()
+    test_named_with_defaults()
+    test_struct_named_args()
+    println("All named args tests passed!")

@@ -27,5 +27,3 @@ void fn main():
     lv_assert(fib(0) == 0, "fib 0")
     lv_assert(fib(1) == 1, "fib 1")
     lv_assert(fib(10) == 55, "fib 10")
-
-    print("test_functions: ALL PASSED")

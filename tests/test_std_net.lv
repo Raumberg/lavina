@@ -1,0 +1,112 @@
+import std::net
+
+void fn test_tcp():
+    // Start a TCP server on loopback
+    int server = net::tcp_listen("127.0.0.1", 19876)
+    lv_assert(server >= 0, "tcp_listen should return valid fd")
+
+    // Connect from client side (completes TCP handshake)
+    int client = net::tcp_connect("127.0.0.1", 19876)
+    lv_assert(client >= 0, "tcp_connect should return valid fd")
+
+    // Accept the pending connection on server side
+    int accepted = net::tcp_accept(server)
+    lv_assert(accepted >= 0, "tcp_accept should return valid fd")
+
+    // Send data from client -> server
+    string msg = "hello lavina"
+    int sent = net::tcp_send(client, msg)
+    lv_assert(sent == msg.len(), "tcp_send should send all bytes")
+
+    // Receive data on server side
+    string received = net::tcp_recv(accepted, 1024)
+    lv_assert(received == msg, "tcp_recv should match sent data")
+
+    // Send response back
+    string reply = "pong"
+    net::tcp_send(accepted, reply)
+    string got_reply = net::tcp_recv(client, 1024)
+    lv_assert(got_reply == reply, "client should receive reply")
+
+    // Cleanup
+    net::tcp_close(client)
+    net::tcp_close(accepted)
+    net::tcp_close(server)
+    print("PASS: TCP send/recv")
+
+void fn test_udp():
+    // Create two UDP sockets on loopback
+    int sock_a = net::udp_create("127.0.0.1", 19877)
+    lv_assert(sock_a >= 0, "udp_create A should return valid fd")
+
+    int sock_b = net::udp_create("127.0.0.1", 19878)
+    lv_assert(sock_b >= 0, "udp_create B should return valid fd")
+
+    // Send from A -> B
+    string msg = "udp hello"
+    int sent = net::udp_send(sock_a, msg, "127.0.0.1", 19878)
+    lv_assert(sent == msg.len(), "udp_send should send all bytes")
+
+    // Receive on B
+    string received = net::udp_recv(sock_b, 1024)
+    lv_assert(received == msg, "udp_recv should match sent data")
+
+    // Cleanup
+    net::udp_close(sock_a)
+    net::udp_close(sock_b)
+    print("PASS: UDP send/recv")
+
+void fn test_resolve():
+    string ip = net::resolve("localhost")
+    lv_assert(ip == "127.0.0.1", "resolve localhost should return 127.0.0.1")
+    print("PASS: DNS resolve")
+
+void fn test_tcp_stream():
+    // High-level TCP: TcpListener + TcpStream (explicit types)
+    net::TcpListener listener = net::TcpListener("127.0.0.1", 19879)
+
+    // Connect via factory function
+    net::TcpStream client = net::connect("127.0.0.1", 19879)
+
+    // Accept returns TcpStream
+    net::TcpStream accepted = listener.accept()
+
+    // Send/recv via methods
+    string msg = "high-level hello"
+    client.send(msg)
+    string received = accepted.recv(1024)
+    lv_assert(received == msg, "TcpStream recv should match sent data")
+
+    // Reply
+    accepted.send("hi back")
+    string reply = client.recv(1024)
+    lv_assert(reply == "hi back", "TcpStream reply should match")
+
+    // Cleanup
+    client.close()
+    accepted.close()
+    listener.close()
+    print("PASS: TcpListener/TcpStream")
+
+void fn test_udp_socket():
+    // High-level UDP: UdpSocket (explicit types)
+    net::UdpSocket sock_a = net::UdpSocket("127.0.0.1", 19880)
+    net::UdpSocket sock_b = net::UdpSocket("127.0.0.1", 19881)
+
+    // Send from A -> B via methods
+    string msg = "udp struct hello"
+    sock_a.send(msg, "127.0.0.1", 19881)
+    string received = sock_b.recv(1024)
+    lv_assert(received == msg, "UdpSocket recv should match sent data")
+
+    sock_a.close()
+    sock_b.close()
+    print("PASS: UdpSocket")
+
+void fn main():
+    test_tcp()
+    test_udp()
+    test_resolve()
+    test_tcp_stream()
+    test_udp_socket()
+    print("All std::net tests passed!")

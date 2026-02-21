@@ -1,0 +1,7 @@
+// Negative test: returning value from void function should fail compilation
+
+void fn do_something():
+    return 42
+
+void fn main():
+    do_something()

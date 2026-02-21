@@ -79,7 +79,7 @@ sudo cp -r lib/* /usr/local/lib/
 git clone https://github.com/Raumberg/lavina.git
 cd lavina
 make bootstrap    # compile compiler from saved C++ snapshot
-make test         # run the test suite (27 tests)
+make test         # run the test suite (37 tests)
 make build        # optimized binary → build/
 make install      # install to /usr/local/ (or: make install PREFIX=~/.local)
 ```
@@ -114,6 +114,7 @@ Lavina ships with a standard library:
 import std::fs
 import std::os
 import std::math
+import std::collections
 
 void fn main():
     // File I/O
@@ -126,6 +127,11 @@ void fn main():
     // Math
     print("pi = ${math::PI}")
     print("sqrt(2) = ${math::sqrt(2.0)}")
+
+    // Collections — dot-notation via extend
+    vector[int] nums = [1, 2, 3, 4, 5]
+    auto doubled = nums.map((int x) => x * 2)
+    auto evens = nums.filter((int x) => x % 2 == 0)
 ```
 
 ## Features
@@ -135,6 +141,7 @@ void fn main():
 - **Generics** — `[T, U]` on functions, structs, and enums
 - **Enums / sum types** with named fields and pattern matching
 - **Enum methods** — methods defined inside enum bodies
+- **Extension methods** — `extend vector:` adds dot-notation methods to built-in types
 - **Operator overloading** — `Type operator + (params):`
 - **References and ownership** — `ref`, `ref!`, `own`
 - **Block lambdas** — `(params):` with indented body

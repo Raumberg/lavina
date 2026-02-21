@@ -1,4 +1,4 @@
-import ast
+import type_utils
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — C++ Code Generator
@@ -25,6 +25,10 @@ class CppCodegen:
     vector[string] module_aliases
     vector[vector[Stmt]] module_stmts
     vector[vector[Stmt]] lambda_blocks
+    hashmap[string, vector[Stmt]] extend_methods
+    bool in_extend
+    hashmap[string, vector[Param]] fn_params
+    hashmap[string, vector[Expr]] fn_defaults
 
     constructor():
         this.output = ""
@@ -46,6 +50,10 @@ class CppCodegen:
         this.module_aliases = []
         this.module_stmts = []
         this.lambda_blocks = []
+        this.extend_methods = {}
+        this.in_extend = false
+        this.fn_params = {}
+        this.fn_defaults = {}
 
     void fn set_modules(ref vector[string] short_names, ref vector[string] full_names, ref vector[string] aliases, ref vector[vector[Stmt]] stmts):
         this.module_short_names = short_names
@@ -70,21 +78,6 @@ class CppCodegen:
     void fn add_dynamic_var(string name):
         if not this.is_dynamic_var(name):
             this.dynamic_vars.push(name)
-
-    string fn find_enum_for_variant(ref string variant_name):
-        string found = ""
-        int count = 0
-        vector[string] keys = this.known_enums.keys()
-        for ref key in keys:
-            vector[EnumVariantNode] variants = this.known_enums[key]
-            for ref v in variants:
-                if v.name.lexeme == variant_name:
-                    if count == 0:
-                        found = key
-                    count += 1
-        if count == 1:
-            return found
-        return ""
 
     EnumVariantNode fn get_variant_info(ref string enum_name, ref string variant_name):
         if this.known_enums.has(enum_name):
@@ -121,6 +114,12 @@ class CppCodegen:
         for ref tp in type_params:
             tps.push("typename ${tp}")
         return "${this.indent()}template<${tps.join(", ")}>\n"
+
+    void fn push_unique(ref! vector[string] vec, string value):
+        for ref existing in vec:
+            if existing == value:
+                return
+        vec.push(value)
 
     string fn wrap_convert(string expr, ref TypeNode from, ref TypeNode expected):
         match from:
@@ -213,23 +212,8 @@ class CppCodegen:
     // ── Type emission ─────────────────────────────────────────
 
     string fn emit_type(ref TypeNode t):
+        // Thin wrapper over type_to_cpp: handles extern_type_names for Custom types
         match t:
-            Int():
-                return "int64_t"
-            Float():
-                return "double"
-            Str():
-                return "std::string"
-            Bool():
-                return "bool"
-            Void():
-                return "void"
-            Auto():
-                return "auto"
-            Dynamic():
-                return "std::any"
-            NullType():
-                return "std::nullptr_t"
             Custom(name, type_args):
                 if type_args.len() > 0:
                     vector[string] ta = []
@@ -247,22 +231,10 @@ class CppCodegen:
                 return "std::unordered_map<${this.emit_type(key_type)}, ${this.emit_type(value_type)}>"
             Nullable(inner):
                 return "std::optional<${this.emit_type(inner)}>"
-            Int8():
-                return "int8_t"
-            Int16():
-                return "int16_t"
-            Int32():
-                return "int32_t"
-            Float32():
-                return "float"
-            USize():
-                return "size_t"
-            CString():
-                return "const char*"
             Ptr(inner):
                 return "${this.emit_type(inner)}*"
             _:
-                return "auto"
+                return type_to_cpp(t)
 
     string fn token_to_cpp_op(Token t):
         if t.token_type == TK_PLUS:
@@ -320,6 +292,60 @@ class CppCodegen:
 
     // ── Expression emission ───────────────────────────────────
 
+    string fn emit_cast(ref Expr expr, ref TypeNode target_type, bool m):
+        string ex = this.emit_expr(expr, m)
+        string t = this.emit_type(target_type)
+        if this.is_dynamic_expression(expr):
+            return "std::any_cast<${t}>(${ex})"
+        TypeNode src = this.infer_source_type(expr)
+        // string -> int/float
+        if is_string_type(src):
+            if is_integer_type(target_type):
+                match target_type:
+                    Int():
+                        return "__str_to_int(${ex})"
+                    _:
+                        return "static_cast<${t}>(__str_to_int(${ex}))"
+            if is_float_type(target_type):
+                match target_type:
+                    Float():
+                        return "__str_to_float(${ex})"
+                    _:
+                        return "static_cast<${t}>(__str_to_float(${ex}))"
+            if is_bytes_type(target_type):
+                return "__bytes_from_string(${ex})"
+        // numeric/bool -> string
+        if is_string_type(target_type):
+            if is_integer_type(src) or is_float_type(src):
+                return "to_string(${ex})"
+            match src:
+                Bool():
+                    return "to_string(${ex})"
+                _:
+                    pass
+        // bytes -> string
+        if is_bytes_type(src) and is_string_type(target_type):
+            return "__bytes_to_string(${ex})"
+        // string -> bytes
+        if is_string_type(src) and is_bytes_type(target_type):
+            return "__bytes_from_string(${ex})"
+        return "static_cast<${t}>(${ex})"
+
+    string fn emit_member_prefix(ref Expr object, bool m):
+        if this.in_extend:
+            match object:
+                This(kw):
+                    return "self."
+                _:
+                    return "${this.emit_expr(object, m)}."
+        if m:
+            match object:
+                This(kw):
+                    return "this->"
+                _:
+                    return "${this.emit_expr(object, m)}."
+        return "${this.emit_expr(object, m)}."
+
     string fn emit_expr(ref Expr e, bool m):
         match e:
             None():
@@ -348,8 +374,8 @@ class CppCodegen:
                 if op.token_type == TK_OR:
                     op_str = "||"
                 return "${l} ${op_str} ${r}"
-            Call(callee, paren, args):
-                return this.emit_call_expr(callee, args, m)
+            Call(callee, paren, args, arg_names):
+                return this.emit_call_expr(callee, args, arg_names, m)
             Index(object, bracket, index):
                 return "${this.emit_expr(object, m)}[${this.emit_expr(index, m)}]"
             IndexSet(object, bracket, index, value):
@@ -367,21 +393,9 @@ class CppCodegen:
                     entries.push("{${this.emit_expr(keys[i], m)}, ${this.emit_expr(values[i], m)}}")
                 return "{{${entries.join(", ")}}}"
             Get(object, name):
-                if m:
-                    match object:
-                        This(kw):
-                            return "this->${name.lexeme}"
-                        _:
-                            return "${this.emit_expr(object, m)}.${name.lexeme}"
-                return "${this.emit_expr(object, m)}.${name.lexeme}"
+                return "${this.emit_member_prefix(object, m)}${name.lexeme}"
             Set(object, name, value):
-                if m:
-                    match object:
-                        This(kw):
-                            return "this->${name.lexeme} = ${this.emit_expr(value, m)}"
-                        _:
-                            return "${this.emit_expr(object, m)}.${name.lexeme} = ${this.emit_expr(value, m)}"
-                return "${this.emit_expr(object, m)}.${name.lexeme} = ${this.emit_expr(value, m)}"
+                return "${this.emit_member_prefix(object, m)}${name.lexeme} = ${this.emit_expr(value, m)}"
             StaticGet(object, name):
                 if m:
                     match object:
@@ -391,13 +405,11 @@ class CppCodegen:
                             return "${this.emit_expr(object, m)}::${name.lexeme}"
                 return "${this.emit_expr(object, m)}::${name.lexeme}"
             This(keyword):
+                if this.in_extend:
+                    return "self"
                 return "(*this)"
             Cast(expr, target_type):
-                string ex = this.emit_expr(expr, m)
-                string t = this.emit_type(target_type)
-                if this.is_dynamic_expression(expr):
-                    return "std::any_cast<${t}>(${ex})"
-                return "static_cast<${t}>(${ex})"
+                return this.emit_cast(expr, target_type, m)
             Throw(expr):
                 return "throw std::runtime_error(${this.emit_expr(expr, m)})"
             Lambda(params, body):
@@ -433,22 +445,93 @@ class CppCodegen:
             _:
                 return false
 
-    string fn emit_call_expr(ref Expr callee, ref vector[Expr] args, bool in_method):
+    // Resolve named arguments: reorder args to match param positions, fill defaults
+    vector[string] fn resolve_named_args(ref vector[Expr] args, ref vector[string] arg_names, ref vector[Param] params, ref vector[Expr] defaults, bool in_method):
+        // Check if any named args are present
+        bool has_named = false
+        for ref n in arg_names:
+            if n != "":
+                has_named = true
+        // Fast path: all positional, fill missing defaults
+        if not has_named:
+            vector[string] result = []
+            for ref a in args:
+                result.push(this.emit_expr(a, in_method))
+            // Append defaults for missing trailing args
+            int i = args.len()
+            while i < params.len():
+                if i < defaults.len():
+                    result.push(this.emit_expr(defaults[i], in_method))
+                i = i + 1
+            return result
+        // Mixed positional + named args
+        // Step 1: count positional args (those before the first named arg)
+        int positional_count = 0
+        int ai = 0
+        while ai < arg_names.len():
+            if arg_names[ai] != "":
+                ai = arg_names.len()
+            else:
+                positional_count = positional_count + 1
+                ai = ai + 1
+        // Step 2: build result for each param position
+        vector[string] result = []
+        int pi = 0
+        while pi < params.len():
+            if pi < positional_count:
+                // Covered by positional arg
+                result.push(this.emit_expr(args[pi], in_method))
+            else:
+                // Look for named arg matching this param
+                bool found = false
+                int ni = positional_count
+                while ni < arg_names.len():
+                    if arg_names[ni] == params[pi].name.lexeme:
+                        result.push(this.emit_expr(args[ni], in_method))
+                        found = true
+                        ni = arg_names.len()
+                    else:
+                        ni = ni + 1
+                if not found:
+                    // Use default value
+                    if pi < defaults.len():
+                        result.push(this.emit_expr(defaults[pi], in_method))
+            pi = pi + 1
+        return result
+
+    vector[string] fn emit_args(ref vector[Expr] args, bool m):
+        vector[string] result = []
+        for ref a in args:
+            result.push(this.emit_expr(a, m))
+        return result
+
+    void fn apply_extern_wrapping(ref! vector[string] arg_strs, ref vector[Expr] args, ref string fn_name):
+        if this.extern_fn_params.has(fn_name):
+            vector[Param] eparams = this.extern_fn_params[fn_name]
+            for i in 0..arg_strs.len():
+                if i < eparams.len():
+                    arg_strs[i] = this.wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type)
+
+    string fn resolve_fn_name(ref string name):
+        if this.extern_fn_names.has(name):
+            return this.extern_fn_names[name]
+        return name
+
+    string fn emit_call_expr(ref Expr callee, ref vector[Expr] args, ref vector[string] arg_names, bool in_method):
         match callee:
             Get(object, name):
                 string obj = this.emit_expr(object, in_method)
-                vector[string] arg_strs = []
-                for ref a in args:
-                    arg_strs.push(this.emit_expr(a, in_method))
+                vector[string] arg_strs = this.emit_args(args, in_method)
                 string remapped = this.try_remap_method(obj, name.lexeme, arg_strs)
                 if remapped != "":
                     return remapped
+                string ext_call = this.try_extend_method(object, name.lexeme, obj, arg_strs)
+                if ext_call != "":
+                    return ext_call
                 return "${obj}.${name.lexeme}(${arg_strs.join(", ")})"
             StaticGet(object, name):
                 string obj = this.emit_expr(object, in_method)
-                vector[string] arg_strs = []
-                for ref a in args:
-                    arg_strs.push(this.emit_expr(a, in_method))
+                vector[string] arg_strs = this.emit_args(args, in_method)
                 match object:
                     Variable(tok):
                         if this.is_known_enum(tok.lexeme):
@@ -457,100 +540,278 @@ class CppCodegen:
                         pass
                 return "${obj}::${name.lexeme}(${arg_strs.join(", ")})"
             Variable(tok):
-                vector[string] arg_strs = []
-                for ref a in args:
-                    arg_strs.push(this.emit_expr(a, in_method))
+                // Resolve named args / defaults if param info available
+                if this.fn_params.has(tok.lexeme):
+                    vector[Param] fparams = this.fn_params[tok.lexeme]
+                    vector[Expr] fdefaults = []
+                    if this.fn_defaults.has(tok.lexeme):
+                        fdefaults = this.fn_defaults[tok.lexeme]
+                    vector[string] arg_strs = this.resolve_named_args(args, arg_names, fparams, fdefaults, in_method)
+                    this.apply_extern_wrapping(arg_strs, args, tok.lexeme)
+                    return "${this.resolve_fn_name(tok.lexeme)}(${arg_strs.join(", ")})"
+                vector[string] arg_strs = this.emit_args(args, in_method)
                 if tok.lexeme == "exit":
                     return "lv_exit(${arg_strs.join(", ")})"
-                if this.extern_fn_params.has(tok.lexeme):
-                    vector[Param] eparams = this.extern_fn_params[tok.lexeme]
-                    for i in 0..arg_strs.len():
-                        if i < eparams.len():
-                            arg_strs[i] = this.wrap_extern_arg(arg_strs[i], args[i], eparams[i].param_type)
-                    string fn_name = tok.lexeme
-                    if this.extern_fn_names.has(tok.lexeme):
-                        fn_name = this.extern_fn_names[tok.lexeme]
-                    return "${fn_name}(${arg_strs.join(", ")})"
-                if this.extern_fn_names.has(tok.lexeme):
-                    return "${this.extern_fn_names[tok.lexeme]}(${arg_strs.join(", ")})"
-                return "${tok.lexeme}(${arg_strs.join(", ")})"
+                this.apply_extern_wrapping(arg_strs, args, tok.lexeme)
+                return "${this.resolve_fn_name(tok.lexeme)}(${arg_strs.join(", ")})"
             _:
                 string func = this.emit_expr(callee, in_method)
-                vector[string] arg_strs = []
-                for ref a in args:
-                    arg_strs.push(this.emit_expr(a, in_method))
+                vector[string] arg_strs = this.emit_args(args, in_method)
                 return "${func}(${arg_strs.join(", ")})"
 
     string fn try_remap_method(ref string obj, ref string method, ref vector[string] args):
+        string a = args.join(", ")
         if method == "len":
             return "static_cast<int64_t>(${obj}.size())"
         elif method == "is_empty":
             return "${obj}.empty()"
         elif method == "contains":
-            return "lv_contains(${obj}, ${args.join(", ")})"
+            return "lv_contains(${obj}, ${a})"
+        elif method == "has":
+            return "(${obj}.count(${a}) > 0)"
+        elif method == "push":
+            return "${obj}.push_back(${a})"
+        elif method == "pop":
+            return "lv_pop(${obj})"
         elif method == "add":
-            return "${obj}.insert(${args.join(", ")})"
+            return "${obj}.insert(${a})"
+        elif method == "remove":
+            return "lv_remove(${obj}, ${a})"
+        elif method == "clear":
+            return "${obj}.clear()"
+        elif method == "sort":
+            return "lv_sort(${obj})"
+        elif method == "reverse":
+            return "lv_reverse(${obj})"
+        elif method == "unique":
+            return "lv_unique(${obj})"
+        elif method == "flatten":
+            return "lv_flatten(${obj})"
+        elif method == "slice":
+            return "lv_slice(${obj}, ${a})"
+        elif method == "keys":
+            return "lv_keys(${obj})"
+        elif method == "values":
+            return "lv_values(${obj})"
         elif method == "upper":
             return "lv_upper(${obj})"
         elif method == "lower":
             return "lv_lower(${obj})"
         elif method == "trim":
             return "lv_trim(${obj})"
+        elif method == "pad_left":
+            return "lv_pad_left(${obj}, ${a})"
+        elif method == "pad_right":
+            return "lv_pad_right(${obj}, ${a})"
+        elif method == "repeat":
+            return "lv_repeat(${obj}, ${a})"
         elif method == "replace":
-            return "lv_replace(${obj}, ${args.join(", ")})"
-        elif method == "split":
-            if args.len() > 0:
-                return "lv_split(${obj}, ${args[0]})"
-            return "lv_split(${obj}, std::string(\" \"))"
+            return "lv_replace(${obj}, ${a})"
         elif method == "starts_with":
-            return "${obj}.starts_with(${args.join(", ")})"
+            return "${obj}.starts_with(${a})"
         elif method == "ends_with":
-            return "${obj}.ends_with(${args.join(", ")})"
-        elif method == "indexOf":
-            if args.len() >= 2:
-                return "lv_index_of(${obj}, ${args[0]}, ${args[1]})"
-            return "lv_index_of(${obj}, ${args.join(", ")})"
+            return "${obj}.ends_with(${a})"
         elif method == "charAt":
-            return "std::string(1, ${obj}[${args.join(", ")}])"
-        elif method == "substring":
-            if args.len() >= 2:
-                return "${obj}.substr(${args[0]}, (${args[1]}) - (${args[0]}))"
-            return "${obj}.substr(${args.join(", ")})"
-        elif method == "push":
-            return "${obj}.push_back(${args.join(", ")})"
-        elif method == "pop":
-            return "lv_pop(${obj})"
-        elif method == "clear":
-            return "${obj}.clear()"
-        elif method == "remove":
-            return "lv_remove(${obj}, ${args.join(", ")})"
+            return "std::string(1, ${obj}[${a}])"
         elif method == "join":
             if args.len() > 0:
                 return "lv_join(${obj}, ${args[0]})"
             return "lv_join(${obj}, std::string(\"\"))"
-        elif method == "reverse":
-            return "lv_reverse(${obj})"
-        elif method == "keys":
-            return "lv_keys(${obj})"
-        elif method == "values":
-            return "lv_values(${obj})"
-        elif method == "has":
-            return "(${obj}.count(${args.join(", ")}) > 0)"
-        elif method == "repeat":
-            return "lv_repeat(${obj}, ${args.join(", ")})"
-        elif method == "pad_left":
-            return "lv_pad_left(${obj}, ${args.join(", ")})"
-        elif method == "pad_right":
-            return "lv_pad_right(${obj}, ${args.join(", ")})"
-        elif method == "sort":
-            return "lv_sort(${obj})"
-        elif method == "unique":
-            return "lv_unique(${obj})"
-        elif method == "slice":
-            return "lv_slice(${obj}, ${args.join(", ")})"
-        elif method == "flatten":
-            return "lv_flatten(${obj})"
+        elif method == "split":
+            if args.len() > 0:
+                return "lv_split(${obj}, ${args[0]})"
+            return "lv_split(${obj}, std::string(\" \"))"
+        elif method == "indexOf":
+            if args.len() >= 2:
+                return "lv_index_of(${obj}, ${args[0]}, ${args[1]})"
+            return "lv_index_of(${obj}, ${a})"
+        elif method == "substring":
+            if args.len() >= 2:
+                return "${obj}.substr(${args[0]}, (${args[1]}) - (${args[0]}))"
+            return "${obj}.substr(${a})"
         return ""
+
+    string fn get_type_category(ref Expr object):
+        match object:
+            Variable(tok):
+                if this.var_types.has(tok.lexeme):
+                    TypeNode t = this.var_types[tok.lexeme]
+                    return this.type_node_to_category(t)
+            Call(callee, paren, args, arg_names):
+                // Infer type from method call for chaining: obj.method(...).method2(...)
+                match callee:
+                    Get(inner_obj, method_name):
+                        string obj_cat = this.get_type_category(inner_obj)
+                        if obj_cat != "":
+                            return this.infer_method_return_category(obj_cat, method_name.lexeme)
+                    _:
+                        pass
+            _:
+                pass
+        return ""
+
+    string fn type_node_to_category(ref TypeNode t):
+        match t:
+            Array(inner):
+                return "vector"
+            HashMap(k, v):
+                return "hashmap"
+            HashSet(inner):
+                return "hashset"
+            Str():
+                return "string"
+            Bytes():
+                return "bytes"
+            Custom(name, type_args):
+                return name
+            _:
+                return ""
+
+    string fn infer_method_return_category(ref string obj_cat, ref string method):
+        // Extend methods that preserve type (collection -> same collection)
+        if obj_cat == "vector":
+            if method == "map" or method == "filter" or method == "take" or method == "drop":
+                return "vector"
+            if method == "zip" or method == "enumerate":
+                return "vector"
+        if obj_cat == "hashset":
+            if method == "union_with" or method == "intersect" or method == "difference":
+                return "hashset"
+        // bytes methods that return bytes
+        if obj_cat == "bytes":
+            if method == "slice" or method == "concat":
+                return "bytes"
+        // string methods that return string
+        if obj_cat == "string":
+            if method == "substring" or method == "trim" or method == "to_lower" or method == "to_upper":
+                return "string"
+        // Cross-type methods
+        if obj_cat == "bytes":
+            if method == "to_string" or method == "to_hex":
+                return "string"
+        if obj_cat == "string":
+            if method == "split":
+                return "vector"
+        if obj_cat == "vector":
+            if method == "join":
+                return "string"
+        // Extend method lookup: check the extend block for this type
+        if this.extend_methods.has(obj_cat):
+            vector[Stmt] methods = this.extend_methods[obj_cat]
+            for ref ext_m in methods:
+                match ext_m:
+                    Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp, m_defs):
+                        if mname.lexeme == method:
+                            string ret_cat = this.type_node_to_category(mret)
+                            if ret_cat != "":
+                                return ret_cat
+                            // Auto return type: assume same type as input for collection methods
+                            return obj_cat
+                    _:
+                        pass
+        return ""
+
+    TypeNode fn infer_source_type(ref Expr e):
+        match e:
+            Literal(kind, value):
+                if kind == "int":
+                    return TypeNode::Int()
+                elif kind == "float":
+                    return TypeNode::Float()
+                elif kind == "string":
+                    return TypeNode::Str()
+                elif kind == "bool":
+                    return TypeNode::Bool()
+                return TypeNode::Auto()
+            Variable(tok):
+                if this.var_types.has(tok.lexeme):
+                    return this.var_types[tok.lexeme]
+                return TypeNode::Auto()
+            Grouping(inner):
+                return this.infer_source_type(inner)
+            Cast(expr, target_type):
+                return target_type
+            Unary(op, right):
+                return this.infer_source_type(right)
+            Call(callee, paren, args, arg_names):
+                // Infer return type from known method calls
+                match callee:
+                    Get(obj, method_tok):
+                        TypeNode obj_type = this.infer_source_type(obj)
+                        string method = method_tok.lexeme
+                        // Methods that return element type (at, pop, etc.)
+                        if method == "at":
+                            match obj_type:
+                                Array(inner):
+                                    return inner
+                                Custom(name, targs):
+                                    if targs.len() > 0:
+                                        return targs[0]
+                                    return TypeNode::Auto()
+                                _:
+                                    return TypeNode::Auto()
+                        // String methods that return string
+                        if method == "substring" or method == "trim" or method == "to_string" or method == "join":
+                            return TypeNode::Str()
+                        // len() returns int
+                        if method == "len":
+                            return TypeNode::Int()
+                        return TypeNode::Auto()
+                    _:
+                        return TypeNode::Auto()
+                return TypeNode::Auto()
+            Index(obj, bracket, idx):
+                // vec[i] returns element type
+                TypeNode obj_type = this.infer_source_type(obj)
+                match obj_type:
+                    Array(inner):
+                        return inner
+                    Custom(name, targs):
+                        if targs.len() > 0:
+                            return targs[0]
+                        return TypeNode::Auto()
+                    _:
+                        return TypeNode::Auto()
+                return TypeNode::Auto()
+            _:
+                return TypeNode::Auto()
+
+    string fn try_extend_method(ref Expr object, ref string method, ref string obj, ref vector[string] args):
+        string type_cat = this.get_type_category(object)
+        if type_cat != "" and this.extend_methods.has(type_cat):
+            vector[Stmt] methods = this.extend_methods[type_cat]
+            for ref ext_m in methods:
+                match ext_m:
+                    Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp, m_defaults):
+                        if mname.lexeme == method:
+                            if args.len() > 0:
+                                return "__ext_${type_cat}_${method}(${obj}, ${args.join(", ")})"
+                            return "__ext_${type_cat}_${method}(${obj})"
+                    _:
+                        pass
+        return ""
+
+    void fn emit_extend_method(ref string type_key, ref Stmt method):
+        match method:
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp, m_defaults):
+                vector[string] saved_dyn = this.dynamic_vars
+                string ret_type = this.emit_type(mret)
+                string param_str = this.emit_params(mparams, true)
+                string all_params = "auto&& self"
+                if param_str != "":
+                    all_params = "auto&& self, ${param_str}"
+                this.output +="${this.indent()}${ret_type} __ext_${type_key}_${mname.lexeme}(${all_params}) {\n"
+                this.indent_level += 1
+                bool saved_extend = this.in_extend
+                this.in_extend = true
+                for ref st in mbody:
+                    this.emit_stmt(st, false)
+                this.in_extend = saved_extend
+                this.indent_level -= 1
+                this.output +="${this.indent()}}\n\n"
+                this.dynamic_vars = saved_dyn
+            _:
+                pass
 
     string fn emit_params(ref vector[Param] params, bool track_dynamic):
         vector[string] strs = []
@@ -657,8 +918,8 @@ class CppCodegen:
                     exc_name = exception_name
                 this.output +="${this.indent()} catch (const std::exception& ${exc_name}) "
                 this.emit_block_or_stmt(catch_body, m)
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
-                this.emit_function(name, params, return_type, body, type_params, comptime_mode)
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
+                this.emit_function(name, params, return_type, body, type_params, comptime_mode, param_defaults)
             Class(name, body, visibility):
                 vector[string] empty_tp = []
                 this.emit_class(name, body, empty_tp)
@@ -695,26 +956,11 @@ class CppCodegen:
                     inc_line = "#include \"${header}\""
                 else:
                     inc_line = "#include <${header}>"
-                bool already = false
-                for ref existing in this.extern_includes:
-                    if existing == inc_line:
-                        already = true
-                if not already:
-                    this.extern_includes.push(inc_line)
+                this.push_unique(this.extern_includes, inc_line)
                 if link_lib != "":
-                    bool link_already = false
-                    for ref existing_lib in this.extern_link_libs:
-                        if existing_lib == link_lib:
-                            link_already = true
-                    if not link_already:
-                        this.extern_link_libs.push(link_lib)
+                    this.push_unique(this.extern_link_libs, link_lib)
                 if import_path != "":
-                    bool path_already = false
-                    for ref existing_path in this.extern_import_paths:
-                        if existing_path == import_path:
-                            path_already = true
-                    if not path_already:
-                        this.extern_import_paths.push(import_path)
+                    this.push_unique(this.extern_import_paths, import_path)
                 for ref et in types:
                     if et.lavina_name != et.cpp_name:
                         this.extern_type_names[et.lavina_name] = et.cpp_name
@@ -722,6 +968,8 @@ class CppCodegen:
                     if ef.name != ef.cpp_name:
                         this.extern_fn_names[ef.name] = ef.cpp_name
                     this.extern_fn_params[ef.name] = ef.params
+            Extend(target, methods, visibility):
+                pass
             _:
                 pass
 
@@ -770,7 +1018,9 @@ class CppCodegen:
                 this.indent_level -= 1
                 this.output +="${this.indent()}}\n"
 
-    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode):
+    void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode, ref vector[Expr] defaults):
+        this.fn_params[name.lexeme] = params
+        this.fn_defaults[name.lexeme] = defaults
         vector[string] saved_dynamic = this.dynamic_vars
         this.output +=this.template_prefix(type_params)
         string ret_type = this.emit_type(return_type)
@@ -844,7 +1094,7 @@ class CppCodegen:
 
     void fn emit_class_method(ref Token class_name, ref Stmt method):
         match method:
-            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp):
+            Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp, m_defs2):
                 vector[string] saved_dyn = this.dynamic_vars
                 string ret_type = this.emit_type(mret)
                 string mparam_str = this.emit_params(mparams, true)
@@ -868,9 +1118,25 @@ class CppCodegen:
             _:
                 pass
 
+    bool fn has_method_named(ref vector[Stmt] methods, string name):
+        for ref m in methods:
+            match m:
+                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp, m_defs):
+                    if mname.lexeme == name:
+                        return true
+                _:
+                    pass
+        return false
+
+    void fn emit_print_ops(ref string full_name, ref string tmpl_line, ref string to_str_expr):
+        this.output +="${tmpl_line}void print(const ${full_name}& _v) { std::cout << ${to_str_expr} << std::endl; }\n"
+        this.output +="${tmpl_line}std::string operator+(const std::string& _s, const ${full_name}& _v) { return _s + ${to_str_expr}; }\n"
+        this.output +="${tmpl_line}std::string operator+(const ${full_name}& _v, const std::string& _s) { return ${to_str_expr} + _s; }\n\n"
+
     void fn emit_class(ref Token name, ref vector[Stmt] body, ref vector[string] type_params):
         vector[Stmt] init_body = []
         vector[Param] init_params = []
+        vector[Expr] init_defaults = []
         bool has_init = false
         vector[Stmt] methods = []
         vector[string] let_field_names = []
@@ -878,11 +1144,12 @@ class CppCodegen:
 
         for ref st in body:
             match st:
-                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp):
+                Function(fname, params, return_type, fbody, is_inline, comptime_mode, is_static, visibility, fn_tp, fn_defaults):
                     if fname.lexeme == "constructor":
                         has_init = true
                         init_body = fbody
                         init_params = params
+                        init_defaults = fn_defaults
                     else:
                         methods.push(st)
                 Let(fname, var_type, init, visibility, is_ref, is_mut):
@@ -927,6 +1194,8 @@ class CppCodegen:
         this.indent_level += 1
         this.emit_class_fields(init_field_names, init_field_types, let_field_names, let_field_types)
         if has_init:
+            this.fn_params[name.lexeme] = init_params
+            this.fn_defaults[name.lexeme] = init_defaults
             this.emit_constructor(name, init_params, init_body)
         for ref m in methods:
             this.emit_class_method(name, m)
@@ -934,23 +1203,12 @@ class CppCodegen:
         this.output +="${this.indent()}};\n\n"
 
         // Auto-generate print/concat if to_string method exists
-        bool has_to_string = false
-        for ref m in methods:
-            match m:
-                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
-                    if mname.lexeme == "to_string":
-                        has_to_string = true
-                _:
-                    pass
-        if has_to_string:
+        if this.has_method_named(methods, "to_string"):
             string tmpl_line = this.template_prefix(type_params)
             string type_suffix = ""
             if type_params.len() > 0:
                 type_suffix = "<${type_params.join(", ")}>"
-            string full_name = "${name.lexeme}${type_suffix}"
-            this.output +="${tmpl_line}${this.indent()}void print(const ${full_name}& _v) { std::cout << _v.to_string() << std::endl; }\n"
-            this.output +="${tmpl_line}${this.indent()}std::string operator+(const std::string& _s, const ${full_name}& _v) { return _s + _v.to_string(); }\n"
-            this.output +="${tmpl_line}${this.indent()}std::string operator+(const ${full_name}& _v, const std::string& _s) { return _v.to_string() + _s; }\n\n"
+            this.emit_print_ops("${name.lexeme}${type_suffix}", tmpl_line, "_v.to_string()")
 
     string fn infer_expr_type(ref Expr e, ref vector[string] param_names, ref vector[string] param_types):
         match e:
@@ -985,7 +1243,7 @@ class CppCodegen:
                 return this.infer_expr_type(right, param_names, param_types)
             Grouping(inner):
                 return this.infer_expr_type(inner, param_names, param_types)
-            Call(callee, paren, args):
+            Call(callee, paren, args, arg_names):
                 match callee:
                     Variable(tok):
                         if this.is_known_enum(tok.lexeme):
@@ -1085,14 +1343,13 @@ class CppCodegen:
         this.output +="${this.indent()}}\n"
         this.indent_level -= 1
         this.output +="${this.indent()}};\n\n"
+        string full_type = "${enum_name}${type_suffix}"
         if has_to_string:
-            this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << e.to_string() << std::endl; }\n"
-            this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e.to_string(); }\n"
-            this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e.to_string() + s; }\n\n"
+            this.emit_print_ops(full_type, tmpl_line, "_v.to_string()")
         else:
-            this.output +="${tmpl_line}void print(const ${enum_name}${type_suffix}& e) { std::cout << \"${enum_name}(\" << e._tag << \")\" << std::endl; }\n"
-            this.output +="${tmpl_line}std::string operator+(const std::string& s, const ${enum_name}${type_suffix}& e) { return s + e._tag; }\n"
-            this.output +="${tmpl_line}std::string operator+(const ${enum_name}${type_suffix}& e, const std::string& s) { return e._tag + s; }\n\n"
+            this.output +="${tmpl_line}void print(const ${full_type}& _v) { std::cout << \"${enum_name}(\" << _v._tag << \")\" << std::endl; }\n"
+            this.output +="${tmpl_line}std::string operator+(const std::string& _s, const ${full_type}& _v) { return _s + _v._tag; }\n"
+            this.output +="${tmpl_line}std::string operator+(const ${full_type}& _v, const std::string& _s) { return _v._tag + _s; }\n\n"
 
     void fn emit_enum(ref Token name, ref vector[EnumVariantNode] variants, ref vector[Stmt] methods, ref vector[string] type_params):
         string enum_name = name.lexeme
@@ -1122,14 +1379,7 @@ class CppCodegen:
         this.emit_enum_makers(enum_name, variants, type_suffix)
         for ref m in methods:
             this.emit_class_method(name, m)
-        bool has_to_string = false
-        for ref m in methods:
-            match m:
-                Function(mname, mparams, mret, mbody, mi, mc, ms, mv, mtp):
-                    if mname.lexeme == "to_string":
-                        has_to_string = true
-                _:
-                    pass
+        bool has_to_string = this.has_method_named(methods, "to_string")
         this.emit_enum_operators(enum_name, type_suffix, tmpl_line, has_to_string)
 
     // ── Match emission ────────────────────────────────────────
@@ -1161,7 +1411,7 @@ class CppCodegen:
                 if not first:
                     keyword = "else if"
                 first = false
-                string ename = this.find_enum_for_variant(arm.pattern_name)
+                string ename = find_enum_for_variant(this.known_enums,arm.pattern_name)
                 if ename != "":
                     this.output +="${this.indent()}${keyword} (std::holds_alternative<std::decay_t<decltype(${temp})>::${arm.pattern_name}>(${temp}._data)) {\n"
                 else:
@@ -1207,7 +1457,7 @@ class CppCodegen:
 
     void fn emit_using_if_public(ref string ns, ref Stmt stmt):
         match stmt:
-            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+            Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                 if visibility != "private":
                     this.output +="using ${ns}::${name.lexeme};\n"
             Class(name, body, visibility):
@@ -1238,7 +1488,7 @@ class CppCodegen:
 
         for ref stmt in this.module_stmts[index]:
             match stmt:
-                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                     if name.lexeme == "main":
                         pass
                     else:
@@ -1269,16 +1519,7 @@ class CppCodegen:
 
     // ── Main entry point ──────────────────────────────────────
 
-    string fn generate(ref vector[Stmt] stmts):
-        // First pass: collect extern declarations from modules and main
-        for mi in 0..this.module_stmts.len():
-            for ref stmt in this.module_stmts[mi]:
-                match stmt:
-                    Extern(header, import_path, link_lib, types, functions):
-                        this.emit_stmt(stmt, false)
-                        this.output = ""
-                    _:
-                        pass
+    void fn collect_externs(ref vector[Stmt] stmts):
         for ref stmt in stmts:
             match stmt:
                 Extern(header, import_path, link_lib, types, functions):
@@ -1287,18 +1528,23 @@ class CppCodegen:
                 _:
                     pass
 
-        this.declarations = "#include \"lavina.h\"\n"
-        for ref inc in this.extern_includes:
-            this.declarations +="${inc}\n"
-        this.declarations +="\n"
-
-        // Emit modules in dependency order
-        for mi in 0..this.module_stmts.len():
-            this.emit_module(mi)
-
+    void fn collect_extends(ref vector[Stmt] stmts):
         for ref stmt in stmts:
             match stmt:
-                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params):
+                Extend(target, methods, visibility):
+                    string key = target.lexeme
+                    if not this.extend_methods.has(key):
+                        vector[Stmt] empty = []
+                        this.extend_methods[key] = empty
+                    for ref m in methods:
+                        this.extend_methods[key].push(m)
+                _:
+                    pass
+
+    void fn emit_main_stmts(ref vector[Stmt] stmts):
+        for ref stmt in stmts:
+            match stmt:
+                Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
                     if name.lexeme == "main":
                         this.has_main = true
                         this.output +="int main(int argc, char* argv[]) {\n"
@@ -1316,9 +1562,41 @@ class CppCodegen:
                         this.output = ""
                 Extern(header, import_path, link_lib, types, functions):
                     pass
+                Extend(target, methods, visibility):
+                    pass
                 _:
                     this.emit_stmt(stmt, false)
                     this.declarations += this.output
                     this.output = ""
 
+    string fn generate(ref vector[Stmt] stmts):
+        // First pass: collect extern declarations from modules and main
+        for mi in 0..this.module_stmts.len():
+            this.collect_externs(this.module_stmts[mi])
+        this.collect_externs(stmts)
+
+        // Collect extend declarations from modules and main
+        for mi in 0..this.module_stmts.len():
+            this.collect_extends(this.module_stmts[mi])
+        this.collect_extends(stmts)
+
+        this.declarations = "#include \"lavina.h\"\n"
+        for ref inc in this.extern_includes:
+            this.declarations +="${inc}\n"
+        this.declarations +="\n"
+
+        // Emit modules in dependency order
+        for mi in 0..this.module_stmts.len():
+            this.emit_module(mi)
+
+        // Emit extension methods as free functions
+        auto ext_keys = this.extend_methods.keys()
+        for ref ek in ext_keys:
+            vector[Stmt] methods = this.extend_methods[ek]
+            for ref m in methods:
+                this.emit_extend_method(ek, m)
+            this.declarations += this.output
+            this.output = ""
+
+        this.emit_main_stmts(stmts)
         return this.declarations
