@@ -28,6 +28,22 @@ inline std::string lv_replace(const std::string& s, const std::string& from, con
     return result;
 }
 
+inline int lv_compare(const std::string& a, const std::string& b) {
+    size_t i = 0;
+    while (i < a.length() && i < b.length() && a[i] == b[i]) {
+        i++;
+    }
+
+    if (i == a.length() && i == b.length()) {
+    return 0;
+    }
+    return 1;
+}
+
+inline std::string lv_reverse(const std::string& s) {
+    return {s.rbegin(), s.rend()};
+}
+
 inline std::vector<std::string> lv_split(const std::string& s, const std::string& delim) {
     std::vector<std::string> result;
     size_t start = 0, end;
