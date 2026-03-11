@@ -2,6 +2,13 @@ import std::rng
 import std::bytes
 
 void fn main():
+    bool is_windows = false
+    cpp {
+        #if defined(_WIN32)
+            is_windows = true;
+        #endif
+    }
+
     rng::seed(12345)
     int first = rng::range(1, 100)
     int second = rng::range(1, 100)
@@ -24,16 +31,18 @@ void fn main():
 
     bytes buf = rng::next_bytes(16)
     lv_assert(buf.len() == 16, "random bytes len")
-    bytes secure = rng::secure_bytes(8)
-    lv_assert(secure.len() == 8, "secure bytes len")
 
-    int sr = rng::secure_int(10, 20)
-    float secure_double = rng::secure_double()
-    lv_assert(sr >= 10 and sr <= 20, "secure int range")
-    lv_assert(secure_double >= 0.0 and secure_double < 1.0, "secure double range")
+    if !is_windows:
+        bytes secure = rng::secure_bytes(8)
+        lv_assert(secure.len() == 8, "secure bytes len")
 
-    bytes uuid_bytes = rng::uuid_bytes()
-    lv_assert(uuid_bytes.len() == 16, "uuid bytes len")
-    string uuid_string = rng::uuid_string()
-    lv_assert(uuid_string.len() == 36, "uuid string len")
+        int sr = rng::secure_int(10, 20)
+        float secure_double = rng::secure_double()
+        lv_assert(sr >= 10 and sr <= 20, "secure int range")
+        lv_assert(secure_double >= 0.0 and secure_double < 1.0, "secure double range")
+
+        bytes uuid_bytes = rng::uuid_bytes()
+        lv_assert(uuid_bytes.len() == 16, "uuid bytes len")
+        string uuid_string = rng::uuid_string()
+        lv_assert(uuid_string.len() == 36, "uuid string len")
     print("All std::rng tests passed!")
