@@ -1,12 +1,37 @@
 import std::net
 
+struct BoundSocket:
+    int fd
+    int port
+
+    constructor(int fd, int port):
+        this.fd = fd
+        this.port = port
+
+BoundSocket fn bind_tcp_listener(int start_port):
+    int port = start_port
+    while port < start_port + 200:
+        try:
+            return BoundSocket(net::tcp_listen("127.0.0.1", port), port)
+        catch err:
+            port += 1
+    throw "could not bind TCP listener"
+
+BoundSocket fn bind_udp_socket(int start_port):
+    int port = start_port
+    while port < start_port + 200:
+        try:
+            return BoundSocket(net::udp_create("127.0.0.1", port), port)
+        catch err:
+            port += 1
+    throw "could not bind UDP socket"
+
 void fn test_tcp():
-    // Start a TCP server on loopback
-    int server = net::tcp_listen("127.0.0.1", 19876)
+    BoundSocket listener = bind_tcp_listener(19876)
+    int server = listener.fd
     lv_assert(server >= 0, "tcp_listen should return valid fd")
 
-    // Connect from client side (completes TCP handshake)
-    int client = net::tcp_connect("127.0.0.1", 19876)
+    int client = net::tcp_connect("127.0.0.1", listener.port)
     lv_assert(client >= 0, "tcp_connect should return valid fd")
 
     // Accept the pending connection on server side
@@ -35,25 +60,24 @@ void fn test_tcp():
     print("PASS: TCP send/recv")
 
 void fn test_udp():
-    // Create two UDP sockets on loopback
-    int sock_a = net::udp_create("127.0.0.1", 19877)
-    lv_assert(sock_a >= 0, "udp_create A should return valid fd")
+    BoundSocket socket_a = bind_udp_socket(19877)
+    lv_assert(socket_a.fd >= 0, "udp_create A should return valid fd")
 
-    int sock_b = net::udp_create("127.0.0.1", 19878)
-    lv_assert(sock_b >= 0, "udp_create B should return valid fd")
+    BoundSocket socket_b = bind_udp_socket(socket_a.port + 1)
+    lv_assert(socket_b.fd >= 0, "udp_create B should return valid fd")
 
     // Send from A -> B
     string msg = "udp hello"
-    int sent = net::udp_send(sock_a, msg, "127.0.0.1", 19878)
+    int sent = net::udp_send(socket_a.fd, msg, "127.0.0.1", socket_b.port)
     lv_assert(sent == msg.len(), "udp_send should send all bytes")
 
     // Receive on B
-    string received = net::udp_recv(sock_b, 1024)
+    string received = net::udp_recv(socket_b.fd, 1024)
     lv_assert(received == msg, "udp_recv should match sent data")
 
     // Cleanup
-    net::udp_close(sock_a)
-    net::udp_close(sock_b)
+    net::udp_close(socket_a.fd)
+    net::udp_close(socket_b.fd)
     print("PASS: UDP send/recv")
 
 void fn test_resolve():
@@ -62,11 +86,13 @@ void fn test_resolve():
     print("PASS: DNS resolve")
 
 void fn test_tcp_stream():
-    // High-level TCP: TcpListener + TcpStream (explicit types)
-    net::TcpListener listener = net::TcpListener("127.0.0.1", 19879)
+    BoundSocket reserved = bind_tcp_listener(19879)
+    int port = reserved.port
+    net::tcp_close(reserved.fd)
 
-    // Connect via factory function
-    net::TcpStream client = net::connect("127.0.0.1", 19879)
+    net::TcpListener listener = net::TcpListener("127.0.0.1", port)
+
+    net::TcpStream client = net::connect("127.0.0.1", port)
 
     // Accept returns TcpStream
     net::TcpStream accepted = listener.accept()
@@ -89,13 +115,18 @@ void fn test_tcp_stream():
     print("PASS: TcpListener/TcpStream")
 
 void fn test_udp_socket():
-    // High-level UDP: UdpSocket (explicit types)
-    net::UdpSocket sock_a = net::UdpSocket("127.0.0.1", 19880)
-    net::UdpSocket sock_b = net::UdpSocket("127.0.0.1", 19881)
+    BoundSocket reserved_a = bind_udp_socket(19880)
+    BoundSocket reserved_b = bind_udp_socket(reserved_a.port + 1)
+    int port_a = reserved_a.port
+    int port_b = reserved_b.port
+    net::udp_close(reserved_a.fd)
+    net::udp_close(reserved_b.fd)
 
-    // Send from A -> B via methods
+    net::UdpSocket sock_a = net::UdpSocket("127.0.0.1", port_a)
+    net::UdpSocket sock_b = net::UdpSocket("127.0.0.1", port_b)
+
     string msg = "udp struct hello"
-    sock_a.send(msg, "127.0.0.1", 19881)
+    sock_a.send(msg, "127.0.0.1", port_b)
     string received = sock_b.recv(1024)
     lv_assert(received == msg, "UdpSocket recv should match sent data")
 

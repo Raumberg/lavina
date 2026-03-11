@@ -1,0 +1,22 @@
+// std::base64 — Base64 encoding helpers
+
+public string fn encode(ref string input):
+    return __base64_encode(input)
+
+public string fn decode(ref string input):
+    return __base64_decode(input)
+
+public string fn url_encode(ref string input):
+    return __base64_url_encode(input)
+
+public string fn url_decode(ref string input):
+    return __base64_url_decode(input)
+
+public bool fn is_valid(ref string input):
+    return __base64_is_valid(input)
+
+public bytes fn encode_bytes(ref bytes input):
+    return __base64_encode_bytes(input)
+
+public bytes fn decode_bytes(ref string input):
+    return __base64_decode_bytes(input)

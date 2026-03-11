@@ -79,7 +79,7 @@ sudo cp -r lib/* /usr/local/lib/
 git clone https://github.com/Raumberg/lavina.git
 cd lavina
 make bootstrap    # compile compiler from saved C++ snapshot
-make test         # run the test suite (37 tests)
+make test         # run the test suite
 make build        # optimized binary → build/
 make install      # install to /usr/local/ (or: make install PREFIX=~/.local)
 ```
@@ -115,6 +115,10 @@ import std::fs
 import std::os
 import std::math
 import std::collections
+import std::crypto
+import std::base64
+import std::rng
+import std::chrono
 
 void fn main():
     // File I/O
@@ -127,6 +131,14 @@ void fn main():
     // Math
     print("pi = ${math::PI}")
     print("sqrt(2) = ${math::sqrt(2.0)}")
+
+    // Crypto + encoding
+    print(crypto::sha256("lavina"))
+    print(base64::encode("hello"))
+
+    // Random + time
+    print("roll = ${rng::range(1, 6)}")
+    print("now = ${chrono::format_current()}")
 
     // Collections — dot-notation via extend
     vector[int] nums = [1, 2, 3, 4, 5]
@@ -157,8 +169,8 @@ void fn main():
 src/           compiler source (.lv): scanner, parser, checker, codegen, main
 stages/        C++ snapshot for bootstrapping (stage-latest.cpp)
 runtime/       C++ runtime header and support libraries
-  liblavina/   C++ runtime modules (12 headers)
-  std/         standard library modules (fs, os, math)
+  liblavina/   C++ runtime modules
+  std/         standard library modules (fs, os, math, bytes, net, thread, crypto, base64, rng, chrono)
 tests/         test suite (.lv files)
 examples/      example programs
 lvpkg/         package manager (written in Lavina)

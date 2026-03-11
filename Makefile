@@ -97,7 +97,7 @@ test:
 			;; \
 		*) \
 			/tmp/lavina_next compile $$f 2>/dev/null && \
-			$$dir/$$name 2>/dev/null; \
+			$$dir/$$name; \
 			if [ $$? -eq 0 ]; then \
 				echo "  PASS  $$name"; \
 				passed=$$((passed + 1)); \

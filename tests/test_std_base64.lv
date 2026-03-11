@@ -1,0 +1,20 @@
+import std::base64
+import std::bytes
+
+void fn main():
+    string encoded = base64::encode("hello")
+    lv_assert(encoded == "aGVsbG8=", "base64 encode")
+    lv_assert(base64::decode(encoded) == "hello", "base64 decode")
+
+    string url_encoded = base64::url_encode("hello?")
+    lv_assert(base64::url_decode(url_encoded) == "hello?", "base64 url roundtrip")
+
+    lv_assert(base64::is_valid("aGVsbG8="), "valid base64")
+    lv_assert(base64::is_valid("%%%") == false, "invalid base64")
+
+    bytes raw = bytes::from_string("Lavina")
+    bytes encoded_bytes = base64::encode_bytes(raw)
+    lv_assert(encoded_bytes.to_string() == "TGF2aW5h", "encode bytes")
+    bytes decoded_bytes = base64::decode_bytes("TGF2aW5h")
+    lv_assert(decoded_bytes.to_string() == "Lavina", "decode bytes")
+    print("All std::base64 tests passed!")

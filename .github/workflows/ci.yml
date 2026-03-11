@@ -19,12 +19,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install g++ (Linux)
+      - name: Setup g++ (Linux)
         if: runner.os == 'Linux'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y g++-14
-          sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+          if command -v g++-14 >/dev/null 2>&1; then
+            sudo update-alternatives --install /usr/bin/g++ g++ "$(command -v g++-14)" 100
+          else
+            sudo apt-get update
+            sudo apt-get install -y g++-14
+            sudo update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-14 100
+          fi
 
       - name: Bootstrap
         run: make bootstrap

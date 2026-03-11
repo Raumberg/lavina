@@ -1,0 +1,48 @@
+import std::rng
+import std::bytes
+
+void fn main():
+    bool is_windows = false
+    cpp {
+        #if defined(_WIN32)
+            is_windows = true;
+        #endif
+    }
+
+    rng::seed(12345)
+    int first = rng::range(1, 100)
+    int second = rng::range(1, 100)
+    rng::seed(12345)
+    lv_assert(rng::range(1, 100) == first, "seed repeat first")
+    lv_assert(rng::range(1, 100) == second, "seed repeat second")
+
+    int u32_val = rng::u32()
+    int u64_val = rng::u64()
+    float double_val = rng::next_double()
+    float float_val = rng::next_float()
+    lv_assert(u32_val >= 0, "u32 non-negative")
+    lv_assert(u64_val >= 0 or u64_val < 0, "u64 callable")
+    lv_assert(double_val >= 0.0 and double_val < 1.0, "double range")
+    lv_assert(float_val >= 0.0 and float_val < 1.0, "float range")
+    lv_assert(rng::chance(0.0) == false, "chance zero")
+    lv_assert(rng::chance(1.0) == true, "chance one")
+    lv_assert(rng::normal(10.0, 2.0) > -1000.0, "normal callable")
+    lv_assert(rng::exponential(2.0) >= 0.0, "exponential non-negative")
+
+    bytes buf = rng::next_bytes(16)
+    lv_assert(buf.len() == 16, "random bytes len")
+
+    if !is_windows:
+        bytes secure = rng::secure_bytes(8)
+        lv_assert(secure.len() == 8, "secure bytes len")
+
+        int sr = rng::secure_int(10, 20)
+        float secure_double = rng::secure_double()
+        lv_assert(sr >= 10 and sr <= 20, "secure int range")
+        lv_assert(secure_double >= 0.0 and secure_double < 1.0, "secure double range")
+
+        bytes uuid_bytes = rng::uuid_bytes()
+        lv_assert(uuid_bytes.len() == 16, "uuid bytes len")
+        string uuid_string = rng::uuid_string()
+        lv_assert(uuid_string.len() == 36, "uuid string len")
+    print("All std::rng tests passed!")

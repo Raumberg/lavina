@@ -1,0 +1,49 @@
+// std::rng — pseudo-random and secure random helpers
+
+public void fn seed(int seed):
+    __rand_seed(seed)
+
+public int fn u32():
+    return __rand_u32()
+
+public int fn u64():
+    return __rand_u64()
+
+public int fn range(int min, int max):
+    return __rand_int(min, max)
+
+public float fn next_double():
+    return __rand_double()
+
+public float fn next_float():
+    return __rand_float()
+
+public bool fn next_bool():
+    return __rand_bool()
+
+public bool fn chance(float probability):
+    return __rand_chance(probability)
+
+public float fn normal(float mean, float stddev):
+    return __rand_normal(mean, stddev)
+
+public float fn exponential(float lambda):
+    return __rand_exponential(lambda)
+
+public bytes fn next_bytes(int len):
+    return __rand_bytes(len)
+
+public bytes fn secure_bytes(int len):
+    return __rand_secure_bytes(len)
+
+public int fn secure_int(int min, int max):
+    return __rand_secure_int(min, max)
+
+public float fn secure_double():
+    return __rand_secure_double()
+
+public bytes fn uuid_bytes():
+    return __rand_uuid_bytes()
+
+public string fn uuid_string():
+    return __rand_uuid_string()

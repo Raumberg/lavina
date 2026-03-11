@@ -1,0 +1,147 @@
+// std::chrono — time and date helpers
+
+extern "liblavina/time.h":
+    type CppDateTime = "TimeUtils::DateTime"
+    CppDateTime fn __time_datetime_from_timestamp_ms(int timestamp_ms, bool local_time)
+    int fn __time_dt_year(CppDateTime dt)
+    int fn __time_dt_month(CppDateTime dt)
+    int fn __time_dt_day(CppDateTime dt)
+    int fn __time_dt_hour(CppDateTime dt)
+    int fn __time_dt_minute(CppDateTime dt)
+    int fn __time_dt_second(CppDateTime dt)
+    int fn __time_dt_millisecond(CppDateTime dt)
+    int fn __time_dt_day_of_week(CppDateTime dt)
+    int fn __time_dt_day_of_year(CppDateTime dt)
+
+public struct DateTime:
+    int year
+    int month
+    int day
+    int hour
+    int minute
+    int second
+    int millisecond
+    int day_of_week
+    int day_of_year
+
+    constructor(
+        int year,
+        int month,
+        int day,
+        int hour = 0,
+        int minute = 0,
+        int second = 0,
+        int millisecond = 0,
+        int day_of_week = 0,
+        int day_of_year = 0,
+    ):
+        this.year = year
+        this.month = month
+        this.day = day
+        this.hour = hour
+        this.minute = minute
+        this.second = second
+        this.millisecond = millisecond
+        this.day_of_week = day_of_week
+        this.day_of_year = day_of_year
+
+DateTime fn from_cpp_datetime(CppDateTime dt):
+    return DateTime(
+        __time_dt_year(dt),
+        __time_dt_month(dt),
+        __time_dt_day(dt),
+        __time_dt_hour(dt),
+        __time_dt_minute(dt),
+        __time_dt_second(dt),
+        __time_dt_millisecond(dt),
+        __time_dt_day_of_week(dt),
+        __time_dt_day_of_year(dt),
+    )
+
+public int fn now():
+    return __time_now()
+
+public int fn now_ms():
+    return __time_now_ms()
+
+public int fn now_us():
+    return __time_now_us()
+
+public int fn uptime_ms():
+    return __time_uptime_ms()
+
+public int fn perf_counter():
+    return __time_perf_counter()
+
+public int fn perf_frequency():
+    return __time_perf_frequency()
+
+public DateTime fn from_timestamp_ms(int timestamp_ms, bool local_time = true):
+    auto dt = __time_datetime_from_timestamp_ms(timestamp_ms, local_time)
+    return from_cpp_datetime(dt)
+
+public DateTime fn current(bool local_time = true):
+    return from_timestamp_ms(now_ms(), local_time)
+
+public int fn to_timestamp_ms(ref DateTime dt):
+    return __time_datetime_to_timestamp_ms(
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
+        dt.millisecond,
+    )
+
+public int fn to_timestamp(ref DateTime dt):
+    return to_timestamp_ms(dt) / 1000
+
+public string fn format(ref DateTime dt, string fmt = "%Y-%m-%d %H:%M:%S"):
+    return __time_format_datetime(
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
+        dt.millisecond,
+        dt.day_of_week,
+        dt.day_of_year,
+        fmt,
+    )
+
+public string fn format_current(string fmt = "%Y-%m-%d %H:%M:%S", bool local_time = true):
+    return __time_format_current(fmt, local_time)
+
+public string fn to_iso8601(int timestamp, bool local_time = true):
+    return __time_to_iso8601(timestamp, local_time)
+
+public int fn from_iso8601(ref string iso):
+    return __time_from_iso8601(iso)
+
+public void fn sleep_ms(int milliseconds):
+    __time_sleep_ms(milliseconds)
+
+public void fn sleep_us(int microseconds):
+    __time_sleep_us(microseconds)
+
+public void fn sleep_seconds(float seconds):
+    __time_sleep_seconds(seconds)
+
+public int fn difference(int timestamp1, int timestamp2):
+    return __time_difference(timestamp1, timestamp2)
+
+public int fn timezone_offset():
+    return __time_timezone_offset()
+
+public bool fn is_valid(ref DateTime dt):
+    return __time_is_valid_datetime(
+        dt.year,
+        dt.month,
+        dt.day,
+        dt.hour,
+        dt.minute,
+        dt.second,
+        dt.millisecond,
+    )
