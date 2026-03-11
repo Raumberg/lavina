@@ -4,7 +4,6 @@
 #include "core.h"
 #include "bytes.h"
 #include <cstring>
-#include <random>
 #if defined(__unix__) || defined(__APPLE__)
 #include <fcntl.h>
 #endif
@@ -248,14 +247,22 @@ inline bool rand_trng_bytes(void *buf, size_t len) {
     if (!buf || len == 0) return false;
     
 #ifdef RAND_PLATFORM_WINDOWS
-    // MSYS2/MinGW can be inconsistent around Windows crypto APIs in CI.
-    // std::random_device is a more portable source here and is sufficient
-    // for generating external-facing random bytes in the current runtime.
-    std::random_device rd;
-    uint8_t *bytes = static_cast<uint8_t *>(buf);
-    for (size_t i = 0; i < len; i++) {
-        bytes[i] = static_cast<uint8_t>(rd());
+    HCRYPTPROV hProv = 0;
+    if (!CryptAcquireContext(&hProv, NULL, NULL, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT)) {
+        return false;
     }
+
+    size_t total = 0;
+    while (total < len) {
+        DWORD chunk = (len - total > 0xFFFFFFFFu) ? 0xFFFFFFFFu : static_cast<DWORD>(len - total);
+        if (!CryptGenRandom(hProv, chunk, static_cast<BYTE *>(buf) + total)) {
+            CryptReleaseContext(hProv, 0);
+            return false;
+        }
+        total += static_cast<size_t>(chunk);
+    }
+
+    CryptReleaseContext(hProv, 0);
     return true;
     
 #elif defined(RAND_PLATFORM_MACOS)

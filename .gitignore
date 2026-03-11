@@ -5,3 +5,5 @@ deps/
 design/
 .vscode
 ROADMAP.md
+COMPILER.md
+IR.md
