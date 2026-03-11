@@ -2,6 +2,7 @@
 #pragma comment(lib, "crypt32.lib")
 
 #include "core.h"
+#include <cstring>
 
 #if defined(__unix__) || defined(__APPLE__)
 #define ROTR(x, n) (((x) >> (n)) | ((x) << (32 - (n))))

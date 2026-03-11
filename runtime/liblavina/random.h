@@ -3,6 +3,10 @@
 
 #include "core.h"
 #include "bytes.h"
+#include <cstring>
+#if defined(__unix__) || defined(__APPLE__)
+#include <fcntl.h>
+#endif
 
 #pragma comment(lib, "bcrypt.lib")
 

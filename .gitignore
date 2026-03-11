@@ -4,4 +4,4 @@ build/
 deps/
 design/
 .vscode
-.claude
+ROADMAP.md
