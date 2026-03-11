@@ -1,0 +1,406 @@
+import ast
+import ir
+
+enum IntrinsicId:
+    None
+    Len
+    Contains
+    Has
+    IsEmpty
+    Push
+    PushCopy
+    Pop
+    Remove
+    Clear
+    Sort
+    Reverse
+    Unique
+    Flatten
+    Slice
+    Join
+    IndexOf
+    Keys
+    Values
+    Add
+    Print
+    Println
+    Assert
+
+string fn intrinsic_runtime_name(ref IntrinsicId intrinsic):
+    match intrinsic:
+        Len():
+            return "len"
+        Contains():
+            return "lv_contains"
+        Has():
+            return "lv_has"
+        IsEmpty():
+            return "lv_is_empty"
+        Push():
+            return "lv_push"
+        PushCopy():
+            return "lv_push_copy"
+        Pop():
+            return "lv_pop"
+        Remove():
+            return "lv_remove"
+        Clear():
+            return "lv_clear"
+        Sort():
+            return "lv_sort"
+        Reverse():
+            return "lv_reverse"
+        Unique():
+            return "lv_unique"
+        Flatten():
+            return "lv_flatten"
+        Slice():
+            return "lv_slice"
+        Join():
+            return "lv_join"
+        IndexOf():
+            return "lv_index_of"
+        Keys():
+            return "lv_keys"
+        Values():
+            return "lv_values"
+        Add():
+            return "lv_add"
+        Print():
+            return "print"
+        Println():
+            return "println"
+        Assert():
+            return "lv_assert"
+        _:
+            return ""
+
+IntrinsicId fn intrinsic_from_name(string name):
+    if name == "len":
+        return IntrinsicId::Len()
+    elif name == "lv_contains":
+        return IntrinsicId::Contains()
+    elif name == "lv_has":
+        return IntrinsicId::Has()
+    elif name == "lv_is_empty":
+        return IntrinsicId::IsEmpty()
+    elif name == "lv_push":
+        return IntrinsicId::Push()
+    elif name == "lv_push_copy":
+        return IntrinsicId::PushCopy()
+    elif name == "lv_pop":
+        return IntrinsicId::Pop()
+    elif name == "lv_remove":
+        return IntrinsicId::Remove()
+    elif name == "lv_clear":
+        return IntrinsicId::Clear()
+    elif name == "lv_sort":
+        return IntrinsicId::Sort()
+    elif name == "lv_reverse":
+        return IntrinsicId::Reverse()
+    elif name == "lv_unique":
+        return IntrinsicId::Unique()
+    elif name == "lv_flatten":
+        return IntrinsicId::Flatten()
+    elif name == "lv_slice":
+        return IntrinsicId::Slice()
+    elif name == "lv_join":
+        return IntrinsicId::Join()
+    elif name == "lv_index_of":
+        return IntrinsicId::IndexOf()
+    elif name == "lv_keys":
+        return IntrinsicId::Keys()
+    elif name == "lv_values":
+        return IntrinsicId::Values()
+    elif name == "lv_add":
+        return IntrinsicId::Add()
+    elif name == "print":
+        return IntrinsicId::Print()
+    elif name == "println":
+        return IntrinsicId::Println()
+    elif name == "lv_assert":
+        return IntrinsicId::Assert()
+    return IntrinsicId::None()
+
+IntrinsicId fn intrinsic_collection_method_id(ref TypeNode object_type, string method_name):
+    match object_type:
+        Str():
+            if method_name == "len":
+                return IntrinsicId::Len()
+            elif method_name == "contains":
+                return IntrinsicId::Contains()
+        Array(inner):
+            if method_name == "len":
+                return IntrinsicId::Len()
+            elif method_name == "indexOf":
+                return IntrinsicId::IndexOf()
+            elif method_name == "is_empty":
+                return IntrinsicId::IsEmpty()
+            elif method_name == "contains":
+                return IntrinsicId::Contains()
+            elif method_name == "pop":
+                return IntrinsicId::Pop()
+            elif method_name == "unique":
+                return IntrinsicId::Unique()
+            elif method_name == "slice":
+                return IntrinsicId::Slice()
+            elif method_name == "join":
+                return IntrinsicId::Join()
+            elif method_name == "flatten":
+                return IntrinsicId::Flatten()
+            elif method_name == "push":
+                return IntrinsicId::Push()
+            elif method_name == "remove":
+                return IntrinsicId::Remove()
+            elif method_name == "clear":
+                return IntrinsicId::Clear()
+            elif method_name == "sort":
+                return IntrinsicId::Sort()
+            elif method_name == "reverse":
+                return IntrinsicId::Reverse()
+        HashMap(key_type, value_type):
+            if method_name == "len":
+                return IntrinsicId::Len()
+            elif method_name == "has":
+                return IntrinsicId::Has()
+            elif method_name == "is_empty":
+                return IntrinsicId::IsEmpty()
+            elif method_name == "keys":
+                return IntrinsicId::Keys()
+            elif method_name == "values":
+                return IntrinsicId::Values()
+            elif method_name == "remove":
+                return IntrinsicId::Remove()
+            elif method_name == "clear":
+                return IntrinsicId::Clear()
+        HashSet(inner):
+            if method_name == "len":
+                return IntrinsicId::Len()
+            elif method_name == "contains":
+                return IntrinsicId::Contains()
+            elif method_name == "is_empty":
+                return IntrinsicId::IsEmpty()
+            elif method_name == "add":
+                return IntrinsicId::Add()
+            elif method_name == "remove":
+                return IntrinsicId::Remove()
+            elif method_name == "clear":
+                return IntrinsicId::Clear()
+        _:
+            pass
+    return IntrinsicId::None()
+
+TypeNode fn intrinsic_type_return_type(ref IntrinsicId intrinsic, ref TypeNode first_arg_type):
+    match intrinsic:
+        Len():
+            return TypeNode::Int()
+        IndexOf():
+            return TypeNode::Int()
+        Contains():
+            return TypeNode::Bool()
+        Has():
+            return TypeNode::Bool()
+        IsEmpty():
+            return TypeNode::Bool()
+        Join():
+            return TypeNode::Str()
+        Push():
+            return TypeNode::Void()
+        Remove():
+            return TypeNode::Void()
+        Clear():
+            return TypeNode::Void()
+        Sort():
+            return TypeNode::Void()
+        Reverse():
+            return TypeNode::Void()
+        Add():
+            return TypeNode::Void()
+        Pop():
+            match first_arg_type:
+                Array(inner):
+                    return inner
+                _:
+                    return TypeNode::Auto()
+        Unique():
+            return first_arg_type
+        Slice():
+            return first_arg_type
+        PushCopy():
+            return first_arg_type
+        Flatten():
+            match first_arg_type:
+                Array(inner):
+                    return inner
+                _:
+                    return TypeNode::Auto()
+        Keys():
+            match first_arg_type:
+                HashMap(key_type, value_type):
+                    return TypeNode::Array(key_type)
+                _:
+                    return TypeNode::Auto()
+        Values():
+            match first_arg_type:
+                HashMap(key_type, value_type):
+                    return TypeNode::Array(value_type)
+                _:
+                    return TypeNode::Auto()
+        _:
+            return TypeNode::Auto()
+
+TypeNode fn intrinsic_collection_method_return_type(ref TypeNode object_type, string method_name):
+    IntrinsicId intrinsic = intrinsic_collection_method_id(object_type, method_name)
+    return intrinsic_type_return_type(intrinsic, object_type)
+
+string fn intrinsic_collection_method_builtin_name(ref TypeNode object_type, string method_name):
+    IntrinsicId intrinsic = intrinsic_collection_method_id(object_type, method_name)
+    return intrinsic_runtime_name(intrinsic)
+
+TypeNode fn intrinsic_builtin_call_return_type(string name, ref TypeNode first_arg_type):
+    IntrinsicId intrinsic = intrinsic_from_name(name)
+    return intrinsic_type_return_type(intrinsic, first_arg_type)
+
+IrType fn intrinsic_ir_element_type(ref IrType container_type):
+    if container_type.name.starts_with("array[") and container_type.name.ends_with("]"):
+        return ir_type(container_type.name.substring(6, container_type.name.len() - 1))
+    elif container_type.name.starts_with("map[") and container_type.name.ends_with("]"):
+        int comma_pos = container_type.name.indexOf(", ")
+        if comma_pos >= 0:
+            return ir_type(container_type.name.substring(comma_pos + 2, container_type.name.len() - 1))
+    return ir_type("auto")
+
+IrType fn intrinsic_ir_key_type(ref IrType container_type):
+    if container_type.name.starts_with("map[") and container_type.name.ends_with("]"):
+        int comma_pos = container_type.name.indexOf(", ")
+        if comma_pos >= 0:
+            return ir_type(container_type.name.substring(4, comma_pos))
+    return ir_type("auto")
+
+IrType fn intrinsic_ir_return_type(ref IntrinsicId intrinsic, ref IrType first_arg_type):
+    match intrinsic:
+        Len():
+            return ir_type("int")
+        IndexOf():
+            return ir_type("int")
+        Contains():
+            return ir_type("bool")
+        Has():
+            return ir_type("bool")
+        IsEmpty():
+            return ir_type("bool")
+        Join():
+            return ir_type("string")
+        Print():
+            return ir_type("void")
+        Println():
+            return ir_type("void")
+        Assert():
+            return ir_type("void")
+        Push():
+            return ir_type("void")
+        Remove():
+            return ir_type("void")
+        Clear():
+            return ir_type("void")
+        Sort():
+            return ir_type("void")
+        Reverse():
+            return ir_type("void")
+        Add():
+            return ir_type("void")
+        Pop():
+            return intrinsic_ir_element_type(first_arg_type)
+        Unique():
+            return first_arg_type
+        Slice():
+            return first_arg_type
+        PushCopy():
+            return first_arg_type
+        Flatten():
+            return intrinsic_ir_element_type(first_arg_type)
+        Keys():
+            return ir_type("array[${ir_type_to_string(intrinsic_ir_key_type(first_arg_type))}]")
+        Values():
+            return ir_type("array[${ir_type_to_string(intrinsic_ir_element_type(first_arg_type))}]")
+        _:
+            return ir_type("auto")
+
+IrType fn intrinsic_ir_builtin_return_type(string callee_name):
+    IntrinsicId intrinsic = intrinsic_from_name(callee_name)
+    return intrinsic_ir_return_type(intrinsic, ir_type("auto"))
+
+IrType fn intrinsic_ir_container_return_type(string callee_name, ref IrType first_arg_type):
+    IntrinsicId intrinsic = intrinsic_from_name(callee_name)
+    return intrinsic_ir_return_type(intrinsic, first_arg_type)
+
+string fn stdlib_runtime_name(string name):
+    if name == "map":
+        return "__lv_col_map"
+    elif name == "filter":
+        return "__lv_col_filter"
+    elif name == "reduce":
+        return "__lv_col_reduce"
+    elif name == "for_each":
+        return "__lv_col_for_each"
+    elif name == "zip":
+        return "__lv_col_zip"
+    elif name == "take":
+        return "__lv_col_take"
+    elif name == "drop":
+        return "__lv_col_drop"
+    elif name == "enumerate":
+        return "__lv_col_enumerate"
+    elif name == "range":
+        return "__lv_col_range"
+    elif name == "range_step":
+        return "__lv_col_range_step"
+    elif name == "set_union":
+        return "__lv_col_set_union"
+    elif name == "set_intersection":
+        return "__lv_col_set_intersection"
+    elif name == "set_difference":
+        return "__lv_col_set_difference"
+    return ""
+
+string fn stdlib_collection_method_runtime_name(ref TypeNode object_type, string method_name):
+    match object_type:
+        Array(inner):
+            if method_name == "map":
+                return "__lv_col_map"
+            elif method_name == "filter":
+                return "__lv_col_filter"
+            elif method_name == "reduce":
+                return "__lv_col_reduce"
+            elif method_name == "for_each":
+                return "__lv_col_for_each"
+            elif method_name == "zip":
+                return "__lv_col_zip"
+            elif method_name == "take":
+                return "__lv_col_take"
+            elif method_name == "drop":
+                return "__lv_col_drop"
+            elif method_name == "enumerate":
+                return "__lv_col_enumerate"
+        HashSet(inner):
+            if method_name == "union_with":
+                return "__lv_col_set_union"
+            elif method_name == "intersect":
+                return "__lv_col_set_intersection"
+            elif method_name == "difference":
+                return "__lv_col_set_difference"
+        _:
+            pass
+    return ""
+
+TypeNode fn pair_field_type(ref TypeNode pair_type, string field_name):
+    match pair_type:
+        Custom(name, type_args):
+            if name == "std::pair" and type_args.len() >= 2:
+                if field_name == "first":
+                    return type_args[0]
+                elif field_name == "second":
+                    return type_args[1]
+        _:
+            pass
+    return TypeNode::Auto()

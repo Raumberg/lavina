@@ -44,3 +44,13 @@
 #include <bcrypt.h>
 #include <wincrypt.h>
 #endif
+
+template<typename C>
+bool lv_is_empty(const C& c) {
+    return c.empty();
+}
+
+template<typename C>
+void lv_clear(C& c) {
+    c.clear();
+}

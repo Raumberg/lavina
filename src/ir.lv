@@ -1,0 +1,240 @@
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — Intermediate Representation
+//  First minimal IR layer for normalized, block-based lowering.
+// ═══════════════════════════════════════════════════════════════
+
+struct IrType:
+    string name
+
+struct IrParam:
+    string name
+    IrType param_type
+
+struct IrLocal:
+    string name
+    IrType local_type
+
+struct IrCallTarget:
+    string kind
+    string name
+
+struct IrInst:
+    string kind
+    string dest
+    IrType value_type
+    IrCallTarget call_target
+    string text_a
+    string text_b
+    string text_c
+    vector[string] args
+
+struct IrTerminator:
+    string kind
+    string text_a
+    string text_b
+    string text_c
+
+struct IrBlock:
+    string name
+    vector[IrInst] instructions
+    IrTerminator terminator
+
+struct IrFunction:
+    string name
+    vector[IrParam] params
+    IrType return_type
+    vector[IrLocal] locals
+    vector[IrBlock] blocks
+    bool is_entry
+    bool is_extern
+
+struct IrModule:
+    string name
+    vector[IrFunction] functions
+
+IrType fn ir_type(string name):
+    return IrType(name)
+
+IrCallTarget fn ir_call_target_none():
+    return IrCallTarget("none", "")
+
+IrCallTarget fn ir_call_target_function(string name):
+    return IrCallTarget("function", name)
+
+IrCallTarget fn ir_call_target_intrinsic(string name):
+    return IrCallTarget("intrinsic", name)
+
+IrCallTarget fn ir_call_target_indirect(string name):
+    return IrCallTarget("indirect", name)
+
+IrInst fn ir_const(string dest, IrType value_type, string literal_kind, string literal_value):
+    vector[string] empty_args = []
+    return IrInst("const", dest, value_type, ir_call_target_none(), literal_kind, literal_value, "", empty_args)
+
+IrInst fn ir_vector_literal(string dest, IrType value_type, ref vector[string] elements):
+    return IrInst("vector_literal", dest, value_type, ir_call_target_none(), "", "", "", elements)
+
+IrInst fn ir_map_literal(string dest, IrType value_type, ref vector[string] items):
+    return IrInst("map_literal", dest, value_type, ir_call_target_none(), "", "", "", items)
+
+IrInst fn ir_move(string dest, IrType value_type, string source):
+    vector[string] empty_args = []
+    return IrInst("move", dest, value_type, ir_call_target_none(), source, "", "", empty_args)
+
+IrInst fn ir_unary(string dest, IrType value_type, string op, string operand):
+    vector[string] empty_args = []
+    return IrInst("unary", dest, value_type, ir_call_target_none(), op, operand, "", empty_args)
+
+IrInst fn ir_binary(string dest, IrType value_type, string op, string left, string right):
+    vector[string] empty_args = []
+    return IrInst("binary", dest, value_type, ir_call_target_none(), op, left, right, empty_args)
+
+IrInst fn ir_call(string dest, IrType value_type, IrCallTarget call_target, ref vector[string] args):
+    return IrInst("call", dest, value_type, call_target, "", "", "", args)
+
+IrInst fn ir_call_auto(string dest, IrCallTarget call_target, ref vector[string] args):
+    return IrInst("call_auto", dest, ir_type("auto"), call_target, "", "", "", args)
+
+IrInst fn ir_call_void(IrCallTarget call_target, ref vector[string] args):
+    return IrInst("call_void", "", ir_type("void"), call_target, "", "", "", args)
+
+IrInst fn ir_get_field(string dest, IrType value_type, string object_name, string field_name):
+    vector[string] empty_args = []
+    return IrInst("get_field", dest, value_type, ir_call_target_none(), object_name, field_name, "", empty_args)
+
+IrInst fn ir_set_field(string object_name, string field_name, string value_name):
+    vector[string] empty_args = []
+    return IrInst("set_field", "", ir_type("void"), ir_call_target_none(), object_name, field_name, value_name, empty_args)
+
+IrInst fn ir_index(string dest, IrType value_type, string object_name, string index_name):
+    vector[string] empty_args = []
+    return IrInst("index", dest, value_type, ir_call_target_none(), object_name, index_name, "", empty_args)
+
+IrInst fn ir_index_set(string object_name, string index_name, string value_name):
+    vector[string] empty_args = []
+    return IrInst("index_set", "", ir_type("void"), ir_call_target_none(), object_name, index_name, value_name, empty_args)
+
+IrInst fn ir_convert(string dest, IrType value_type, string source):
+    vector[string] empty_args = []
+    return IrInst("convert", dest, value_type, ir_call_target_none(), source, "", "", empty_args)
+
+IrInst fn ir_bind_auto(string dest, string expr_text):
+    vector[string] empty_args = []
+    return IrInst("bind_auto", dest, ir_type("auto"), ir_call_target_none(), expr_text, "", "", empty_args)
+
+IrInst fn ir_enum_is(string dest, string object_name, string variant_name):
+    vector[string] empty_args = []
+    return IrInst("enum_is", dest, ir_type("bool"), ir_call_target_none(), object_name, variant_name, "", empty_args)
+
+IrInst fn ir_enum_get(string dest, IrType value_type, string object_name, string variant_name, string field_name):
+    vector[string] empty_args = []
+    return IrInst("enum_get", dest, value_type, ir_call_target_none(), object_name, variant_name, field_name, empty_args)
+
+IrTerminator fn ir_term_none():
+    return IrTerminator("none", "", "", "")
+
+IrTerminator fn ir_term_jump(string target):
+    return IrTerminator("jump", target, "", "")
+
+IrTerminator fn ir_term_branch(string condition, string then_block, string else_block):
+    return IrTerminator("branch", condition, then_block, else_block)
+
+IrTerminator fn ir_term_return_void():
+    return IrTerminator("return_void", "", "", "")
+
+IrTerminator fn ir_term_return_value(string value):
+    return IrTerminator("return_value", value, "", "")
+
+IrTerminator fn ir_term_unreachable():
+    return IrTerminator("unreachable", "", "", "")
+
+string fn ir_type_to_string(ref IrType t):
+    return t.name
+
+string fn ir_call_target_to_string(ref IrCallTarget target):
+    if target.kind == "intrinsic":
+        return "intrinsic ${target.name}"
+    elif target.kind == "indirect":
+        return "indirect ${target.name}"
+    return target.name
+
+string fn ir_inst_to_string(ref IrInst inst):
+    if inst.kind == "const":
+        return "${inst.dest} = const ${ir_type_to_string(inst.value_type)} ${inst.text_a} ${inst.text_b}"
+    elif inst.kind == "vector_literal":
+        return "${inst.dest} = vector_literal [${inst.args.join(", ")}] : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "map_literal":
+        return "${inst.dest} = map_literal {${inst.args.join(", ")}} : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "move":
+        return "${inst.dest} = move ${inst.text_a} : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "unary":
+        return "${inst.dest} = unary ${inst.text_a} ${inst.text_b} : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "binary":
+        return "${inst.dest} = binary ${inst.text_a} ${inst.text_b}, ${inst.text_c} : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "call":
+        return "${inst.dest} = call ${ir_call_target_to_string(inst.call_target)}(${inst.args.join(", ")}) : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "call_auto":
+        return "${inst.dest} = call_auto ${ir_call_target_to_string(inst.call_target)}(${inst.args.join(", ")})"
+    elif inst.kind == "call_void":
+        return "call ${ir_call_target_to_string(inst.call_target)}(${inst.args.join(", ")}) : void"
+    elif inst.kind == "get_field":
+        return "${inst.dest} = get_field ${inst.text_a}.${inst.text_b} : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "set_field":
+        return "set_field ${inst.text_a}.${inst.text_b} = ${inst.text_c}"
+    elif inst.kind == "index":
+        return "${inst.dest} = index ${inst.text_a}[${inst.text_b}] : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "index_set":
+        return "index_set ${inst.text_a}[${inst.text_b}] = ${inst.text_c}"
+    elif inst.kind == "convert":
+        return "${inst.dest} = convert ${inst.text_a} : ${ir_type_to_string(inst.value_type)}"
+    elif inst.kind == "bind_auto":
+        return "${inst.dest} = bind_auto ${inst.text_a}"
+    elif inst.kind == "enum_is":
+        return "${inst.dest} = enum_is ${inst.text_a} is ${inst.text_b}"
+    elif inst.kind == "enum_get":
+        return "${inst.dest} = enum_get ${inst.text_a} as ${inst.text_b}.${inst.text_c} : ${ir_type_to_string(inst.value_type)}"
+    return "<unknown-inst>"
+
+string fn ir_terminator_to_string(ref IrTerminator term):
+    if term.kind == "none":
+        return "unreachable"
+    elif term.kind == "jump":
+        return "jump ${term.text_a}"
+    elif term.kind == "branch":
+        return "branch ${term.text_a}, ${term.text_b}, ${term.text_c}"
+    elif term.kind == "return_void":
+        return "return"
+    elif term.kind == "return_value":
+        return "return ${term.text_a}"
+    elif term.kind == "unreachable":
+        return "unreachable"
+    return "<unknown-term>"
+
+string fn ir_dump_function(ref IrFunction fn_ir):
+    vector[string] parts = []
+    vector[string] param_parts = []
+    for ref p in fn_ir.params:
+        param_parts.push("${p.name}: ${ir_type_to_string(p.param_type)}")
+    parts.push("fn ${fn_ir.name}(${param_parts.join(", ")}) -> ${ir_type_to_string(fn_ir.return_type)} {")
+    if fn_ir.locals.len() > 0:
+        vector[string] local_parts = []
+        for ref local in fn_ir.locals:
+            local_parts.push("${local.name}: ${ir_type_to_string(local.local_type)}")
+        parts.push("  locals ${local_parts.join(", ")}")
+    for ref block in fn_ir.blocks:
+        parts.push("  ${block.name}:")
+        for ref inst in block.instructions:
+            parts.push("    ${ir_inst_to_string(inst)}")
+        parts.push("    ${ir_terminator_to_string(block.terminator)}")
+    parts.push("}")
+    return parts.join("\n")
+
+string fn ir_dump_module(ref IrModule module_ir):
+    vector[string] parts = []
+    parts.push("module ${module_ir.name}")
+    parts.push("")
+    for i in 0..module_ir.functions.len():
+        parts.push(ir_dump_function(module_ir.functions[i]))
+        if i + 1 < module_ir.functions.len():
+            parts.push("")
+    return parts.join("\n")

@@ -1,6 +1,12 @@
 import codegen
 import checker
+import backend_cpp
+import backend_model
+import ir
+import lowering
 import parser
+import typed_ast
+import typed_lowering
 
 // ═══════════════════════════════════════════════════════════════
 //  Lavina Bootstrap Compiler — Main CLI
@@ -114,7 +120,7 @@ string fn find_runtime_dir():
 int fn main():
     auto args = __os_args()
     if args.len() < 2:
-        print("Usage: bootstrap [--emit-cpp | compile] <file.lv>")
+        print("Usage: bootstrap [--emit-cpp | --emit-ir | --emit-ir-cpp | compile] <file.lv>")
         return 1
 
     string mode = "run"
@@ -128,6 +134,10 @@ int fn main():
             no_check = true
         elif args[ai] == "--emit-cpp":
             mode = "emit-cpp"
+        elif args[ai] == "--emit-ir":
+            mode = "emit-ir"
+        elif args[ai] == "--emit-ir-cpp":
+            mode = "emit-ir-cpp"
         elif args[ai] == "compile":
             mode = "compile"
         else:
@@ -135,7 +145,7 @@ int fn main():
         ai += 1
 
     if path == "":
-        print("Usage: bootstrap [--emit-cpp | compile] [--no-check] <file.lv>")
+        print("Usage: bootstrap [--emit-cpp | --emit-ir | --emit-ir-cpp | compile] [--no-check] <file.lv>")
         return 1
 
     string runtime_dir = find_runtime_dir()
@@ -181,6 +191,8 @@ int fn main():
 
     vector[Stmt] stmts = []
     string cpp = ""
+    string ir_dump = ""
+    string ir_cpp = ""
     bool has_main = false
     vector[string] link_libs = []
     vector[string] import_paths = []
@@ -205,6 +217,29 @@ int fn main():
 
         for ref lb in parser.lambda_blocks:
             all_lambda_blocks.push(lb)
+        if mode == "emit-ir" or mode == "emit-ir-cpp":
+            vector[Stmt] all_stmts = []
+            for ref ms in mod_stmts_list:
+                for ref s in ms:
+                    all_stmts.push(s)
+            for ref s in stmts:
+                all_stmts.push(s)
+            auto typed_result = lower_to_typed(path, all_stmts, all_lambda_blocks)
+            auto typed_errors = typed_lower_errors(typed_result)
+            if typed_errors.len() > 0:
+                print("Typed lowering errors:")
+                for ref terr in typed_errors:
+                    print("  ${terr}")
+                return 1
+            auto ir_result = lower_to_ir(typed_result.program)
+            auto ir_errors = lower_ir_errors(ir_result)
+            if ir_errors.len() > 0:
+                print("IR lowering errors:")
+                for ref ierr in ir_errors:
+                    print("  ${ierr}")
+                return 1
+            ir_dump = ir_dump_module(ir_result.module)
+            ir_cpp = lower_ir_to_cpp(typed_result.program, ir_result.module)
         auto codegen = CppCodegen()
         codegen.set_modules(mod_short_names, mod_full_names, mod_aliases, mod_stmts_list)
         codegen.lambda_blocks = all_lambda_blocks
@@ -218,6 +253,12 @@ int fn main():
 
     if mode == "emit-cpp":
         print(cpp)
+        return 0
+    if mode == "emit-ir":
+        print(ir_dump)
+        return 0
+    if mode == "emit-ir-cpp":
+        print(ir_cpp)
         return 0
 
     if not has_main:

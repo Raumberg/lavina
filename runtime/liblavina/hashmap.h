@@ -19,3 +19,8 @@ template<typename K, typename V>
 void lv_remove(std::unordered_map<K, V>& m, const K& key) {
     m.erase(key);
 }
+
+template<typename K, typename V>
+bool lv_has(const std::unordered_map<K, V>& m, const K& key) {
+    return m.count(key) > 0;
+}

@@ -10,6 +10,17 @@ T lv_pop(std::vector<T>& v) {
 }
 
 template<typename T>
+void lv_push(std::vector<T>& v, const T& val) {
+    v.push_back(val);
+}
+
+template<typename T>
+std::vector<T> lv_push_copy(std::vector<T> v, const T& val) {
+    v.push_back(val);
+    return v;
+}
+
+template<typename T>
 void lv_remove(std::vector<T>& v, int64_t idx) {
     v.erase(v.begin() + idx);
 }

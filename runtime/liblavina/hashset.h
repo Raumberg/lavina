@@ -7,6 +7,11 @@ bool lv_contains(const std::unordered_set<T>& s, const T& val) {
 }
 
 template<typename T>
+void lv_add(std::unordered_set<T>& s, const T& val) {
+    s.insert(val);
+}
+
+template<typename T>
 void lv_remove(std::unordered_set<T>& s, const T& val) {
     s.erase(val);
 }

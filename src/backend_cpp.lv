@@ -1,0 +1,643 @@
+import backend_model
+import ir
+import typed_ast
+import type_utils
+
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — IR → C++ Backend
+//  Converts structured IR into a structured C++ backend model.
+// ═══════════════════════════════════════════════════════════════
+
+string fn cpp_escape_string(string value):
+    return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t")
+
+string fn cpp_operator(string op):
+    if op == "and":
+        return "&&"
+    elif op == "or":
+        return "||"
+    elif op == "not":
+        return "!"
+    return op
+
+string fn cpp_safe_name(string name):
+    if name.starts_with("%"):
+        return "tmp_${name.substring(1, name.len())}"
+    return name
+
+string fn cpp_literal(ref IrInst inst):
+    if inst.text_a == "string":
+        return "\"${cpp_escape_string(inst.text_b)}\""
+    elif inst.text_a == "bool":
+        return inst.text_b
+    elif inst.text_a == "null":
+        return "nullptr"
+    return inst.text_b
+
+string fn cpp_map_key_type(string map_type):
+    int comma_pos = map_type.indexOf(", ")
+    if comma_pos >= 0:
+        return map_type.substring(4, comma_pos)
+    return "auto"
+
+string fn cpp_map_value_type(string map_type):
+    int comma_pos = map_type.indexOf(", ")
+    if comma_pos >= 0:
+        return map_type.substring(comma_pos + 2, map_type.len() - 1)
+    return "auto"
+
+vector[string] fn cpp_split_generic_args(string type_name):
+    vector[string] parts = []
+    string current = ""
+    int depth = 0
+    for i in 0..type_name.len():
+        string ch = type_name.substring(i, i + 1)
+        if ch == "<":
+            depth += 1
+            current += ch
+        elif ch == ">":
+            depth -= 1
+            current += ch
+        elif ch == "," and depth == 0:
+            parts.push(current.trim())
+            current = ""
+        else:
+            current += ch
+    if current != "":
+        parts.push(current.trim())
+    return parts
+
+string fn cpp_type_from_ir(ref IrType t):
+    if t.name == "void":
+        return "void"
+    elif t.name == "bool":
+        return "bool"
+    elif t.name == "int":
+        return "int64_t"
+    elif t.name == "float":
+        return "double"
+    elif t.name == "string":
+        return "std::string"
+    elif t.name == "bytes":
+        return "lv_bytes"
+    elif t.name == "int8":
+        return "int8_t"
+    elif t.name == "int16":
+        return "int16_t"
+    elif t.name == "int32":
+        return "int32_t"
+    elif t.name == "float32":
+        return "float"
+    elif t.name == "usize":
+        return "size_t"
+    elif t.name == "*char":
+        return "const char*"
+    elif t.name.starts_with("array[") and t.name.ends_with("]"):
+        string inner = t.name.substring(6, t.name.len() - 1)
+        return "std::vector<${cpp_type_from_ir(IrType(inner))}>"
+    elif t.name.starts_with("set[") and t.name.ends_with("]"):
+        string inner = t.name.substring(4, t.name.len() - 1)
+        return "std::unordered_set<${cpp_type_from_ir(IrType(inner))}>"
+    elif t.name.starts_with("map[") and t.name.ends_with("]"):
+        string key_type = cpp_map_key_type(t.name)
+        string value_type = cpp_map_value_type(t.name)
+        return "std::unordered_map<${cpp_type_from_ir(IrType(key_type))}, ${cpp_type_from_ir(IrType(value_type))}>"
+    elif t.name.starts_with("std::pair<") and t.name.ends_with(">"):
+        string inner = t.name.substring(10, t.name.len() - 1)
+        vector[string] parts = cpp_split_generic_args(inner)
+        if parts.len() == 2:
+            return "std::pair<${cpp_type_from_ir(IrType(parts[0]))}, ${cpp_type_from_ir(IrType(parts[1]))}>"
+        return t.name
+    elif t.name.starts_with("*"):
+        return "${cpp_type_from_ir(IrType(t.name.substring(1, t.name.len())))}*"
+    elif t.name.starts_with("?"):
+        string inner = t.name.substring(1, t.name.len())
+        return "std::optional<${cpp_type_from_ir(IrType(inner))}>"
+    elif t.name == "auto":
+        return "auto"
+    return t.name
+
+string fn cpp_type_from_type_node(ref TypeNode t):
+    match t:
+        Int():
+            return "int64_t"
+        Float():
+            return "double"
+        Str():
+            return "std::string"
+        Bool():
+            return "bool"
+        Void():
+            return "void"
+        Int8():
+            return "int8_t"
+        Int16():
+            return "int16_t"
+        Int32():
+            return "int32_t"
+        Float32():
+            return "float"
+        USize():
+            return "size_t"
+        Bytes():
+            return "lv_bytes"
+        Custom(name, type_args):
+            return type_to_cpp(t)
+        _:
+            return type_to_cpp(t)
+
+bool fn cpp_should_skip_local(ref CppFunction function_model, ref string name):
+    for ref local in function_model.locals:
+        if local.name == name:
+            return true
+    return false
+
+void fn cpp_push_line(ref! vector[string] lines, string line):
+    lines.push(line)
+
+string fn cpp_render_inst(ref IrInst inst):
+    if inst.kind == "const":
+        return "    ${cpp_safe_name(inst.dest)} = ${cpp_literal(inst)};"
+    elif inst.kind == "vector_literal":
+        vector[string] rendered = []
+        for ref arg in inst.args:
+            rendered.push(cpp_safe_name(arg))
+        return "    ${cpp_safe_name(inst.dest)} = {${rendered.join(", ")}};"
+    elif inst.kind == "map_literal":
+        vector[string] rendered = []
+        int i = 0
+        while i < inst.args.len():
+            rendered.push("{${cpp_safe_name(inst.args[i])}, ${cpp_safe_name(inst.args[i + 1])}}")
+            i += 2
+        return "    ${cpp_safe_name(inst.dest)} = {${rendered.join(", ")}};"
+    elif inst.kind == "move":
+        return "    ${cpp_safe_name(inst.dest)} = ${cpp_safe_name(inst.text_a)};"
+    elif inst.kind == "unary":
+        return "    ${cpp_safe_name(inst.dest)} = ${cpp_operator(inst.text_a)}${cpp_safe_name(inst.text_b)};"
+    elif inst.kind == "binary":
+        return "    ${cpp_safe_name(inst.dest)} = ${cpp_safe_name(inst.text_b)} ${cpp_operator(inst.text_a)} ${cpp_safe_name(inst.text_c)};"
+    elif inst.kind == "call":
+        vector[string] rendered_args = []
+        for ref arg in inst.args:
+            rendered_args.push(cpp_safe_name(arg))
+        return "    ${cpp_safe_name(inst.dest)} = ${inst.call_target.name}(${rendered_args.join(", ")});"
+    elif inst.kind == "call_auto":
+        vector[string] rendered_args = []
+        for ref arg in inst.args:
+            rendered_args.push(cpp_safe_name(arg))
+        return "    auto ${cpp_safe_name(inst.dest)} = ${inst.call_target.name}(${rendered_args.join(", ")});"
+    elif inst.kind == "call_void":
+        vector[string] rendered_args = []
+        for ref arg in inst.args:
+            rendered_args.push(cpp_safe_name(arg))
+        return "    ${inst.call_target.name}(${rendered_args.join(", ")});"
+    elif inst.kind == "get_field":
+        return "    ${cpp_safe_name(inst.dest)} = ${cpp_safe_name(inst.text_a)}.${inst.text_b};"
+    elif inst.kind == "set_field":
+        return "    ${cpp_safe_name(inst.text_a)}.${inst.text_b} = ${cpp_safe_name(inst.text_c)};"
+    elif inst.kind == "index":
+        return "    ${cpp_safe_name(inst.dest)} = ${cpp_safe_name(inst.text_a)}[${cpp_safe_name(inst.text_b)}];"
+    elif inst.kind == "index_set":
+        return "    ${cpp_safe_name(inst.text_a)}[${cpp_safe_name(inst.text_b)}] = ${cpp_safe_name(inst.text_c)};"
+    elif inst.kind == "convert":
+        return "    ${cpp_safe_name(inst.dest)} = static_cast<${cpp_type_from_ir(inst.value_type)}>(${cpp_safe_name(inst.text_a)});"
+    elif inst.kind == "bind_auto":
+        return "    auto ${cpp_safe_name(inst.dest)} = ${inst.text_a};"
+    elif inst.kind == "enum_is":
+        return "    ${cpp_safe_name(inst.dest)} = std::holds_alternative<std::decay_t<decltype(${cpp_safe_name(inst.text_a)})>::${inst.text_b}>(${cpp_safe_name(inst.text_a)}._data);"
+    elif inst.kind == "enum_get":
+        return "    ${cpp_safe_name(inst.dest)} = std::get<std::decay_t<decltype(${cpp_safe_name(inst.text_a)})>::${inst.text_b}>(${cpp_safe_name(inst.text_a)}._data).${inst.text_c};"
+    return "    /* unknown inst */"
+
+vector[string] fn cpp_render_terminator(ref IrTerminator term, bool is_entry, ref string return_type):
+    vector[string] lines = []
+    if term.kind == "jump":
+        lines.push("    goto ${term.text_a};")
+    elif term.kind == "branch":
+        lines.push("    if (${cpp_safe_name(term.text_a)}) goto ${term.text_b}; else goto ${term.text_c};")
+    elif term.kind == "return_void":
+        if is_entry:
+            lines.push("    return 0;")
+        elif return_type == "void":
+            lines.push("    return;")
+        else:
+            lines.push("    return {};")
+    elif term.kind == "return_value":
+        lines.push("    return ${cpp_safe_name(term.text_a)};")
+    else:
+        lines.push("    std::abort();")
+    return lines
+
+CppFunction fn cpp_lower_function(ref IrFunction fn_ir):
+    vector[CppParam] params = []
+    vector[CppLocal] locals = []
+    vector[string] body_lines = []
+    for ref param in fn_ir.params:
+        string param_type = cpp_type_from_ir(param.param_type)
+        if param.name == "self":
+            param_type = "${param_type}&"
+        params.push(CppParam(cpp_safe_name(param.name), param_type))
+    for ref local in fn_ir.locals:
+        bool is_param = false
+        for ref param in fn_ir.params:
+            if param.name == local.name:
+                is_param = true
+        if not is_param:
+            string local_type = cpp_type_from_ir(local.local_type)
+            if local_type == "auto":
+                local_type = "std::any"
+            locals.push(CppLocal(cpp_safe_name(local.name), local_type))
+    for ref block in fn_ir.blocks:
+        cpp_push_line(body_lines, "  ${block.name}:")
+        for ref inst in block.instructions:
+            cpp_push_line(body_lines, cpp_render_inst(inst))
+        auto term_lines = cpp_render_terminator(block.terminator, fn_ir.is_entry, cpp_type_from_ir(fn_ir.return_type))
+        for ref line in term_lines:
+            cpp_push_line(body_lines, line)
+    string return_type = cpp_type_from_ir(fn_ir.return_type)
+    string fn_name = fn_ir.name
+    if fn_ir.is_entry:
+        return_type = "int"
+        fn_name = "main"
+    return CppFunction(fn_name, return_type, params, locals, body_lines, fn_ir.is_entry)
+
+string fn cpp_expr_literal(ref Expr expr):
+    match expr:
+        Literal(kind, value):
+            if kind == "string":
+                return "\"${cpp_escape_string(value)}\""
+            return value
+        Unary(op, right):
+            return "${cpp_operator(op.lexeme)}${cpp_expr_literal(right)}"
+        Variable(name):
+            return name.lexeme
+        Vector(elements):
+            vector[string] rendered = []
+            for ref el in elements:
+                rendered.push(cpp_expr_literal(el))
+            return "{${rendered.join(", ")}}"
+        Call(callee, paren, args, arg_names):
+            vector[string] rendered_args = []
+            for ref arg in args:
+                rendered_args.push(cpp_expr_literal(arg))
+            match callee:
+                Variable(name):
+                    return "${name.lexeme}(${rendered_args.join(", ")})"
+                _:
+                    return "{}"
+        _:
+            return "{}"
+
+string fn cpp_typed_expr_literal(ref TypedExpr expr):
+    if expr.kind == "literal":
+        if expr.text_a == "string":
+            return "\"${cpp_escape_string(expr.text_b)}\""
+        return expr.text_b
+    elif expr.kind == "unary":
+        return "${cpp_operator(expr.text_a)}${cpp_typed_expr_literal(expr.children[0])}"
+    elif expr.kind == "variable":
+        return expr.text_a
+    elif expr.kind == "vector":
+        vector[string] rendered = []
+        for ref el in expr.children:
+            rendered.push(cpp_typed_expr_literal(el))
+        return "{${rendered.join(", ")}}"
+    elif expr.kind == "call":
+        vector[string] rendered_args = []
+        for ref arg in expr.children:
+            rendered_args.push(cpp_typed_expr_literal(arg))
+        return "${expr.call_target.lowered_name}(${rendered_args.join(", ")})"
+    return "{}"
+
+string fn cpp_indent(int level):
+    string out = ""
+    for i in 0..level:
+        out += "    "
+    return out
+
+class TypedLambdaCppRenderer:
+    vector[vector[TypedStmt]] lambda_blocks
+
+    constructor(ref vector[vector[TypedStmt]] lambda_blocks):
+        this.lambda_blocks = lambda_blocks
+
+    string fn render_param(ref Param param):
+        string cpp_type = cpp_type_from_type_node(param.param_type)
+        if param.is_mut and param.is_ref:
+            return "${cpp_type}& ${param.name.lexeme}"
+        elif param.is_ref:
+            return "const ${cpp_type}& ${param.name.lexeme}"
+        return "${cpp_type} ${param.name.lexeme}"
+
+    string fn render_expr(ref TypedExpr expr):
+        if expr.kind == "literal":
+            return cpp_typed_expr_literal(expr)
+        elif expr.kind == "variable":
+            return expr.text_a
+        elif expr.kind == "grouping":
+            return "(${this.render_expr(expr.children[0])})"
+        elif expr.kind == "unary":
+            return "${cpp_operator(expr.text_a)}${this.render_expr(expr.children[0])}"
+        elif expr.kind == "binary" or expr.kind == "logical":
+            string left = this.render_expr(expr.children[0])
+            string right = this.render_expr(expr.children[1])
+            return "(${left} ${cpp_operator(expr.text_a)} ${right})"
+        elif expr.kind == "assign":
+            return "${expr.text_a} = ${this.render_expr(expr.children[0])}"
+        elif expr.kind == "call":
+            vector[string] rendered_args = []
+            for ref arg in expr.children:
+                rendered_args.push(this.render_expr(arg))
+            return "${expr.call_target.lowered_name}(${rendered_args.join(", ")})"
+        elif expr.kind == "get":
+            return "${this.render_expr(expr.children[0])}.${expr.text_a}"
+        elif expr.kind == "set":
+            return "${this.render_expr(expr.children[0])}.${expr.text_a} = ${this.render_expr(expr.children[1])}"
+        elif expr.kind == "index":
+            return "${this.render_expr(expr.children[0])}[${this.render_expr(expr.children[1])}]"
+        elif expr.kind == "index_set":
+            return "${this.render_expr(expr.children[0])}[${this.render_expr(expr.children[1])}] = ${this.render_expr(expr.children[2])}"
+        elif expr.kind == "cast":
+            return "static_cast<${cpp_type_from_type_node(expr.value_type)}>(${this.render_expr(expr.children[0])})"
+        elif expr.kind == "vector":
+            vector[string] parts = []
+            for ref child in expr.children:
+                parts.push(this.render_expr(child))
+            return "{${parts.join(", ")}}"
+        elif expr.kind == "map":
+            vector[string] parts = []
+            for i in 0..expr.children.len():
+                parts.push("{${this.render_expr(expr.children[i])}, ${this.render_expr(expr.extra_children[i])}}")
+            return "{${parts.join(", ")}}"
+        elif expr.kind == "lambda":
+            match expr.node:
+                Lambda(params, body):
+                    vector[string] param_parts = []
+                    for ref param in params:
+                        param_parts.push(this.render_param(param))
+                    string body_expr = "{}"
+                    if expr.children.len() > 0:
+                        body_expr = this.render_expr(expr.children[0])
+                    return "[&](${param_parts.join(", ")}) { return ${body_expr}; }"
+                _:
+                    return "[&]() {}"
+        elif expr.kind == "block_lambda":
+            match expr.node:
+                BlockLambda(params, body_id):
+                    if body_id >= 0 and body_id < this.lambda_blocks.len():
+                        vector[string] param_parts = []
+                        for ref param in params:
+                            param_parts.push(this.render_param(param))
+                        string out = "[&](${param_parts.join(", ")}) {\n"
+                        for ref stmt in this.lambda_blocks[body_id]:
+                            out += this.render_stmt(stmt, 1)
+                        out += "}"
+                        return out
+                _:
+                    pass
+            return "[&]() {}"
+        return "{}"
+
+    string fn render_stmt(ref TypedStmt stmt, int indent_level):
+        string indent = cpp_indent(indent_level)
+        if stmt.kind == "expr_stmt":
+            if stmt.exprs.len() == 0:
+                return ""
+            return "${indent}${this.render_expr(stmt.exprs[0])};\n"
+        elif stmt.kind == "let":
+            string declared_type = cpp_type_from_type_node(stmt.value_type)
+            if stmt.exprs.len() == 0 or stmt.exprs[0].kind == "none":
+                return "${indent}${declared_type} ${stmt.text_a};\n"
+            return "${indent}${declared_type} ${stmt.text_a} = ${this.render_expr(stmt.exprs[0])};\n"
+        elif stmt.kind == "const":
+            string declared_type = cpp_type_from_type_node(stmt.value_type)
+            if stmt.exprs.len() == 0 or stmt.exprs[0].kind == "none":
+                return "${indent}const ${declared_type} ${stmt.text_a};\n"
+            return "${indent}const ${declared_type} ${stmt.text_a} = ${this.render_expr(stmt.exprs[0])};\n"
+        elif stmt.kind == "return":
+            if stmt.exprs.len() == 0 or stmt.exprs[0].kind == "none":
+                return "${indent}return;\n"
+            return "${indent}return ${this.render_expr(stmt.exprs[0])};\n"
+        elif stmt.kind == "block":
+            string out = "${indent}{\n"
+            for ref child in stmt.children:
+                out += this.render_stmt(child, indent_level + 1)
+            out += "${indent}}\n"
+            return out
+        elif stmt.kind == "if":
+            string out = "${indent}if (${this.render_expr(stmt.exprs[0])}) "
+            if stmt.children.len() > 0 and stmt.children[0].kind == "block":
+                out += this.render_stmt(stmt.children[0], indent_level)
+            else:
+                out += "{\n"
+                if stmt.children.len() > 0:
+                    out += this.render_stmt(stmt.children[0], indent_level + 1)
+                out += "${indent}}\n"
+            if stmt.children.len() > 1 and stmt.children[1].kind != "none":
+                out = out.substring(0, out.len() - 1)
+                out += " else "
+                if stmt.children[1].kind == "block":
+                    out += this.render_stmt(stmt.children[1], indent_level)
+                else:
+                    out += "{\n"
+                    out += this.render_stmt(stmt.children[1], indent_level + 1)
+                    out += "${indent}}\n"
+            return out
+        elif stmt.kind == "while":
+            string out = "${indent}while (${this.render_expr(stmt.exprs[0])}) "
+            if stmt.children.len() > 0 and stmt.children[0].kind == "block":
+                out += this.render_stmt(stmt.children[0], indent_level)
+            else:
+                out += "{\n"
+                if stmt.children.len() > 0:
+                    out += this.render_stmt(stmt.children[0], indent_level + 1)
+                out += "${indent}}\n"
+            return out
+        elif stmt.kind == "break":
+            return "${indent}break;\n"
+        elif stmt.kind == "continue":
+            return "${indent}continue;\n"
+        elif stmt.kind == "pass":
+            return ""
+        return "${indent}/* unsupported lambda stmt */\n"
+ 
+string fn cpp_render_typed_expr_inline(ref TypedExpr expr, ref vector[vector[TypedStmt]] lambda_blocks):
+    auto renderer = TypedLambdaCppRenderer(lambda_blocks)
+    return renderer.render_expr(expr)
+
+CppStruct fn cpp_lower_struct(ref TypedStructInfo struct_info):
+    vector[CppField] fields = []
+    vector[CppParam] constructor_params = []
+    vector[string] constructor_defaults = []
+    vector[string] init_fields = []
+    vector[string] constructor_body_lines = []
+    for ref field in struct_info.fields:
+        fields.push(CppField(field.name, cpp_type_from_type_node(field.field_type)))
+    for ref param in struct_info.constructor_params:
+        constructor_params.push(CppParam(param.name.lexeme, cpp_type_from_type_node(param.param_type)))
+    for ref default_expr in struct_info.constructor_defaults:
+        match default_expr:
+            None():
+                constructor_defaults.push("")
+            _:
+                constructor_defaults.push(cpp_expr_literal(default_expr))
+    for ref stmt in struct_info.constructor_body:
+        if stmt.kind == "expr_stmt" and stmt.exprs.len() > 0:
+            ref auto expr = stmt.exprs[0]
+            if expr.kind == "set" and expr.children.len() >= 2:
+                ref auto object = expr.children[0]
+                ref auto value = expr.children[1]
+                if object.kind == "this":
+                    if value.kind == "variable":
+                        init_fields.push("${expr.text_a}(${value.text_a})")
+                    else:
+                        constructor_body_lines.push("        ${expr.text_a} = ${cpp_typed_expr_literal(value)};")
+    return CppStruct(struct_info.name, fields, constructor_params, constructor_defaults, init_fields, constructor_body_lines)
+
+CppEnum fn cpp_lower_enum(ref TypedEnumInfo enum_info, bool has_to_string):
+    vector[CppEnumVariant] variants = []
+    for ref variant in enum_info.variants:
+        vector[CppField] fields = []
+        for i in 0..variant.types.len():
+            fields.push(CppField(variant.field_names[i], cpp_type_from_type_node(variant.types[i])))
+        variants.push(CppEnumVariant(variant.name, fields))
+    return CppEnum(enum_info.name, variants, has_to_string)
+
+CppModule fn cpp_lower_module(ref TypedProgram program, ref IrModule module_ir):
+    vector[string] includes = ["#include \"lavina.h\""]
+    vector[CppStruct] structs = []
+    vector[CppEnum] enums = []
+    vector[CppFunction] functions = []
+    for ref struct_info in program.structs:
+        structs.push(cpp_lower_struct(struct_info))
+    for ref enum_info in program.enums:
+        bool has_to_string = false
+        for ref fn_ir in module_ir.functions:
+            if fn_ir.name == "${enum_info.name}__to_string":
+                has_to_string = true
+        enums.push(cpp_lower_enum(enum_info, has_to_string))
+    for ref fn_ir in module_ir.functions:
+        if fn_ir.name == "__module_init":
+            continue
+        functions.push(cpp_lower_function(fn_ir))
+    return CppModule(includes, structs, enums, functions)
+
+string fn cpp_render_struct(ref CppStruct struct_model):
+    vector[string] lines = []
+    lines.push("struct ${struct_model.name} {")
+    for ref field in struct_model.fields:
+        lines.push("    ${field.field_type} ${field.name};")
+    lines.push("")
+    lines.push("    ${struct_model.name}() = default;")
+    if struct_model.constructor_params.len() > 0:
+        vector[string] params = []
+        for i in 0..struct_model.constructor_params.len():
+            string param = "${struct_model.constructor_params[i].param_type} ${struct_model.constructor_params[i].name}"
+            if i < struct_model.constructor_defaults.len() and struct_model.constructor_defaults[i] != "":
+                param += " = ${struct_model.constructor_defaults[i]}"
+            params.push(param)
+        if struct_model.init_fields.len() > 0:
+            lines.push("")
+            lines.push("    ${struct_model.name}(${params.join(", ")}) : ${struct_model.init_fields.join(", ")} {")
+            for ref line in struct_model.constructor_body_lines:
+                lines.push(line)
+            lines.push("    }")
+        else:
+            lines.push("")
+            lines.push("    ${struct_model.name}(${params.join(", ")}) {")
+            for ref line in struct_model.constructor_body_lines:
+                lines.push(line)
+            lines.push("    }")
+    lines.push("};")
+    return lines.join("\n")
+
+string fn cpp_render_enum(ref CppEnum enum_model):
+    vector[string] lines = []
+    lines.push("struct ${enum_model.name} {")
+    for ref variant in enum_model.variants:
+        if variant.fields.len() == 0:
+            lines.push("    struct ${variant.name} {};")
+        else:
+            vector[string] field_parts = []
+            for ref field in variant.fields:
+                field_parts.push("${field.field_type} ${field.name};")
+            lines.push("    struct ${variant.name} { ${field_parts.join(" ")} };")
+    lines.push("")
+    lines.push("    std::string _tag;")
+    vector[string] variant_types = []
+    for ref variant in enum_model.variants:
+        variant_types.push("${enum_model.name}::${variant.name}")
+    lines.push("    std::variant<${variant_types.join(", ")}> _data;")
+    lines.push("")
+    for ref variant in enum_model.variants:
+        if variant.fields.len() == 0:
+            lines.push("    static ${enum_model.name} make_${variant.name}() { return {\"${variant.name}\", ${variant.name}{}}; }")
+        else:
+            vector[string] params = []
+            vector[string] args = []
+            for ref field in variant.fields:
+                params.push("${field.field_type} ${field.name}")
+                args.push(field.name)
+            lines.push("    static ${enum_model.name} make_${variant.name}(${params.join(", ")}) { return {\"${variant.name}\", ${variant.name}{${args.join(", ")}}}; }")
+    lines.push("")
+    lines.push("    std::string operator[](const std::string& key) const {")
+    lines.push("        if (key == \"_tag\") return _tag;")
+    lines.push("        return \"\";")
+    lines.push("    }")
+    lines.push("};")
+    if enum_model.has_to_string:
+        lines.push("std::string ${enum_model.name}__to_string(${enum_model.name}& self);")
+        lines.push("inline void print(const ${enum_model.name}& _v) { std::cout << ${enum_model.name}__to_string(const_cast<${enum_model.name}&>(_v)) << std::endl; }")
+        lines.push("inline std::string operator+(const std::string& _s, const ${enum_model.name}& _v) { return _s + ${enum_model.name}__to_string(const_cast<${enum_model.name}&>(_v)); }")
+        lines.push("inline std::string operator+(const ${enum_model.name}& _v, const std::string& _s) { return ${enum_model.name}__to_string(const_cast<${enum_model.name}&>(_v)) + _s; }")
+    else:
+        lines.push("inline void print(const ${enum_model.name}& _v) { std::cout << \"${enum_model.name}(\" << _v._tag << \")\" << std::endl; }")
+        lines.push("inline std::string operator+(const std::string& _s, const ${enum_model.name}& _v) { return _s + _v._tag; }")
+        lines.push("inline std::string operator+(const ${enum_model.name}& _v, const std::string& _s) { return _v._tag + _s; }")
+    return lines.join("\n")
+
+string fn cpp_render_function(ref CppFunction fn_model):
+    vector[string] lines = []
+    vector[string] params = []
+    for ref param in fn_model.params:
+        params.push("${param.param_type} ${param.name}")
+    lines.push("${fn_model.return_type} ${fn_model.name}(${params.join(", ")}) {")
+    for ref local in fn_model.locals:
+        lines.push("    ${local.local_type} ${local.name};")
+    if fn_model.locals.len() > 0 and fn_model.body_lines.len() > 0:
+        lines.push("")
+    for ref line in fn_model.body_lines:
+        lines.push(line)
+    lines.push("}")
+    return lines.join("\n")
+
+string fn cpp_render_function_decl(ref CppFunction fn_model):
+    vector[string] params = []
+    for ref param in fn_model.params:
+        params.push("${param.param_type} ${param.name}")
+    return "${fn_model.return_type} ${fn_model.name}(${params.join(", ")});"
+
+string fn cpp_render_module(ref CppModule module_model):
+    vector[string] lines = []
+    for ref inc in module_model.includes:
+        lines.push(inc)
+    lines.push("")
+    for i in 0..module_model.structs.len():
+        lines.push(cpp_render_struct(module_model.structs[i]))
+        lines.push("")
+    for i in 0..module_model.enums.len():
+        lines.push(cpp_render_enum(module_model.enums[i]))
+        lines.push("")
+    for ref function_model in module_model.functions:
+        lines.push(cpp_render_function_decl(function_model))
+    if module_model.functions.len() > 0:
+        lines.push("")
+    for i in 0..module_model.functions.len():
+        lines.push(cpp_render_function(module_model.functions[i]))
+        if i + 1 < module_model.functions.len():
+            lines.push("")
+    return lines.join("\n")
+
+string fn lower_ir_to_cpp(ref TypedProgram program, ref IrModule module_ir):
+    auto module_model = cpp_lower_module(program, module_ir)
+    return cpp_render_module(module_model)

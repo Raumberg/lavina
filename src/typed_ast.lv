@@ -1,0 +1,76 @@
+import ast
+import typed_calls
+
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — Typed Frontend Boundary
+//  Bootstrap-friendly typed tree wrappers over normalized AST.
+// ═══════════════════════════════════════════════════════════════
+
+struct TypedExpr:
+    string kind
+    Expr node
+    TypeNode value_type
+    TypedCallTarget call_target
+    vector[TypedExpr] children
+    vector[TypedExpr] extra_children
+    string text_a
+    string text_b
+
+TypeNode fn typed_expr_type(ref TypedExpr expr):
+    return expr.value_type
+
+TypedExpr fn typed_expr_none():
+    vector[TypedExpr] empty = []
+    return TypedExpr("none", Expr::None(), TypeNode::None(), typed_call_target_none(), empty, empty, "", "")
+
+struct TypedStmt:
+    string kind
+    Stmt node
+    TypeNode value_type
+    string text_a
+    string text_b
+    vector[string] names
+    vector[vector[string]] name_groups
+    vector[TypedExpr] exprs
+    vector[TypedStmt] children
+
+TypedStmt fn typed_stmt_none():
+    vector[string] empty_names = []
+    vector[vector[string]] empty_name_groups = []
+    vector[TypedExpr] empty_exprs = []
+    vector[TypedStmt] empty_children = []
+    return TypedStmt("none", Stmt::None(), TypeNode::None(), "", "", empty_names, empty_name_groups, empty_exprs, empty_children)
+
+struct TypedFunctionInfo:
+    string name
+    vector[Param] params
+    TypeNode return_type
+    vector[TypedStmt] body
+
+struct TypedStructField:
+    string name
+    TypeNode field_type
+
+struct TypedStructInfo:
+    string name
+    vector[TypedStructField] fields
+    vector[Param] constructor_params
+    vector[Expr] constructor_defaults
+    vector[TypedStmt] constructor_body
+
+struct TypedEnumVariant:
+    string name
+    vector[TypeNode] types
+    vector[string] field_names
+
+struct TypedEnumInfo:
+    string name
+    vector[TypedEnumVariant] variants
+
+struct TypedProgram:
+    string name
+    vector[TypedStmt] top_level
+    vector[TypedFunctionInfo] functions
+    vector[TypedStructInfo] structs
+    vector[TypedEnumInfo] enums
+    vector[vector[TypedStmt]] lambda_blocks

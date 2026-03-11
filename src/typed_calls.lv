@@ -1,0 +1,123 @@
+import ast
+import checker
+import intrinsics
+
+enum TypedCallTargetKind:
+    None
+    DirectFunction
+    Intrinsic
+    DirectConstructor
+    Indirect
+
+struct TypedCallTarget:
+    TypedCallTargetKind kind
+    string source_name
+    string lowered_name
+    IntrinsicId intrinsic
+
+TypedCallTarget fn typed_call_target_none():
+    return TypedCallTarget(TypedCallTargetKind::None(), "", "", IntrinsicId::None())
+
+TypedCallTarget fn typed_call_target_function(string name):
+    return TypedCallTarget(TypedCallTargetKind::DirectFunction(), name, name, IntrinsicId::None())
+
+TypedCallTarget fn typed_call_target_intrinsic(ref IntrinsicId intrinsic):
+    string name = intrinsic_runtime_name(intrinsic)
+    return TypedCallTarget(TypedCallTargetKind::Intrinsic(), name, name, intrinsic)
+
+TypedCallTarget fn typed_call_target_constructor(string name):
+    return TypedCallTarget(TypedCallTargetKind::DirectConstructor(), name, name, IntrinsicId::None())
+
+TypedCallTarget fn typed_call_target_indirect(string name):
+    return TypedCallTarget(TypedCallTargetKind::Indirect(), name, name, IntrinsicId::None())
+
+string fn typed_method_name(string struct_name, string method_name):
+    return "${struct_name}__${method_name}"
+
+bool fn typed_call_is_intrinsic(ref TypedCallTarget target):
+    match target.kind:
+        Intrinsic():
+            return true
+        _:
+            return false
+
+bool fn typed_call_is_function_like(ref TypedCallTarget target):
+    match target.kind:
+        DirectFunction():
+            return true
+        DirectConstructor():
+            return true
+        _:
+            return false
+
+TypedCallTarget fn typed_call_target_from_surface(ref Checker checker, ref Expr callee, ref TypeNode object_type):
+    match callee:
+        Variable(name):
+            string stdlib_name = stdlib_runtime_name(name.lexeme)
+            if stdlib_name != "":
+                return typed_call_target_function(stdlib_name)
+            IntrinsicId intrinsic = intrinsic_from_name(name.lexeme)
+            match intrinsic:
+                None():
+                    pass
+                _:
+                    return typed_call_target_intrinsic(intrinsic)
+            if checker.known_funcs.has(name.lexeme):
+                return typed_call_target_function(name.lexeme)
+            if checker.known_classes.has(name.lexeme):
+                return typed_call_target_constructor(name.lexeme)
+            return typed_call_target_indirect(name.lexeme)
+        Get(object, name):
+            IntrinsicId collection_intrinsic = intrinsic_collection_method_id(object_type, name.lexeme)
+            match collection_intrinsic:
+                None():
+                    pass
+                _:
+                    return typed_call_target_intrinsic(collection_intrinsic)
+            string stdlib_name = stdlib_collection_method_runtime_name(object_type, name.lexeme)
+            if stdlib_name != "":
+                return typed_call_target_function(stdlib_name)
+            match object_type:
+                Custom(struct_name, type_args):
+                    if checker.known_classes.has(struct_name):
+                        return typed_call_target_function(typed_method_name(struct_name, name.lexeme))
+                    if checker.known_enums.has(struct_name):
+                        return typed_call_target_function(typed_method_name(struct_name, name.lexeme))
+                _:
+                    pass
+            return typed_call_target_indirect(name.lexeme)
+        StaticGet(object, name):
+            match object:
+                Variable(obj_name):
+                    string stdlib_name = stdlib_runtime_name(name.lexeme)
+                    if stdlib_name != "":
+                        return typed_call_target_function(stdlib_name)
+                    if checker.known_enums.has(obj_name.lexeme):
+                        return typed_call_target_function("${obj_name.lexeme}::make_${name.lexeme}")
+                _:
+                    pass
+            return typed_call_target_indirect(name.lexeme)
+        _:
+            return typed_call_target_indirect("")
+
+TypedCallTarget fn typed_call_target_from_normalized_callee(ref Expr callee):
+    match callee:
+        Variable(name):
+            IntrinsicId intrinsic = intrinsic_from_name(name.lexeme)
+            match intrinsic:
+                None():
+                    pass
+                _:
+                    return typed_call_target_intrinsic(intrinsic)
+            if name.lexeme.contains("::"):
+                return typed_call_target_function(name.lexeme)
+            if name.lexeme.contains("__"):
+                return typed_call_target_function(name.lexeme)
+            return typed_call_target_function(name.lexeme)
+        _:
+            return typed_call_target_indirect("")
+
+Expr fn typed_call_expr(ref TypedCallTarget target, ref Token paren, ref vector[Expr] args):
+    vector[string] empty_arg_names = []
+    Token callee_name = Token(TK_IDENTIFIER, target.lowered_name, paren.line, paren.col)
+    return Expr::Call(Expr::Variable(callee_name), paren, args, empty_arg_names)

@@ -356,6 +356,16 @@ class Checker:
                 this.known_classes[name.lexeme] = body
             Enum(name, variants, methods, visibility, enum_tp):
                 this.known_enums[name.lexeme] = variants
+                for ref method in methods:
+                    match method:
+                        Function(method_name, params, return_type, body, is_inline, comptime_mode, is_static, method_visibility, type_params, param_defaults):
+                            vector[Param] lowered_params = [Param(Token(TK_IDENTIFIER, "self", name.line, name.col), TypeNode::Custom(name.lexeme, []), true, true)]
+                            for ref param in params:
+                                lowered_params.push(param)
+                            string lowered_name = "${name.lexeme}__${method_name.lexeme}"
+                            this.known_funcs[lowered_name] = ExternFn(lowered_name, lowered_name, return_type, lowered_params, param_defaults)
+                        _:
+                            pass
             Const(name, const_type, value, visibility, comptime_mode):
                 this.declare(name.lexeme, const_type, "const", false, false, name)
             Struct(name, body, visibility, struct_tp):

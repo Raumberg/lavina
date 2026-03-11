@@ -1,0 +1,733 @@
+import ast
+import backend_cpp
+import intrinsics
+import ir
+import typed_ast
+import type_utils
+
+struct LoweredValue:
+    string name
+    IrType value_type
+
+struct IrLowerResult:
+    IrModule module
+    vector[string] errors
+
+class IrLowerer:
+    int temp_counter
+    int block_counter
+    vector[string] errors
+    vector[IrBlock] active_blocks
+    int current_block
+    vector[IrLocal] active_locals
+    hashmap[string, IrType] local_types
+    hashmap[string, IrType] struct_field_types
+    hashmap[string, IrType] call_return_types
+    hashmap[string, vector[TypedEnumVariant]] enum_variants
+    vector[vector[TypedStmt]] lambda_blocks
+    IrType current_return_type
+    vector[string] break_targets
+    vector[string] continue_targets
+
+    constructor():
+        this.temp_counter = 0
+        this.block_counter = 0
+        this.errors = []
+        this.active_blocks = []
+        this.current_block = 0
+        this.active_locals = []
+        this.local_types = {}
+        this.struct_field_types = {}
+        this.call_return_types = {}
+        this.enum_variants = {}
+        this.lambda_blocks = []
+        this.current_return_type = ir_type("void")
+        this.break_targets = []
+        this.continue_targets = []
+
+    string fn next_temp():
+        string name = "%${this.temp_counter}"
+        this.temp_counter += 1
+        return name
+
+    string fn new_temp(IrType value_type):
+        string name = this.next_temp()
+        this.declare_local(name, value_type)
+        return name
+
+    string fn next_block_name(string prefix):
+        string name = "${prefix}${this.block_counter}"
+        this.block_counter += 1
+        return name
+
+    int fn create_block(string prefix):
+        string name = this.next_block_name(prefix)
+        vector[IrInst] instructions = []
+        this.active_blocks.push(IrBlock(name, instructions, ir_term_none()))
+        return this.active_blocks.len() - 1
+
+    bool fn block_terminated(int index):
+        return this.active_blocks[index].terminator.kind != "none"
+
+    void fn emit(IrInst inst):
+        ref! auto block = this.active_blocks[this.current_block]
+        block.instructions.push(inst)
+
+    void fn terminate(IrTerminator term):
+        ref! auto block = this.active_blocks[this.current_block]
+        block.terminator = term
+
+    void fn switch_to(int index):
+        this.current_block = index
+
+    void fn declare_local(string name, IrType local_type):
+        if this.local_types.has(name):
+            return
+        this.local_types[name] = local_type
+        this.active_locals.push(IrLocal(name, local_type))
+
+    IrType fn lower_type(ref TypeNode t):
+        match t:
+            Void():
+                return ir_type("void")
+            Bool():
+                return ir_type("bool")
+            Int():
+                return ir_type("int")
+            Int8():
+                return ir_type("int8")
+            Int16():
+                return ir_type("int16")
+            Int32():
+                return ir_type("int32")
+            USize():
+                return ir_type("usize")
+            Float():
+                return ir_type("float")
+            Float32():
+                return ir_type("float32")
+            Str():
+                return ir_type("string")
+            Bytes():
+                return ir_type("bytes")
+            Auto():
+                return ir_type("auto")
+            Dynamic():
+                return ir_type("dynamic")
+            NullType():
+                return ir_type("?auto")
+            CString():
+                return ir_type("*char")
+            Ptr(inner):
+                return ir_type("*${ir_type_to_string(this.lower_type(inner))}")
+            Nullable(inner):
+                return ir_type("?${ir_type_to_string(this.lower_type(inner))}")
+            Array(inner):
+                return ir_type("array[${ir_type_to_string(this.lower_type(inner))}]")
+            HashSet(inner):
+                return ir_type("set[${ir_type_to_string(this.lower_type(inner))}]")
+            HashMap(key_type, value_type):
+                return ir_type("map[${ir_type_to_string(this.lower_type(key_type))}, ${ir_type_to_string(this.lower_type(value_type))}]")
+            Custom(name, type_args):
+                if type_args.len() == 0:
+                    return ir_type(name)
+                vector[string] parts = []
+                for ref arg in type_args:
+                    parts.push(ir_type_to_string(this.lower_type(arg)))
+                return ir_type("${name}<${parts.join(", ")}>")
+            None():
+                return ir_type("auto")
+
+    IrType fn infer_binary_type(ref LoweredValue left, ref Token op, ref LoweredValue right):
+        if op.token_type == TK_EQUAL_EQUAL or op.token_type == TK_BANG_EQUAL or op.token_type == TK_LESS or op.token_type == TK_LESS_EQUAL or op.token_type == TK_GREATER or op.token_type == TK_GREATER_EQUAL or op.token_type == TK_AND or op.token_type == TK_OR:
+            return ir_type("bool")
+        if left.value_type.name == "string" or right.value_type.name == "string":
+            return ir_type("string")
+        if left.value_type.name == "float" or right.value_type.name == "float":
+            return ir_type("float")
+        return left.value_type
+
+    IrType fn element_type(ref IrType container_type):
+        return intrinsic_ir_element_type(container_type)
+
+    TypedEnumVariant fn enum_variant_info(string enum_name, string variant_name):
+        vector[TypeNode] empty_types = []
+        vector[string] empty_fields = []
+        if this.enum_variants.has(enum_name):
+            for ref variant in this.enum_variants[enum_name]:
+                if variant.name == variant_name:
+                    return variant
+        return TypedEnumVariant("", empty_types, empty_fields)
+
+    string fn render_lambda_cpp(ref TypedExpr lambda_expr):
+        match lambda_expr.node:
+            Lambda(params, body):
+                return cpp_render_typed_expr_inline(lambda_expr, this.lambda_blocks)
+            BlockLambda(params, body_id):
+                return cpp_render_typed_expr_inline(lambda_expr, this.lambda_blocks)
+            _:
+                return "[&]() {}"
+
+    string fn new_bound_auto(string expr_text):
+        string name = this.next_temp()
+        this.emit(ir_bind_auto(name, expr_text))
+        return name
+
+    IrCallTarget fn lower_typed_call_target(ref TypedExpr expr):
+        match expr.call_target.kind:
+            Intrinsic():
+                return ir_call_target_intrinsic(expr.call_target.lowered_name)
+            DirectFunction():
+                return ir_call_target_function(expr.call_target.lowered_name)
+            DirectConstructor():
+                return ir_call_target_function(expr.call_target.lowered_name)
+            _:
+                return ir_call_target_indirect(expr.call_target.lowered_name)
+
+    vector[string] fn lower_call_args(ref TypedExpr expr):
+        vector[string] lowered_args = []
+        for ref arg in expr.children:
+            auto lowered_arg = this.lower_expr(arg)
+            lowered_args.push(lowered_arg.name)
+        return lowered_args
+
+    LoweredValue fn lower_call_expr(ref TypedExpr expr):
+        vector[string] lowered_args = this.lower_call_args(expr)
+        IrCallTarget call_target = this.lower_typed_call_target(expr)
+        IrType result_type = this.lower_type(expr.value_type)
+        if result_type.name == "auto" and this.call_return_types.has(expr.call_target.lowered_name):
+            result_type = this.call_return_types[expr.call_target.lowered_name]
+        if result_type.name == "auto" and this.current_return_type.name != "auto" and this.current_return_type.name != "void":
+            result_type = this.current_return_type
+        if result_type.name.contains("auto"):
+            string dest = this.next_temp()
+            this.emit(ir_call_auto(dest, call_target, lowered_args))
+            return LoweredValue(dest, ir_type("auto"))
+        string dest = this.new_temp(result_type)
+        this.emit(ir_call(dest, result_type, call_target, lowered_args))
+        return LoweredValue(dest, result_type)
+
+    vector[string] fn lower_vector_elements_with_hint(ref vector[TypedExpr] elements, ref IrType element_hint):
+        vector[string] lowered_elements = []
+        for ref element in elements:
+            match element.node:
+                Vector(inner_elements):
+                    if inner_elements.len() == 0 and element_hint.name != "auto":
+                        string empty_name = this.new_temp(element_hint)
+                        vector[string] empty_items = []
+                        this.emit(ir_vector_literal(empty_name, element_hint, empty_items))
+                        lowered_elements.push(empty_name)
+                    else:
+                        auto lowered_element = this.lower_expr(element)
+                        lowered_elements.push(lowered_element.name)
+                _:
+                    auto lowered_element = this.lower_expr(element)
+                    lowered_elements.push(lowered_element.name)
+        return lowered_elements
+
+    LoweredValue fn lower_expr(ref TypedExpr expr):
+        if expr.kind == "literal":
+            IrType lowered_type = this.lower_type(expr.value_type)
+            string dest = this.new_temp(lowered_type)
+            this.emit(ir_const(dest, lowered_type, expr.text_a, expr.text_b))
+            return LoweredValue(dest, lowered_type)
+        elif expr.kind == "variable":
+            IrType lowered_type = this.lower_type(expr.value_type)
+            if this.local_types.has(expr.text_a):
+                return LoweredValue(expr.text_a, this.local_types[expr.text_a])
+            return LoweredValue(expr.text_a, lowered_type)
+        elif expr.kind == "assign":
+            auto lowered_value = this.lower_expr(expr.children[0])
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                result_type = lowered_value.value_type
+            this.declare_local(expr.text_a, result_type)
+            this.emit(ir_move(expr.text_a, result_type, lowered_value.name))
+            return LoweredValue(expr.text_a, result_type)
+        elif expr.kind == "unary":
+            auto lowered_right = this.lower_expr(expr.children[0])
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                result_type = lowered_right.value_type
+            string dest = this.new_temp(result_type)
+            this.emit(ir_unary(dest, result_type, expr.text_a, lowered_right.name))
+            return LoweredValue(dest, result_type)
+        elif expr.kind == "binary":
+            auto lowered_left = this.lower_expr(expr.children[0])
+            auto lowered_right = this.lower_expr(expr.children[1])
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                Token fake_op = Token(TK_PLUS, expr.text_a, 0, 0)
+                result_type = this.infer_binary_type(lowered_left, fake_op, lowered_right)
+            string dest = this.new_temp(result_type)
+            IrType final_type = result_type
+            this.emit(ir_binary(dest, final_type, expr.text_a, lowered_left.name, lowered_right.name))
+            return LoweredValue(dest, final_type)
+        elif expr.kind == "logical":
+            auto lowered_left = this.lower_expr(expr.children[0])
+            auto lowered_right = this.lower_expr(expr.children[1])
+            string dest = this.new_temp(ir_type("bool"))
+            this.emit(ir_binary(dest, ir_type("bool"), expr.text_a, lowered_left.name, lowered_right.name))
+            return LoweredValue(dest, ir_type("bool"))
+        elif expr.kind == "grouping":
+            return this.lower_expr(expr.children[0])
+        elif expr.kind == "call":
+            return this.lower_call_expr(expr)
+        elif expr.kind == "get":
+            auto lowered_object = this.lower_expr(expr.children[0])
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                string field_key = "${lowered_object.value_type.name}.${expr.text_a}"
+                if this.struct_field_types.has(field_key):
+                    result_type = this.struct_field_types[field_key]
+            string dest = this.new_temp(result_type)
+            this.emit(ir_get_field(dest, result_type, lowered_object.name, expr.text_a))
+            return LoweredValue(dest, result_type)
+        elif expr.kind == "index":
+            auto lowered_object = this.lower_expr(expr.children[0])
+            auto lowered_index = this.lower_expr(expr.children[1])
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                result_type = this.element_type(lowered_object.value_type)
+            string dest = this.new_temp(result_type)
+            this.emit(ir_index(dest, result_type, lowered_object.name, lowered_index.name))
+            return LoweredValue(dest, result_type)
+        elif expr.kind == "index_set":
+            auto lowered_object = this.lower_expr(expr.children[0])
+            auto lowered_index = this.lower_expr(expr.children[1])
+            auto lowered_value = this.lower_expr(expr.children[2])
+            this.emit(ir_index_set(lowered_object.name, lowered_index.name, lowered_value.name))
+            return lowered_value
+        elif expr.kind == "vector":
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                result_type = ir_type("array[auto]")
+            vector[string] lowered_elements = []
+            vector[LoweredValue] lowered_values = []
+            if expr.children.len() > 0:
+                for ref element in expr.children:
+                    if element.kind == "vector" and element.children.len() == 0:
+                        lowered_values.push(LoweredValue("", ir_type("array[auto]")))
+                    else:
+                        lowered_values.push(this.lower_expr(element))
+                IrType element_type = this.element_type(result_type)
+                if element_type.name == "auto":
+                    for ref lowered_value in lowered_values:
+                        if lowered_value.value_type.name != "array[auto]" and lowered_value.value_type.name != "auto":
+                            element_type = lowered_value.value_type
+                if result_type.name == "array[auto]":
+                    result_type = ir_type("array[${ir_type_to_string(element_type)}]")
+                for ref lowered_value in lowered_values:
+                    if lowered_value.name == "":
+                        string empty_name = this.new_temp(element_type)
+                        vector[string] empty_items = []
+                        this.emit(ir_vector_literal(empty_name, element_type, empty_items))
+                        lowered_elements.push(empty_name)
+                    else:
+                        lowered_elements.push(lowered_value.name)
+            string dest = this.new_temp(result_type)
+            this.emit(ir_vector_literal(dest, result_type, lowered_elements))
+            return LoweredValue(dest, result_type)
+        elif expr.kind == "map":
+            IrType result_type = this.lower_type(expr.value_type)
+            if result_type.name == "auto":
+                result_type = ir_type("map[auto, auto]")
+            vector[string] lowered_items = []
+            if expr.children.len() > 0:
+                auto first_key = this.lower_expr(expr.children[0])
+                auto first_value = this.lower_expr(expr.extra_children[0])
+                if result_type.name == "map[auto, auto]":
+                    result_type = ir_type("map[${ir_type_to_string(first_key.value_type)}, ${ir_type_to_string(first_value.value_type)}]")
+                lowered_items.push(first_key.name)
+                lowered_items.push(first_value.name)
+                for i in 1..expr.children.len():
+                    auto lowered_key = this.lower_expr(expr.children[i])
+                    auto lowered_value = this.lower_expr(expr.extra_children[i])
+                    lowered_items.push(lowered_key.name)
+                    lowered_items.push(lowered_value.name)
+            string dest = this.new_temp(result_type)
+            this.emit(ir_map_literal(dest, result_type, lowered_items))
+            return LoweredValue(dest, result_type)
+        elif expr.kind == "set":
+            auto lowered_value = this.lower_expr(expr.children[1])
+            if expr.children[0].kind == "variable":
+                this.emit(ir_set_field(expr.children[0].text_a, expr.text_a, lowered_value.name))
+                return lowered_value
+            this.errors.push("Unsupported set target in IR lowering")
+            return lowered_value
+        elif expr.kind == "cast":
+            auto lowered_value = this.lower_expr(expr.children[0])
+            IrType result_type = this.lower_type(expr.value_type)
+            string dest = this.new_temp(result_type)
+            this.emit(ir_convert(dest, result_type, lowered_value.name))
+            return LoweredValue(dest, result_type)
+        elif expr.kind == "lambda" or expr.kind == "block_lambda":
+            string lambda_name = this.new_bound_auto(this.render_lambda_cpp(expr))
+            return LoweredValue(lambda_name, ir_type("auto"))
+        match expr.node:
+            _:
+                this.errors.push("Unsupported typed expression in IR lowering: ${expr.kind}")
+                string dest = this.new_temp(ir_type("auto"))
+                this.emit(ir_const(dest, ir_type("auto"), "error", "\"unsupported_expr\""))
+                return LoweredValue(dest, ir_type("auto"))
+
+    void fn lower_stmt(ref TypedStmt stmt):
+        if stmt.kind == "none":
+            return
+        elif stmt.kind == "expr_stmt":
+            if stmt.exprs.len() == 0:
+                return
+            if stmt.exprs[0].kind == "call":
+                vector[string] lowered_args = []
+                for ref arg in stmt.exprs[0].children:
+                    auto lowered_arg = this.lower_expr(arg)
+                    lowered_args.push(lowered_arg.name)
+                IrCallTarget call_target = this.lower_typed_call_target(stmt.exprs[0])
+                this.emit(ir_call_void(call_target, lowered_args))
+            else:
+                this.lower_expr(stmt.exprs[0])
+        elif stmt.kind == "let":
+            IrType declared_type = this.lower_type(stmt.value_type)
+            if stmt.exprs.len() == 0:
+                this.declare_local(stmt.text_a, declared_type)
+                return
+            auto initializer_expr = stmt.exprs[0]
+            if initializer_expr.kind == "none":
+                this.declare_local(stmt.text_a, declared_type)
+                return
+            elif initializer_expr.kind == "lambda" or initializer_expr.kind == "block_lambda":
+                this.emit(ir_bind_auto(stmt.text_a, this.render_lambda_cpp(initializer_expr)))
+            elif declared_type.name == "auto" and initializer_expr.kind == "call":
+                vector[string] lowered_args = this.lower_call_args(initializer_expr)
+                IrCallTarget call_target = this.lower_typed_call_target(initializer_expr)
+                this.emit(ir_call_auto(stmt.text_a, call_target, lowered_args))
+            elif initializer_expr.kind == "vector":
+                this.declare_local(stmt.text_a, declared_type)
+                IrType element_hint = this.element_type(declared_type)
+                vector[string] lowered_elements = this.lower_vector_elements_with_hint(initializer_expr.children, element_hint)
+                this.emit(ir_vector_literal(stmt.text_a, declared_type, lowered_elements))
+            elif initializer_expr.kind == "map":
+                this.declare_local(stmt.text_a, declared_type)
+                vector[string] lowered_items = []
+                for i in 0..initializer_expr.children.len():
+                    auto lowered_key = this.lower_expr(initializer_expr.children[i])
+                    auto lowered_value = this.lower_expr(initializer_expr.extra_children[i])
+                    lowered_items.push(lowered_key.name)
+                    lowered_items.push(lowered_value.name)
+                this.emit(ir_map_literal(stmt.text_a, declared_type, lowered_items))
+            else:
+                this.declare_local(stmt.text_a, declared_type)
+                auto lowered_value = this.lower_expr(initializer_expr)
+                this.emit(ir_move(stmt.text_a, declared_type, lowered_value.name))
+        elif stmt.kind == "const":
+            IrType declared_type = this.lower_type(stmt.value_type)
+            if stmt.exprs.len() == 0:
+                this.declare_local(stmt.text_a, declared_type)
+                return
+            auto value_expr = stmt.exprs[0]
+            if value_expr.kind == "lambda" or value_expr.kind == "block_lambda":
+                this.emit(ir_bind_auto(stmt.text_a, this.render_lambda_cpp(value_expr)))
+            elif declared_type.name == "auto" and value_expr.kind == "call":
+                vector[string] lowered_args = this.lower_call_args(value_expr)
+                IrCallTarget call_target = this.lower_typed_call_target(value_expr)
+                this.emit(ir_call_auto(stmt.text_a, call_target, lowered_args))
+            elif value_expr.kind == "vector":
+                this.declare_local(stmt.text_a, declared_type)
+                IrType element_hint = this.element_type(declared_type)
+                vector[string] lowered_elements = this.lower_vector_elements_with_hint(value_expr.children, element_hint)
+                this.emit(ir_vector_literal(stmt.text_a, declared_type, lowered_elements))
+            elif value_expr.kind == "map":
+                this.declare_local(stmt.text_a, declared_type)
+                vector[string] lowered_items = []
+                for i in 0..value_expr.children.len():
+                    auto lowered_key = this.lower_expr(value_expr.children[i])
+                    auto lowered_value = this.lower_expr(value_expr.extra_children[i])
+                    lowered_items.push(lowered_key.name)
+                    lowered_items.push(lowered_value.name)
+                this.emit(ir_map_literal(stmt.text_a, declared_type, lowered_items))
+            else:
+                this.declare_local(stmt.text_a, declared_type)
+                auto lowered_value = this.lower_expr(value_expr)
+                this.emit(ir_move(stmt.text_a, declared_type, lowered_value.name))
+        elif stmt.kind == "return":
+            if stmt.exprs.len() == 0:
+                this.terminate(ir_term_return_void())
+                return
+            if stmt.exprs[0].kind == "none":
+                this.terminate(ir_term_return_void())
+            else:
+                auto lowered_value = this.lower_expr(stmt.exprs[0])
+                this.terminate(ir_term_return_value(lowered_value.name))
+        elif stmt.kind == "block":
+            for ref nested in stmt.children:
+                if this.block_terminated(this.current_block):
+                    return
+                this.lower_stmt(nested)
+        elif stmt.kind == "namespace":
+            for ref nested in stmt.children:
+                if this.block_terminated(this.current_block):
+                    return
+                this.lower_stmt(nested)
+        elif stmt.kind == "if":
+            auto lowered_condition = this.lower_expr(stmt.exprs[0])
+            int then_index = this.create_block("bb_then")
+            int else_index = this.create_block("bb_else")
+            int end_index = this.create_block("bb_end")
+            string then_name = this.active_blocks[then_index].name
+            string else_name = this.active_blocks[else_index].name
+            string end_name = this.active_blocks[end_index].name
+            this.terminate(ir_term_branch(lowered_condition.name, then_name, else_name))
+
+            this.switch_to(then_index)
+            this.lower_stmt(stmt.children[0])
+            if not this.block_terminated(this.current_block):
+                this.terminate(ir_term_jump(end_name))
+
+            this.switch_to(else_index)
+            this.lower_stmt(stmt.children[1])
+            if not this.block_terminated(this.current_block):
+                this.terminate(ir_term_jump(end_name))
+
+            this.switch_to(end_index)
+        elif stmt.kind == "while":
+            int cond_index = this.create_block("bb_while_cond")
+            int body_index = this.create_block("bb_while_body")
+            int end_index = this.create_block("bb_while_end")
+            string cond_name = this.active_blocks[cond_index].name
+            string body_name = this.active_blocks[body_index].name
+            string end_name = this.active_blocks[end_index].name
+
+            this.terminate(ir_term_jump(cond_name))
+
+            this.switch_to(cond_index)
+            auto lowered_condition = this.lower_expr(stmt.exprs[0])
+            this.terminate(ir_term_branch(lowered_condition.name, body_name, end_name))
+
+            this.break_targets.push(end_name)
+            this.continue_targets.push(cond_name)
+            this.switch_to(body_index)
+            this.lower_stmt(stmt.children[0])
+            if not this.block_terminated(this.current_block):
+                this.terminate(ir_term_jump(cond_name))
+            this.break_targets.pop()
+            this.continue_targets.pop()
+
+            this.switch_to(end_index)
+        elif stmt.kind == "for":
+            if stmt.exprs[0].kind == "range":
+                string iter_name = stmt.text_a
+                auto lowered_start = this.lower_expr(stmt.exprs[0].children[0])
+                auto lowered_end = this.lower_expr(stmt.exprs[0].children[1])
+                IrType iter_type = lowered_start.value_type
+                if iter_type.name == "auto":
+                    iter_type = ir_type("int")
+                this.declare_local(iter_name, iter_type)
+                this.emit(ir_move(iter_name, iter_type, lowered_start.name))
+
+                int cond_index = this.create_block("bb_for_cond")
+                int body_index = this.create_block("bb_for_body")
+                int step_index = this.create_block("bb_for_step")
+                int end_index = this.create_block("bb_for_end")
+                string cond_name = this.active_blocks[cond_index].name
+                string body_name = this.active_blocks[body_index].name
+                string step_name = this.active_blocks[step_index].name
+                string end_name = this.active_blocks[end_index].name
+
+                this.terminate(ir_term_jump(cond_name))
+
+                this.switch_to(cond_index)
+                string cmp_name = this.new_temp(ir_type("bool"))
+                this.emit(ir_binary(cmp_name, ir_type("bool"), "<", iter_name, lowered_end.name))
+                this.terminate(ir_term_branch(cmp_name, body_name, end_name))
+
+                this.break_targets.push(end_name)
+                this.continue_targets.push(step_name)
+                this.switch_to(body_index)
+                this.lower_stmt(stmt.children[0])
+                if not this.block_terminated(this.current_block):
+                    this.terminate(ir_term_jump(step_name))
+
+                this.switch_to(step_index)
+                string one_name = this.new_temp(iter_type)
+                this.emit(ir_const(one_name, iter_type, "int", "1"))
+                string next_name = this.new_temp(iter_type)
+                this.emit(ir_binary(next_name, iter_type, "+", iter_name, one_name))
+                this.emit(ir_move(iter_name, iter_type, next_name))
+                this.terminate(ir_term_jump(cond_name))
+                this.break_targets.pop()
+                this.continue_targets.pop()
+
+                this.switch_to(end_index)
+            else:
+                auto collection_value = this.lower_expr(stmt.exprs[0])
+                string collection_name = collection_value.name
+                string index_name = "${stmt.text_a}__index"
+                string item_name = stmt.text_a
+                IrType index_type = ir_type("int")
+                IrType item_type = this.element_type(collection_value.value_type)
+                if item_type.name == "auto":
+                    item_type = this.lower_type(stmt.exprs[0].value_type)
+                this.declare_local(index_name, index_type)
+                this.declare_local(item_name, item_type)
+                string zero_name = this.new_temp(index_type)
+                this.emit(ir_const(zero_name, index_type, "int", "0"))
+                this.emit(ir_move(index_name, index_type, zero_name))
+
+                int cond_index = this.create_block("bb_for_cond")
+                int body_index = this.create_block("bb_for_body")
+                int step_index = this.create_block("bb_for_step")
+                int end_index = this.create_block("bb_for_end")
+                string cond_name = this.active_blocks[cond_index].name
+                string body_name = this.active_blocks[body_index].name
+                string step_name = this.active_blocks[step_index].name
+                string end_name = this.active_blocks[end_index].name
+
+                this.terminate(ir_term_jump(cond_name))
+
+                this.switch_to(cond_index)
+                string len_name = this.new_temp(ir_type("int"))
+                vector[string] len_args = [collection_name]
+                this.emit(ir_call(len_name, ir_type("int"), ir_call_target_intrinsic("len"), len_args))
+                string cmp_name = this.new_temp(ir_type("bool"))
+                this.emit(ir_binary(cmp_name, ir_type("bool"), "<", index_name, len_name))
+                this.terminate(ir_term_branch(cmp_name, body_name, end_name))
+
+                this.break_targets.push(end_name)
+                this.continue_targets.push(step_name)
+                this.switch_to(body_index)
+                this.emit(ir_index(item_name, item_type, collection_name, index_name))
+                this.lower_stmt(stmt.children[0])
+                if not this.block_terminated(this.current_block):
+                    this.terminate(ir_term_jump(step_name))
+
+                this.switch_to(step_index)
+                string one_name = this.new_temp(index_type)
+                this.emit(ir_const(one_name, index_type, "int", "1"))
+                string next_name = this.new_temp(index_type)
+                this.emit(ir_binary(next_name, index_type, "+", index_name, one_name))
+                this.emit(ir_move(index_name, index_type, next_name))
+                this.terminate(ir_term_jump(cond_name))
+                this.break_targets.pop()
+                this.continue_targets.pop()
+
+                this.switch_to(end_index)
+        elif stmt.kind == "break":
+            if this.break_targets.len() == 0:
+                this.errors.push("break used outside loop")
+                return
+            string target = this.break_targets[this.break_targets.len() - 1]
+            this.terminate(ir_term_jump(target))
+            int dead_index = this.create_block("bb_dead")
+            this.switch_to(dead_index)
+        elif stmt.kind == "continue":
+            if this.continue_targets.len() == 0:
+                this.errors.push("continue used outside loop")
+                return
+            string target = this.continue_targets[this.continue_targets.len() - 1]
+            this.terminate(ir_term_jump(target))
+            int dead_index = this.create_block("bb_dead")
+            this.switch_to(dead_index)
+        elif stmt.kind == "pass":
+            return
+        elif stmt.kind == "try":
+            this.errors.push("try is not yet supported in IR lowering")
+        elif stmt.kind == "match":
+            auto lowered_match_value = this.lower_expr(stmt.exprs[0])
+            string enum_name = ""
+            match stmt.exprs[0].value_type:
+                Custom(name, type_args):
+                    enum_name = name
+                _:
+                    pass
+            int end_index = this.create_block("bb_match_end")
+            string end_name = this.active_blocks[end_index].name
+            int next_index = this.current_block
+            for i in 0..stmt.children.len():
+                this.switch_to(next_index)
+                string pattern_name = stmt.names[i]
+                int body_index = this.create_block("bb_match_arm")
+                string body_name = this.active_blocks[body_index].name
+                bool is_wildcard = pattern_name == "_"
+                int fail_index = end_index
+                string fail_name = end_name
+                if not is_wildcard and i + 1 < stmt.children.len():
+                    fail_index = this.create_block("bb_match_next")
+                    fail_name = this.active_blocks[fail_index].name
+                if is_wildcard:
+                    this.terminate(ir_term_jump(body_name))
+                else:
+                    string cond_name = this.new_temp(ir_type("bool"))
+                    this.emit(ir_enum_is(cond_name, lowered_match_value.name, pattern_name))
+                    this.terminate(ir_term_branch(cond_name, body_name, fail_name))
+                this.switch_to(body_index)
+                if enum_name != "":
+                    auto variant = this.enum_variant_info(enum_name, pattern_name)
+                    for bi in 0..stmt.name_groups[i].len():
+                        if bi < variant.field_names.len() and bi < variant.types.len():
+                            string binding_name = stmt.name_groups[i][bi]
+                            IrType binding_type = this.lower_type(variant.types[bi])
+                            this.declare_local(binding_name, binding_type)
+                            this.emit(ir_enum_get(binding_name, binding_type, lowered_match_value.name, pattern_name, variant.field_names[bi]))
+                this.lower_stmt(stmt.children[i])
+                if not this.block_terminated(this.current_block):
+                    this.terminate(ir_term_jump(end_name))
+                next_index = fail_index
+            this.switch_to(end_index)
+        else:
+            this.errors.push("Unsupported typed statement kind in IR lowering: ${stmt.kind}")
+
+    IrFunction fn lower_typed_function(ref TypedFunctionInfo fn_info):
+        this.active_blocks = []
+        this.active_locals = []
+        this.local_types = {}
+        this.break_targets = []
+        this.continue_targets = []
+        this.current_return_type = this.lower_type(fn_info.return_type)
+        vector[IrParam] lowered_params = []
+        int entry_index = this.create_block("bb")
+        this.switch_to(entry_index)
+        for ref param in fn_info.params:
+            IrType param_type = this.lower_type(param.param_type)
+            lowered_params.push(IrParam(param.name.lexeme, param_type))
+            this.declare_local(param.name.lexeme, param_type)
+        for ref body_stmt in fn_info.body:
+            if this.block_terminated(this.current_block):
+                break
+            this.lower_stmt(body_stmt)
+        if not this.block_terminated(this.current_block):
+            if this.current_return_type.name == "void":
+                this.terminate(ir_term_return_void())
+            else:
+                this.terminate(ir_term_unreachable())
+        return IrFunction(fn_info.name, lowered_params, this.current_return_type, this.active_locals, this.active_blocks, fn_info.name == "main", false)
+
+    IrLowerResult fn lower_program(ref TypedProgram program):
+        this.struct_field_types = {}
+        this.call_return_types = {}
+        this.enum_variants = {}
+        this.lambda_blocks = program.lambda_blocks
+        for ref struct_info in program.structs:
+            this.call_return_types[struct_info.name] = ir_type(struct_info.name)
+            for ref field in struct_info.fields:
+                this.struct_field_types["${struct_info.name}.${field.name}"] = this.lower_type(field.field_type)
+        for ref enum_info in program.enums:
+            this.call_return_types[enum_info.name] = ir_type(enum_info.name)
+            this.enum_variants[enum_info.name] = enum_info.variants
+            for ref variant in enum_info.variants:
+                this.call_return_types["${enum_info.name}::make_${variant.name}"] = ir_type(enum_info.name)
+        vector[IrFunction] functions = []
+        for ref fn_info in program.functions:
+            this.call_return_types[fn_info.name] = this.lower_type(fn_info.return_type)
+        for ref fn_info in program.functions:
+            functions.push(this.lower_typed_function(fn_info))
+        if program.top_level.len() > 0:
+            TypedFunctionInfo top_level_fn = TypedFunctionInfo("__module_init", [], TypeNode::Void(), program.top_level)
+            functions.push(this.lower_typed_function(top_level_fn))
+        return IrLowerResult(IrModule(program.name, functions), this.errors)
+
+vector[string] fn lower_ir_errors(ref IrLowerResult result):
+    return result.errors
+
+IrLowerResult fn lower_to_ir(ref TypedProgram program):
+    auto lowerer = IrLowerer()
+    return lowerer.lower_program(program)

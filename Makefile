@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-BOOTSTRAP_SRC = src/scanner.lv src/ast.lv src/type_utils.lv src/parser.lv src/checker.lv src/codegen.lv src/main.lv
+BOOTSTRAP_SRC = src/scanner.lv src/ast.lv src/type_utils.lv src/parser.lv src/checker.lv src/codegen.lv src/typed_ast.lv src/intrinsics.lv src/typed_calls.lv src/typed_lowering.lv src/ir.lv src/lowering.lv src/backend_model.lv src/backend_cpp.lv src/main.lv
 LATEST_STAGE = stages/stage-latest.cpp
 
 # Windows (MSYS2) needs ws2_32 for Winsock

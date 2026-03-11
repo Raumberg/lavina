@@ -1,0 +1,47 @@
+// ═══════════════════════════════════════════════════════════════
+//  Lavina Bootstrap Compiler — Backend Model
+//  Structured C++ backend representation consumed by renderers.
+// ═══════════════════════════════════════════════════════════════
+
+struct CppParam:
+    string name
+    string param_type
+
+struct CppLocal:
+    string name
+    string local_type
+
+struct CppFunction:
+    string name
+    string return_type
+    vector[CppParam] params
+    vector[CppLocal] locals
+    vector[string] body_lines
+    bool is_entry
+
+struct CppField:
+    string name
+    string field_type
+
+struct CppStruct:
+    string name
+    vector[CppField] fields
+    vector[CppParam] constructor_params
+    vector[string] constructor_defaults
+    vector[string] init_fields
+    vector[string] constructor_body_lines
+
+struct CppEnumVariant:
+    string name
+    vector[CppField] fields
+
+struct CppEnum:
+    string name
+    vector[CppEnumVariant] variants
+    bool has_to_string
+
+struct CppModule:
+    vector[string] includes
+    vector[CppStruct] structs
+    vector[CppEnum] enums
+    vector[CppFunction] functions
