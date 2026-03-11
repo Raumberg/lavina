@@ -258,6 +258,24 @@ string fn intrinsic_collection_method_builtin_name(ref TypeNode object_type, str
     return intrinsic_runtime_name(intrinsic)
 
 TypeNode fn intrinsic_builtin_call_return_type(string name, ref TypeNode first_arg_type):
+    if name == "to_string" or name == "typeof" or name == "input":
+        return TypeNode::Str()
+    elif name == "exit":
+        return TypeNode::Void()
+    elif name == "abs":
+        match first_arg_type:
+            Float():
+                return TypeNode::Float()
+            Float32():
+                return TypeNode::Float32()
+            Int32():
+                return TypeNode::Int32()
+            Int16():
+                return TypeNode::Int16()
+            Int8():
+                return TypeNode::Int8()
+            _:
+                return TypeNode::Int()
     IntrinsicId intrinsic = intrinsic_from_name(name)
     return intrinsic_type_return_type(intrinsic, first_arg_type)
 

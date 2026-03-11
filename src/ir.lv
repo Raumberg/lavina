@@ -14,9 +14,25 @@ struct IrLocal:
     string name
     IrType local_type
 
+struct IrClosureSig:
+    vector[IrType] param_types
+    IrType return_type
+
+struct IrCallSig:
+    vector[IrType] param_types
+    IrType return_type
+
+struct IrClosureDef:
+    string name
+    string helper_name
+    vector[IrParam] capture_params
+    vector[IrParam] lambda_params
+    IrClosureSig signature
+
 struct IrCallTarget:
     string kind
     string name
+    IrCallSig signature
 
 struct IrInst:
     string kind
@@ -50,22 +66,35 @@ struct IrFunction:
 
 struct IrModule:
     string name
+    vector[IrClosureDef] closures
     vector[IrFunction] functions
 
 IrType fn ir_type(string name):
     return IrType(name)
 
+IrType fn ir_closure_type(string closure_name):
+    return ir_type("closure:${closure_name}")
+
+IrClosureSig fn ir_closure_sig(ref vector[IrType] param_types, IrType return_type):
+    return IrClosureSig(param_types, return_type)
+
+IrCallSig fn ir_call_sig(ref vector[IrType] param_types, IrType return_type):
+    return IrCallSig(param_types, return_type)
+
 IrCallTarget fn ir_call_target_none():
-    return IrCallTarget("none", "")
+    return IrCallTarget("none", "", ir_call_sig([], ir_type("void")))
 
-IrCallTarget fn ir_call_target_function(string name):
-    return IrCallTarget("function", name)
+IrCallTarget fn ir_call_target_function(string name, IrCallSig signature):
+    return IrCallTarget("function", name, signature)
 
-IrCallTarget fn ir_call_target_intrinsic(string name):
-    return IrCallTarget("intrinsic", name)
+IrCallTarget fn ir_call_target_intrinsic(string name, IrCallSig signature):
+    return IrCallTarget("intrinsic", name, signature)
 
-IrCallTarget fn ir_call_target_indirect(string name):
-    return IrCallTarget("indirect", name)
+IrCallTarget fn ir_call_target_closure(string name, IrCallSig signature):
+    return IrCallTarget("closure", name, signature)
+
+IrCallTarget fn ir_call_target_indirect(string name, IrCallSig signature):
+    return IrCallTarget("indirect", name, signature)
 
 IrInst fn ir_const(string dest, IrType value_type, string literal_kind, string literal_value):
     vector[string] empty_args = []
@@ -122,6 +151,9 @@ IrInst fn ir_bind_auto(string dest, string expr_text):
     vector[string] empty_args = []
     return IrInst("bind_auto", dest, ir_type("auto"), ir_call_target_none(), expr_text, "", "", empty_args)
 
+IrInst fn ir_make_closure(string dest, IrType value_type, string closure_name, ref vector[string] captures):
+    return IrInst("make_closure", dest, value_type, ir_call_target_none(), closure_name, "", "", captures)
+
 IrInst fn ir_enum_is(string dest, string object_name, string variant_name):
     vector[string] empty_args = []
     return IrInst("enum_is", dest, ir_type("bool"), ir_call_target_none(), object_name, variant_name, "", empty_args)
@@ -154,6 +186,8 @@ string fn ir_type_to_string(ref IrType t):
 string fn ir_call_target_to_string(ref IrCallTarget target):
     if target.kind == "intrinsic":
         return "intrinsic ${target.name}"
+    elif target.kind == "closure":
+        return "closure ${target.name}"
     elif target.kind == "indirect":
         return "indirect ${target.name}"
     return target.name
@@ -189,6 +223,8 @@ string fn ir_inst_to_string(ref IrInst inst):
         return "${inst.dest} = convert ${inst.text_a} : ${ir_type_to_string(inst.value_type)}"
     elif inst.kind == "bind_auto":
         return "${inst.dest} = bind_auto ${inst.text_a}"
+    elif inst.kind == "make_closure":
+        return "${inst.dest} = make_closure ${inst.text_a}(${inst.args.join(", ")}) : ${ir_type_to_string(inst.value_type)}"
     elif inst.kind == "enum_is":
         return "${inst.dest} = enum_is ${inst.text_a} is ${inst.text_b}"
     elif inst.kind == "enum_get":
@@ -229,10 +265,24 @@ string fn ir_dump_function(ref IrFunction fn_ir):
     parts.push("}")
     return parts.join("\n")
 
+string fn ir_dump_closure(ref IrClosureDef closure_ir):
+    vector[string] capture_parts = []
+    for ref p in closure_ir.capture_params:
+        capture_parts.push("${p.name}: ${ir_type_to_string(p.param_type)}")
+    vector[string] lambda_parts = []
+    for i in 0..closure_ir.lambda_params.len():
+        if i < closure_ir.signature.param_types.len():
+            lambda_parts.push("${closure_ir.lambda_params[i].name}: ${ir_type_to_string(closure_ir.signature.param_types[i])}")
+    return "closure ${closure_ir.name} captures (${capture_parts.join(", ")}) params (${lambda_parts.join(", ")}) -> ${ir_type_to_string(closure_ir.signature.return_type)} uses ${closure_ir.helper_name}"
+
 string fn ir_dump_module(ref IrModule module_ir):
     vector[string] parts = []
     parts.push("module ${module_ir.name}")
     parts.push("")
+    for ref closure_ir in module_ir.closures:
+        parts.push(ir_dump_closure(closure_ir))
+    if module_ir.closures.len() > 0:
+        parts.push("")
     for i in 0..module_ir.functions.len():
         parts.push(ir_dump_function(module_ir.functions[i]))
         if i + 1 < module_ir.functions.len():

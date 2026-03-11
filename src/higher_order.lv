@@ -1,0 +1,102 @@
+import ast
+import typed_calls
+import typed_ast
+
+bool fn higher_order_is_auto_type(ref TypeNode value_type):
+    match value_type:
+        Auto():
+            return true
+        _:
+            return false
+
+TypeNode fn higher_order_collection_item_type(ref TypeNode value_type):
+    match value_type:
+        Array(inner):
+            return inner
+        HashSet(inner):
+            return inner
+        _:
+            return TypeNode::Auto()
+
+bool fn higher_order_type_has_auto(ref TypeNode value_type):
+    match value_type:
+        Auto():
+            return true
+        Array(inner):
+            return higher_order_type_has_auto(inner)
+        HashSet(inner):
+            return higher_order_type_has_auto(inner)
+        HashMap(key_type, item_type):
+            return higher_order_type_has_auto(key_type) or higher_order_type_has_auto(item_type)
+        Custom(name, type_args):
+            for ref arg in type_args:
+                if higher_order_type_has_auto(arg):
+                    return true
+        Nullable(inner):
+            return higher_order_type_has_auto(inner)
+        Ptr(inner):
+            return higher_order_type_has_auto(inner)
+        _:
+            pass
+    return false
+
+bool fn higher_order_closure_accepts_types(ref TypeNode closure_type, ref vector[TypeNode] expected_types):
+    if not typed_is_closure_type(closure_type):
+        return false
+    vector[TypeNode] param_types = typed_closure_param_types(closure_type)
+    if param_types.len() != expected_types.len():
+        return false
+    for i in 0..param_types.len():
+        match param_types[i]:
+            Auto():
+                pass
+            _:
+                if param_types[i] != expected_types[i]:
+                    return false
+    return true
+
+TypeNode fn higher_order_return_type(string target_name, ref vector[TypedExpr] args, ref TypeNode first_arg_type):
+    if target_name == "__lv_col_map" and args.len() >= 2:
+        TypeNode item_input = higher_order_collection_item_type(first_arg_type)
+        TypeNode callback_type = typed_expr_type(args[1])
+        vector[TypeNode] expected = [item_input]
+        if typed_is_closure_type(callback_type):
+            TypeNode item_type = typed_closure_return_type(callback_type)
+            if higher_order_type_has_auto(item_type):
+                return TypeNode::Auto()
+            return TypeNode::Array(item_type)
+        if not higher_order_is_auto_type(item_input):
+            return TypeNode::Array(item_input)
+        return TypeNode::Auto()
+    elif target_name == "__lv_col_filter" and args.len() >= 2:
+        TypeNode item_input = higher_order_collection_item_type(first_arg_type)
+        TypeNode callback_type = typed_expr_type(args[1])
+        vector[TypeNode] expected = [item_input]
+        if typed_is_closure_type(callback_type) and (higher_order_is_auto_type(item_input) or higher_order_closure_accepts_types(callback_type, expected)):
+            return first_arg_type
+        if not higher_order_is_auto_type(item_input):
+            return first_arg_type
+        return TypeNode::Auto()
+    elif target_name == "__lv_col_reduce" and args.len() >= 3:
+        TypeNode item_input = higher_order_collection_item_type(first_arg_type)
+        TypeNode init_type = typed_expr_type(args[2])
+        TypeNode callback_type = typed_expr_type(args[1])
+        vector[TypeNode] expected = [init_type, item_input]
+        if typed_is_closure_type(callback_type) and (higher_order_is_auto_type(item_input) or higher_order_closure_accepts_types(callback_type, expected)):
+            return init_type
+        match init_type:
+            Auto():
+                pass
+            _:
+                return init_type
+        return TypeNode::Auto()
+    elif target_name == "__lv_col_for_each" and args.len() >= 2:
+        TypeNode item_input = higher_order_collection_item_type(first_arg_type)
+        TypeNode callback_type = typed_expr_type(args[1])
+        vector[TypeNode] expected = [item_input]
+        if typed_is_closure_type(callback_type) and (higher_order_is_auto_type(item_input) or higher_order_closure_accepts_types(callback_type, expected)):
+            return TypeNode::Void()
+        if not higher_order_is_auto_type(item_input):
+            return TypeNode::Void()
+        return TypeNode::Auto()
+    return TypeNode::Auto()

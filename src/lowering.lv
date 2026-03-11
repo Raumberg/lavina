@@ -16,6 +16,7 @@ struct IrLowerResult:
 class IrLowerer:
     int temp_counter
     int block_counter
+    int closure_counter
     vector[string] errors
     vector[IrBlock] active_blocks
     int current_block
@@ -25,6 +26,8 @@ class IrLowerer:
     hashmap[string, IrType] call_return_types
     hashmap[string, vector[TypedEnumVariant]] enum_variants
     vector[vector[TypedStmt]] lambda_blocks
+    vector[IrClosureDef] closure_defs
+    vector[IrFunction] closure_functions
     IrType current_return_type
     vector[string] break_targets
     vector[string] continue_targets
@@ -32,6 +35,7 @@ class IrLowerer:
     constructor():
         this.temp_counter = 0
         this.block_counter = 0
+        this.closure_counter = 0
         this.errors = []
         this.active_blocks = []
         this.current_block = 0
@@ -41,6 +45,8 @@ class IrLowerer:
         this.call_return_types = {}
         this.enum_variants = {}
         this.lambda_blocks = []
+        this.closure_defs = []
+        this.closure_functions = []
         this.current_return_type = ir_type("void")
         this.break_targets = []
         this.continue_targets = []
@@ -129,6 +135,8 @@ class IrLowerer:
             HashMap(key_type, value_type):
                 return ir_type("map[${ir_type_to_string(this.lower_type(key_type))}, ${ir_type_to_string(this.lower_type(value_type))}]")
             Custom(name, type_args):
+                if name == "__closure":
+                    return ir_type("closure")
                 if type_args.len() == 0:
                     return ir_type(name)
                 vector[string] parts = []
@@ -145,6 +153,10 @@ class IrLowerer:
             return ir_type("string")
         if left.value_type.name == "float" or right.value_type.name == "float":
             return ir_type("float")
+        if left.value_type.name == "auto" and right.value_type.name != "auto":
+            return right.value_type
+        if right.value_type.name == "auto" and left.value_type.name != "auto":
+            return left.value_type
         return left.value_type
 
     IrType fn element_type(ref IrType container_type):
@@ -159,30 +171,41 @@ class IrLowerer:
                     return variant
         return TypedEnumVariant("", empty_types, empty_fields)
 
-    string fn render_lambda_cpp(ref TypedExpr lambda_expr):
-        match lambda_expr.node:
-            Lambda(params, body):
-                return cpp_render_typed_expr_inline(lambda_expr, this.lambda_blocks)
-            BlockLambda(params, body_id):
-                return cpp_render_typed_expr_inline(lambda_expr, this.lambda_blocks)
-            _:
-                return "[&]() {}"
-
-    string fn new_bound_auto(string expr_text):
-        string name = this.next_temp()
-        this.emit(ir_bind_auto(name, expr_text))
+    string fn next_closure_name():
+        string name = "__closure_${this.closure_counter}"
+        this.closure_counter += 1
         return name
 
+    string fn next_closure_helper_name():
+        string name = "__closure_fn_${this.closure_counter}"
+        this.closure_counter += 1
+        return name
+
+    IrCallSig fn lower_typed_call_signature(ref TypedExpr expr):
+        vector[IrType] param_types = []
+        for ref param_type in expr.call_signature.param_types:
+            param_types.push(this.lower_type(param_type))
+        return ir_call_sig(param_types, this.lower_type(expr.call_signature.return_type))
+
+    IrClosureSig fn lower_typed_closure_signature(ref TypedExpr expr):
+        vector[IrType] param_types = []
+        for ref param_type in expr.closure_signature.param_types:
+            param_types.push(this.lower_type(param_type))
+        return ir_closure_sig(param_types, this.lower_type(expr.closure_signature.return_type))
+
     IrCallTarget fn lower_typed_call_target(ref TypedExpr expr):
+        IrCallSig signature = this.lower_typed_call_signature(expr)
         match expr.call_target.kind:
             Intrinsic():
-                return ir_call_target_intrinsic(expr.call_target.lowered_name)
+                return ir_call_target_intrinsic(expr.call_target.lowered_name, signature)
             DirectFunction():
-                return ir_call_target_function(expr.call_target.lowered_name)
+                return ir_call_target_function(expr.call_target.lowered_name, signature)
             DirectConstructor():
-                return ir_call_target_function(expr.call_target.lowered_name)
+                return ir_call_target_function(expr.call_target.lowered_name, signature)
+            ClosureValue():
+                return ir_call_target_closure(expr.call_target.lowered_name, signature)
             _:
-                return ir_call_target_indirect(expr.call_target.lowered_name)
+                return ir_call_target_indirect(expr.call_target.lowered_name, signature)
 
     vector[string] fn lower_call_args(ref TypedExpr expr):
         vector[string] lowered_args = []
@@ -210,20 +233,134 @@ class IrLowerer:
     vector[string] fn lower_vector_elements_with_hint(ref vector[TypedExpr] elements, ref IrType element_hint):
         vector[string] lowered_elements = []
         for ref element in elements:
-            match element.node:
-                Vector(inner_elements):
-                    if inner_elements.len() == 0 and element_hint.name != "auto":
-                        string empty_name = this.new_temp(element_hint)
-                        vector[string] empty_items = []
-                        this.emit(ir_vector_literal(empty_name, element_hint, empty_items))
-                        lowered_elements.push(empty_name)
-                    else:
-                        auto lowered_element = this.lower_expr(element)
-                        lowered_elements.push(lowered_element.name)
-                _:
-                    auto lowered_element = this.lower_expr(element)
-                    lowered_elements.push(lowered_element.name)
+            if element.kind == "vector" and element.children.len() == 0 and element_hint.name != "auto":
+                string empty_name = this.new_temp(element_hint)
+                vector[string] empty_items = []
+                this.emit(ir_vector_literal(empty_name, element_hint, empty_items))
+                lowered_elements.push(empty_name)
+            else:
+                auto lowered_element = this.lower_expr(element)
+                lowered_elements.push(lowered_element.name)
         return lowered_elements
+
+    vector[IrParam] fn closure_capture_params(ref TypedExpr expr):
+        vector[IrParam] params = []
+        for i in 0..expr.capture_names.len():
+            if i < expr.closure_signature.capture_types.len():
+                params.push(IrParam(expr.capture_names[i], this.lower_type(expr.closure_signature.capture_types[i])))
+        return params
+
+    vector[IrParam] fn closure_lambda_params(ref TypedExpr expr):
+        vector[IrParam] params = []
+        for i in 0..expr.names.len():
+            if i < expr.closure_signature.param_types.len():
+                params.push(IrParam(expr.names[i], this.lower_type(expr.closure_signature.param_types[i])))
+        return params
+
+    void fn reset_function_state():
+        this.active_blocks = []
+        this.active_locals = []
+        this.local_types = {}
+        this.break_targets = []
+        this.continue_targets = []
+
+    IrFunction fn lower_closure_helper_expr(string helper_name, ref TypedExpr expr, ref vector[IrParam] capture_params, ref vector[IrParam] lambda_params):
+        vector[IrBlock] saved_blocks = this.active_blocks
+        int saved_current_block = this.current_block
+        vector[IrLocal] saved_locals = this.active_locals
+        hashmap[string, IrType] saved_local_types = this.local_types
+        vector[string] saved_break_targets = this.break_targets
+        vector[string] saved_continue_targets = this.continue_targets
+        IrType saved_return_type = this.current_return_type
+
+        this.reset_function_state()
+        this.current_return_type = this.lower_type(expr.closure_signature.return_type)
+        vector[IrParam] helper_params = []
+        int entry_index = this.create_block("bb")
+        this.switch_to(entry_index)
+        for ref param in capture_params:
+            helper_params.push(param)
+            this.declare_local(param.name, param.param_type)
+        for ref param in lambda_params:
+            helper_params.push(param)
+            this.declare_local(param.name, param.param_type)
+        auto lowered_body = this.lower_expr(expr.children[0])
+        this.terminate(ir_term_return_value(lowered_body.name))
+        IrFunction helper_fn = IrFunction(helper_name, helper_params, this.current_return_type, this.active_locals, this.active_blocks, false, false)
+
+        this.active_blocks = saved_blocks
+        this.current_block = saved_current_block
+        this.active_locals = saved_locals
+        this.local_types = saved_local_types
+        this.break_targets = saved_break_targets
+        this.continue_targets = saved_continue_targets
+        this.current_return_type = saved_return_type
+        return helper_fn
+
+    IrFunction fn lower_closure_helper_block(string helper_name, ref TypedExpr expr, ref vector[IrParam] capture_params, ref vector[IrParam] lambda_params):
+        vector[IrBlock] saved_blocks = this.active_blocks
+        int saved_current_block = this.current_block
+        vector[IrLocal] saved_locals = this.active_locals
+        hashmap[string, IrType] saved_local_types = this.local_types
+        vector[string] saved_break_targets = this.break_targets
+        vector[string] saved_continue_targets = this.continue_targets
+        IrType saved_return_type = this.current_return_type
+
+        this.reset_function_state()
+        vector[TypedStmt] body = []
+        if expr.int_a >= 0 and expr.int_a < this.lambda_blocks.len():
+            body = this.lambda_blocks[expr.int_a]
+        this.current_return_type = this.lower_type(expr.closure_signature.return_type)
+        vector[IrParam] helper_params = []
+        int entry_index = this.create_block("bb")
+        this.switch_to(entry_index)
+        for ref param in capture_params:
+            helper_params.push(param)
+            this.declare_local(param.name, param.param_type)
+        for ref param in lambda_params:
+            helper_params.push(param)
+            this.declare_local(param.name, param.param_type)
+        for ref stmt in body:
+            if this.block_terminated(this.current_block):
+                break
+            this.lower_stmt(stmt)
+        if not this.block_terminated(this.current_block):
+            if this.current_return_type.name == "void":
+                this.terminate(ir_term_return_void())
+            else:
+                this.terminate(ir_term_unreachable())
+        IrFunction helper_fn = IrFunction(helper_name, helper_params, this.current_return_type, this.active_locals, this.active_blocks, false, false)
+
+        this.active_blocks = saved_blocks
+        this.current_block = saved_current_block
+        this.active_locals = saved_locals
+        this.local_types = saved_local_types
+        this.break_targets = saved_break_targets
+        this.continue_targets = saved_continue_targets
+        this.current_return_type = saved_return_type
+        return helper_fn
+
+    LoweredValue fn lower_closure_expr(ref TypedExpr expr, string preferred_name):
+        string closure_name = this.next_closure_name()
+        IrType closure_type = ir_closure_type(closure_name)
+        string helper_name = this.next_closure_helper_name()
+        vector[IrParam] capture_params = this.closure_capture_params(expr)
+        vector[IrParam] lambda_params = this.closure_lambda_params(expr)
+        IrFunction helper_fn
+        if expr.kind == "lambda":
+            helper_fn = this.lower_closure_helper_expr(helper_name, expr, capture_params, lambda_params)
+        else:
+            helper_fn = this.lower_closure_helper_block(helper_name, expr, capture_params, lambda_params)
+        this.closure_functions.push(helper_fn)
+        this.closure_defs.push(IrClosureDef(closure_name, helper_name, capture_params, lambda_params, this.lower_typed_closure_signature(expr)))
+        vector[string] captures = []
+        for ref capture_name in expr.capture_names:
+            captures.push(capture_name)
+        string dest = preferred_name
+        if dest == "":
+            dest = this.next_temp()
+        this.emit(ir_make_closure(dest, closure_type, closure_name, captures))
+        return LoweredValue(dest, closure_type)
 
     LoweredValue fn lower_expr(ref TypedExpr expr):
         if expr.kind == "literal":
@@ -362,14 +499,11 @@ class IrLowerer:
             this.emit(ir_convert(dest, result_type, lowered_value.name))
             return LoweredValue(dest, result_type)
         elif expr.kind == "lambda" or expr.kind == "block_lambda":
-            string lambda_name = this.new_bound_auto(this.render_lambda_cpp(expr))
-            return LoweredValue(lambda_name, ir_type("auto"))
-        match expr.node:
-            _:
-                this.errors.push("Unsupported typed expression in IR lowering: ${expr.kind}")
-                string dest = this.new_temp(ir_type("auto"))
-                this.emit(ir_const(dest, ir_type("auto"), "error", "\"unsupported_expr\""))
-                return LoweredValue(dest, ir_type("auto"))
+            return this.lower_closure_expr(expr, "")
+        this.errors.push("Unsupported typed expression in IR lowering: ${expr.kind}")
+        string dest = this.new_temp(ir_type("auto"))
+        this.emit(ir_const(dest, ir_type("auto"), "error", "\"unsupported_expr\""))
+        return LoweredValue(dest, ir_type("auto"))
 
     void fn lower_stmt(ref TypedStmt stmt):
         if stmt.kind == "none":
@@ -396,7 +530,7 @@ class IrLowerer:
                 this.declare_local(stmt.text_a, declared_type)
                 return
             elif initializer_expr.kind == "lambda" or initializer_expr.kind == "block_lambda":
-                this.emit(ir_bind_auto(stmt.text_a, this.render_lambda_cpp(initializer_expr)))
+                this.lower_closure_expr(initializer_expr, stmt.text_a)
             elif declared_type.name == "auto" and initializer_expr.kind == "call":
                 vector[string] lowered_args = this.lower_call_args(initializer_expr)
                 IrCallTarget call_target = this.lower_typed_call_target(initializer_expr)
@@ -426,7 +560,7 @@ class IrLowerer:
                 return
             auto value_expr = stmt.exprs[0]
             if value_expr.kind == "lambda" or value_expr.kind == "block_lambda":
-                this.emit(ir_bind_auto(stmt.text_a, this.render_lambda_cpp(value_expr)))
+                this.lower_closure_expr(value_expr, stmt.text_a)
             elif declared_type.name == "auto" and value_expr.kind == "call":
                 vector[string] lowered_args = this.lower_call_args(value_expr)
                 IrCallTarget call_target = this.lower_typed_call_target(value_expr)
@@ -587,7 +721,7 @@ class IrLowerer:
                 this.switch_to(cond_index)
                 string len_name = this.new_temp(ir_type("int"))
                 vector[string] len_args = [collection_name]
-                this.emit(ir_call(len_name, ir_type("int"), ir_call_target_intrinsic("len"), len_args))
+                this.emit(ir_call(len_name, ir_type("int"), ir_call_target_intrinsic("len", ir_call_sig([collection_value.value_type], ir_type("int"))), len_args))
                 string cmp_name = this.new_temp(ir_type("bool"))
                 this.emit(ir_binary(cmp_name, ir_type("bool"), "<", index_name, len_name))
                 this.terminate(ir_term_branch(cmp_name, body_name, end_name))
@@ -723,7 +857,12 @@ class IrLowerer:
         if program.top_level.len() > 0:
             TypedFunctionInfo top_level_fn = TypedFunctionInfo("__module_init", [], TypeNode::Void(), program.top_level)
             functions.push(this.lower_typed_function(top_level_fn))
-        return IrLowerResult(IrModule(program.name, functions), this.errors)
+        vector[IrFunction] ordered_functions = []
+        for ref closure_fn in this.closure_functions:
+            ordered_functions.push(closure_fn)
+        for ref fn_ir in functions:
+            ordered_functions.push(fn_ir)
+        return IrLowerResult(IrModule(program.name, this.closure_defs, ordered_functions), this.errors)
 
 vector[string] fn lower_ir_errors(ref IrLowerResult result):
     return result.errors

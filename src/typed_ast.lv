@@ -8,11 +8,17 @@ import typed_calls
 
 struct TypedExpr:
     string kind
-    Expr node
     TypeNode value_type
     TypedCallTarget call_target
+    TypedCallSig call_signature
+    TypedClosureSig closure_signature
+    int int_a
     vector[TypedExpr] children
     vector[TypedExpr] extra_children
+    vector[string] names
+    vector[TypeNode] types
+    vector[string] capture_names
+    vector[TypeNode] capture_types
     string text_a
     string text_b
 
@@ -21,7 +27,9 @@ TypeNode fn typed_expr_type(ref TypedExpr expr):
 
 TypedExpr fn typed_expr_none():
     vector[TypedExpr] empty = []
-    return TypedExpr("none", Expr::None(), TypeNode::None(), typed_call_target_none(), empty, empty, "", "")
+    vector[string] empty_names = []
+    vector[TypeNode] empty_types = []
+    return TypedExpr("none", TypeNode::None(), typed_call_target_none(), typed_call_sig_none(), typed_closure_sig_none(), 0, empty, empty, empty_names, empty_types, empty_names, empty_types, "", "")
 
 struct TypedStmt:
     string kind

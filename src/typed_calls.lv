@@ -7,6 +7,7 @@ enum TypedCallTargetKind:
     DirectFunction
     Intrinsic
     DirectConstructor
+    ClosureValue
     Indirect
 
 struct TypedCallTarget:
@@ -15,8 +16,66 @@ struct TypedCallTarget:
     string lowered_name
     IntrinsicId intrinsic
 
+struct TypedCallSig:
+    vector[TypeNode] param_types
+    TypeNode return_type
+
+struct TypedClosureSig:
+    vector[TypeNode] capture_types
+    vector[TypeNode] param_types
+    TypeNode return_type
+
 TypedCallTarget fn typed_call_target_none():
     return TypedCallTarget(TypedCallTargetKind::None(), "", "", IntrinsicId::None())
+
+TypedCallSig fn typed_call_sig(ref vector[TypeNode] param_types, ref TypeNode return_type):
+    return TypedCallSig(param_types, return_type)
+
+TypedCallSig fn typed_call_sig_none():
+    vector[TypeNode] empty = []
+    return TypedCallSig(empty, TypeNode::Void())
+
+TypedClosureSig fn typed_closure_sig(ref vector[TypeNode] capture_types, ref vector[TypeNode] param_types, ref TypeNode return_type):
+    return TypedClosureSig(capture_types, param_types, return_type)
+
+TypedClosureSig fn typed_closure_sig_none():
+    vector[TypeNode] empty = []
+    return TypedClosureSig(empty, empty, TypeNode::Void())
+
+TypeNode fn typed_closure_value_type(ref TypedClosureSig signature):
+    vector[TypeNode] parts = []
+    for ref param_type in signature.param_types:
+        parts.push(param_type)
+    parts.push(signature.return_type)
+    return TypeNode::Custom("__closure", parts)
+
+bool fn typed_is_closure_type(ref TypeNode value_type):
+    match value_type:
+        Custom(name, type_args):
+            return name == "__closure"
+        _:
+            return false
+
+vector[TypeNode] fn typed_closure_param_types(ref TypeNode value_type):
+    match value_type:
+        Custom(name, type_args):
+            if name == "__closure" and type_args.len() > 0:
+                vector[TypeNode] params = []
+                for i in 0..type_args.len() - 1:
+                    params.push(type_args[i])
+                return params
+        _:
+            pass
+    return []
+
+TypeNode fn typed_closure_return_type(ref TypeNode value_type):
+    match value_type:
+        Custom(name, type_args):
+            if name == "__closure" and type_args.len() > 0:
+                return type_args[type_args.len() - 1]
+        _:
+            pass
+    return TypeNode::Auto()
 
 TypedCallTarget fn typed_call_target_function(string name):
     return TypedCallTarget(TypedCallTargetKind::DirectFunction(), name, name, IntrinsicId::None())
@@ -27,6 +86,9 @@ TypedCallTarget fn typed_call_target_intrinsic(ref IntrinsicId intrinsic):
 
 TypedCallTarget fn typed_call_target_constructor(string name):
     return TypedCallTarget(TypedCallTargetKind::DirectConstructor(), name, name, IntrinsicId::None())
+
+TypedCallTarget fn typed_call_target_closure(string name):
+    return TypedCallTarget(TypedCallTargetKind::ClosureValue(), name, name, IntrinsicId::None())
 
 TypedCallTarget fn typed_call_target_indirect(string name):
     return TypedCallTarget(TypedCallTargetKind::Indirect(), name, name, IntrinsicId::None())
@@ -47,10 +109,12 @@ bool fn typed_call_is_function_like(ref TypedCallTarget target):
             return true
         DirectConstructor():
             return true
+        ClosureValue():
+            return true
         _:
             return false
 
-TypedCallTarget fn typed_call_target_from_surface(ref Checker checker, ref Expr callee, ref TypeNode object_type):
+TypedCallTarget fn typed_call_target_from_surface(ref Checker checker, ref Expr callee, ref TypeNode object_type, ref TypeNode callee_type):
     match callee:
         Variable(name):
             string stdlib_name = stdlib_runtime_name(name.lexeme)
@@ -66,6 +130,8 @@ TypedCallTarget fn typed_call_target_from_surface(ref Checker checker, ref Expr 
                 return typed_call_target_function(name.lexeme)
             if checker.known_classes.has(name.lexeme):
                 return typed_call_target_constructor(name.lexeme)
+            if typed_is_closure_type(callee_type):
+                return typed_call_target_closure(name.lexeme)
             return typed_call_target_indirect(name.lexeme)
         Get(object, name):
             IntrinsicId collection_intrinsic = intrinsic_collection_method_id(object_type, name.lexeme)

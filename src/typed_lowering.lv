@@ -1,5 +1,7 @@
 import ast
+import call_semantics
 import checker
+import higher_order
 import intrinsics
 import typed_calls
 import typed_ast
@@ -75,6 +77,24 @@ class TypedNormalizer:
             if name != "":
                 return true
         return false
+
+    bool fn contains_name(ref vector[string] names, string name):
+        for ref existing in names:
+            if existing == name:
+                return true
+        return false
+
+    vector[string] fn copy_names(ref vector[string] names):
+        vector[string] copied = []
+        for ref name in names:
+            copied.push(name)
+        return copied
+
+    void fn add_capture(ref! vector[string] capture_names, ref! vector[TypeNode] capture_types, string name, ref TypeNode value_type):
+        if this.contains_name(capture_names, name):
+            return
+        capture_names.push(name)
+        capture_types.push(value_type)
 
     TypeNode fn field_type_for(string struct_name, string field_name):
         if this.checker.known_classes.has(struct_name):
@@ -232,105 +252,23 @@ class TypedNormalizer:
                             Custom(struct_name, type_args):
                                 return this.method_signature_for(struct_name, name.lexeme).return_type
                             _:
-                                return TypeNode::Auto()
+                                return this.checker.infer_type(expr)
                     _:
                         return this.checker.infer_type(expr)
             _:
                 return this.checker.infer_type(expr)
 
-    TypeNode fn call_return_type_for_target(ref TypedCallTarget target, ref TypeNode first_arg_type):
-        match target.kind:
-            Intrinsic():
-                return intrinsic_type_return_type(target.intrinsic, first_arg_type)
-            DirectFunction():
-                if this.checker.known_funcs.has(target.source_name):
-                    return this.checker.known_funcs[target.source_name].return_type
-                if this.checker.known_funcs.has(target.lowered_name):
-                    return this.checker.known_funcs[target.lowered_name].return_type
-                return TypeNode::Auto()
-            DirectConstructor():
-                return TypeNode::Custom(target.source_name, [])
-            _:
-                return TypeNode::Auto()
+    TypedCallSig fn make_typed_call_sig(ref vector[TypedExpr] args, ref TypeNode return_type):
+        vector[TypeNode] param_types = []
+        for ref arg in args:
+            param_types.push(arg.value_type)
+        return typed_call_sig(param_types, return_type)
 
-    TypeNode fn lambda_result_type(ref TypedExpr expr):
-        if expr.kind == "lambda" and expr.children.len() > 0:
-            return typed_expr_type(expr.children[0])
-        return TypeNode::Auto()
+    TypedClosureSig fn make_typed_closure_sig(ref vector[TypeNode] capture_types, ref vector[TypeNode] param_types, ref TypeNode return_type):
+        return typed_closure_sig(capture_types, param_types, return_type)
 
-    bool fn type_has_auto(ref TypeNode value_type):
-        match value_type:
-            Auto():
-                return true
-            Array(inner):
-                return this.type_has_auto(inner)
-            HashSet(inner):
-                return this.type_has_auto(inner)
-            HashMap(key_type, value_type):
-                return this.type_has_auto(key_type) or this.type_has_auto(value_type)
-            Custom(name, type_args):
-                for ref arg in type_args:
-                    if this.type_has_auto(arg):
-                        return true
-            Nullable(inner):
-                return this.type_has_auto(inner)
-            Ptr(inner):
-                return this.type_has_auto(inner)
-            _:
-                pass
-        return false
-
-    TypeNode fn typed_call_return_type(ref TypedCallTarget target, ref vector[TypedExpr] args):
-        TypeNode first_arg_type = TypeNode::Auto()
-        if args.len() > 0:
-            first_arg_type = typed_expr_type(args[0])
-        TypeNode direct_type = this.call_return_type_for_target(target, first_arg_type)
-        match direct_type:
-            Auto():
-                pass
-            _:
-                return direct_type
-        if target.lowered_name == "__lv_col_map" and args.len() >= 2:
-            TypeNode item_type = this.lambda_result_type(args[1])
-            if this.type_has_auto(item_type):
-                return TypeNode::Auto()
-            return TypeNode::Array(item_type)
-        elif target.lowered_name == "__lv_col_filter" and args.len() >= 1:
-            return first_arg_type
-        elif target.lowered_name == "__lv_col_reduce" and args.len() >= 3:
-            return typed_expr_type(args[2])
-        elif target.lowered_name == "__lv_col_for_each":
-            return TypeNode::Void()
-        elif target.lowered_name == "__lv_col_zip" and args.len() >= 2:
-            match first_arg_type:
-                Array(left_inner):
-                    match typed_expr_type(args[1]):
-                        Array(right_inner):
-                            if this.type_has_auto(left_inner) or this.type_has_auto(right_inner):
-                                return TypeNode::Auto()
-                            return TypeNode::Array(TypeNode::Custom("std::pair", [left_inner, right_inner]))
-                        _:
-                            pass
-                _:
-                    pass
-        elif target.lowered_name == "__lv_col_take" or target.lowered_name == "__lv_col_drop":
-            return first_arg_type
-        elif target.lowered_name == "__lv_col_enumerate" and args.len() >= 1:
-            match first_arg_type:
-                Array(inner):
-                    if this.type_has_auto(inner):
-                        return TypeNode::Auto()
-                    return TypeNode::Array(TypeNode::Custom("std::pair", [TypeNode::Int(), inner]))
-                _:
-                    pass
-        elif target.lowered_name == "__lv_col_range" or target.lowered_name == "__lv_col_range_step":
-            return TypeNode::Array(TypeNode::Int())
-        elif target.lowered_name == "__lv_col_set_union" or target.lowered_name == "__lv_col_set_intersection" or target.lowered_name == "__lv_col_set_difference":
-            return first_arg_type
-        return TypeNode::Auto()
-
-    TypedExpr fn make_typed_expr(string kind, ref Expr node, ref TypeNode value_type, ref TypedCallTarget call_target, ref vector[TypedExpr] children, ref vector[TypedExpr] extra_children, string text_a, string text_b):
-        return TypedExpr(kind, node, value_type, call_target, children, extra_children, text_a, text_b)
+    TypedExpr fn make_typed_expr(string kind, ref TypeNode value_type, ref TypedCallTarget call_target, ref TypedCallSig call_signature, ref TypedClosureSig closure_signature, int int_a, ref vector[TypedExpr] children, ref vector[TypedExpr] extra_children, ref vector[string] names, ref vector[TypeNode] types, ref vector[string] capture_names, ref vector[TypeNode] capture_types, string text_a, string text_b):
+        return TypedExpr(kind, value_type, call_target, call_signature, closure_signature, int_a, children, extra_children, names, types, capture_names, capture_types, text_a, text_b)
 
     vector[TypedExpr] fn normalize_call_args(ref ExternFn fn_info, ref vector[Expr] args, ref vector[string] arg_names):
         vector[TypedExpr] normalized = []
@@ -376,69 +314,70 @@ class TypedNormalizer:
 
     TypedExpr fn normalize_expr(ref Expr expr):
         vector[TypedExpr] empty = []
+        vector[string] empty_names = []
+        vector[TypeNode] empty_types = []
+        TypedCallSig no_call = typed_call_sig_none()
+        TypedClosureSig no_closure = typed_closure_sig_none()
         match expr:
             Literal(kind, value):
-                return this.make_typed_expr("literal", expr, this.infer_expr_type(expr), typed_call_target_none(), empty, empty, kind, value)
+                return this.make_typed_expr("literal", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, empty, empty, empty_names, empty_types, empty_names, empty_types, kind, value)
             Unary(op, right):
                 vector[TypedExpr] children = [this.normalize_expr(right)]
-                return this.make_typed_expr("unary", expr, typed_expr_type(children[0]), typed_call_target_none(), children, empty, op.lexeme, "")
+                return this.make_typed_expr("unary", typed_expr_type(children[0]), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, op.lexeme, "")
             Binary(left, op, right):
                 vector[TypedExpr] children = [this.normalize_expr(left), this.normalize_expr(right)]
-                return this.make_typed_expr("binary", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, op.lexeme, "")
+                return this.make_typed_expr("binary", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, op.lexeme, "")
             Grouping(inner):
                 vector[TypedExpr] children = [this.normalize_expr(inner)]
-                return this.make_typed_expr("grouping", expr, typed_expr_type(children[0]), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("grouping", typed_expr_type(children[0]), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Variable(name):
-                return this.make_typed_expr("variable", expr, this.infer_expr_type(expr), typed_call_target_none(), empty, empty, name.lexeme, "")
+                return this.make_typed_expr("variable", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, empty, empty, empty_names, empty_types, empty_names, empty_types, name.lexeme, "")
             Assign(name, value):
                 vector[TypedExpr] children = [this.normalize_expr(value)]
-                return this.make_typed_expr("assign", expr, typed_expr_type(children[0]), typed_call_target_none(), children, empty, name.lexeme, "")
+                return this.make_typed_expr("assign", typed_expr_type(children[0]), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, name.lexeme, "")
             Logical(left, op, right):
                 vector[TypedExpr] children = [this.normalize_expr(left), this.normalize_expr(right)]
-                return this.make_typed_expr("logical", expr, TypeNode::Bool(), typed_call_target_none(), children, empty, op.lexeme, "")
+                return this.make_typed_expr("logical", TypeNode::Bool(), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, op.lexeme, "")
             This(keyword):
                 if this.current_self_name != "":
                     Expr rewritten = Expr::Variable(Token(TK_IDENTIFIER, this.current_self_name, keyword.line, keyword.col))
-                    return this.make_typed_expr("variable", rewritten, TypeNode::Custom(this.current_struct_name, []), typed_call_target_none(), empty, empty, this.current_self_name, "")
-                return this.make_typed_expr("this", expr, this.infer_expr_type(expr), typed_call_target_none(), empty, empty, "", "")
+                    return this.make_typed_expr("variable", TypeNode::Custom(this.current_struct_name, []), typed_call_target_none(), no_call, no_closure, 0, empty, empty, empty_names, empty_types, empty_names, empty_types, this.current_self_name, "")
+                return this.make_typed_expr("this", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, empty, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Call(callee, paren, args, arg_names):
                 match callee:
                     Get(object, name):
                         TypedExpr normalized_object = this.normalize_expr(object)
                         TypeNode callee_object_type = typed_expr_type(normalized_object)
-                        TypedCallTarget call_target = typed_call_target_from_surface(this.checker, callee, callee_object_type)
+                        TypedCallTarget call_target = typed_call_target_from_surface(this.checker, callee, callee_object_type, TypeNode::Auto())
                         if typed_call_is_intrinsic(call_target):
                             vector[TypedExpr] call_children = [normalized_object]
                             for ref arg in args:
                                 call_children.push(this.normalize_expr(arg))
-                            TypeNode return_type = this.typed_call_return_type(call_target, call_children)
+                            TypeNode return_type = semantic_call_return_type(this.checker, call_target, call_children)
                             if call_target.lowered_name == "lv_push" and args.len() == 1:
                                 TypedExpr normalized_value = this.normalize_expr(args[0])
-                                match normalized_object.node:
-                                    Get(base_object, field_name):
-                                        vector[TypedExpr] pushed_args = [normalized_object, normalized_value]
-                                        TypedCallTarget pushed_target = typed_call_target_intrinsic(IntrinsicId::PushCopy())
-                                        TypeNode pushed_return_type = this.typed_call_return_type(pushed_target, pushed_args)
-                                        Expr pushed_expr = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, pushed_target.lowered_name, name.line, name.col)), paren, [], [])
-                                        TypedExpr pushed_value = this.make_typed_expr("call", pushed_expr, pushed_return_type, pushed_target, pushed_args, empty, "", "")
-                                        Expr set_expr = Expr::Set(base_object, field_name, Expr::None())
-                                        vector[TypedExpr] set_children = [this.normalize_expr(base_object), pushed_value]
-                                        return this.make_typed_expr("set", set_expr, pushed_return_type, typed_call_target_none(), set_children, empty, field_name.lexeme, "")
-                                    _:
-                                        vector[TypedExpr] call_children = [normalized_object, normalized_value]
-                                        Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, call_target.lowered_name, name.line, name.col)), paren, [], [])
-                                        return this.make_typed_expr("call", rewritten, return_type, call_target, call_children, empty, "", "")
+                                if normalized_object.kind == "get" and normalized_object.children.len() > 0:
+                                    vector[TypedExpr] pushed_args = [normalized_object, normalized_value]
+                                    TypedCallTarget pushed_target = typed_call_target_intrinsic(IntrinsicId::PushCopy())
+                                    TypeNode pushed_return_type = semantic_call_return_type(this.checker, pushed_target, pushed_args)
+                                    Expr pushed_expr = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, pushed_target.lowered_name, name.line, name.col)), paren, [], [])
+                                    TypedExpr pushed_value = this.make_typed_expr("call", pushed_return_type, pushed_target, this.make_typed_call_sig(pushed_args, pushed_return_type), no_closure, 0, pushed_args, empty, empty_names, empty_types, empty_names, empty_types, "", "")
+                                    vector[TypedExpr] set_children = [normalized_object.children[0], pushed_value]
+                                    return this.make_typed_expr("set", pushed_return_type, typed_call_target_none(), no_call, no_closure, 0, set_children, empty, empty_names, empty_types, empty_names, empty_types, normalized_object.text_a, "")
+                                vector[TypedExpr] call_children = [normalized_object, normalized_value]
+                                Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, call_target.lowered_name, name.line, name.col)), paren, [], [])
+                                return this.make_typed_expr("call", return_type, call_target, this.make_typed_call_sig(call_children, return_type), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                             Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, call_target.lowered_name, name.line, name.col)), paren, [], [])
-                            return this.make_typed_expr("call", rewritten, return_type, call_target, call_children, empty, "", "")
+                            return this.make_typed_expr("call", return_type, call_target, this.make_typed_call_sig(call_children, return_type), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                         string stdlib_name = stdlib_collection_method_runtime_name(callee_object_type, name.lexeme)
                         if stdlib_name != "":
                             vector[TypedExpr] call_children = [normalized_object]
                             for ref arg in args:
                                 call_children.push(this.normalize_expr(arg))
                             TypedCallTarget stdlib_target = typed_call_target_function(stdlib_name)
-                            TypeNode return_type = this.typed_call_return_type(stdlib_target, call_children)
+                            TypeNode return_type = semantic_call_return_type(this.checker, stdlib_target, call_children)
                             Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, stdlib_target.lowered_name, name.line, name.col)), paren, [], [])
-                            return this.make_typed_expr("call", rewritten, return_type, stdlib_target, call_children, empty, "", "")
+                            return this.make_typed_expr("call", return_type, stdlib_target, this.make_typed_call_sig(call_children, return_type), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                         match callee_object_type:
                             Custom(struct_name, type_args):
                                 ExternFn method_info = this.method_signature_for(struct_name, name.lexeme)
@@ -448,16 +387,17 @@ class TypedNormalizer:
                                     for ref arg in method_args:
                                         call_children.push(arg)
                                     Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, this.method_signature_for(struct_name, name.lexeme).name, name.line, name.col)), paren, [], [])
-                                    return this.make_typed_expr("call", rewritten, method_info.return_type, call_target, call_children, empty, "", "")
+                                    return this.make_typed_expr("call", method_info.return_type, call_target, this.make_typed_call_sig(call_children, method_info.return_type), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                             _:
                                 pass
-                        vector[TypedExpr] fallback_children = []
+                        vector[TypedExpr] fallback_children = [normalized_object]
                         for ref arg in args:
                             fallback_children.push(this.normalize_expr(arg))
-                        Expr rewritten = Expr::Call(this.normalize_expr(callee).node, paren, [], [])
-                        return this.make_typed_expr("call", rewritten, this.infer_expr_type(expr), call_target, fallback_children, empty, "", "")
+                        TypeNode fallback_return = this.infer_expr_type(expr)
+                        return this.make_typed_expr("call", fallback_return, call_target, this.make_typed_call_sig(fallback_children, fallback_return), no_closure, 0, fallback_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                     Variable(name):
-                        TypedCallTarget call_target = typed_call_target_from_surface(this.checker, callee, TypeNode::Auto())
+                        TypeNode callee_type = this.infer_expr_type(callee)
+                        TypedCallTarget call_target = typed_call_target_from_surface(this.checker, callee, TypeNode::Auto(), callee_type)
                         vector[TypedExpr] call_children = []
                         if this.checker.known_funcs.has(name.lexeme):
                             ExternFn fn_info = this.checker.known_funcs[name.lexeme]
@@ -465,14 +405,34 @@ class TypedNormalizer:
                         else:
                             for ref arg in args:
                                 call_children.push(this.normalize_expr(arg))
-                        TypeNode return_type = this.typed_call_return_type(call_target, call_children)
+                        TypeNode return_type = semantic_call_return_type(this.checker, call_target, call_children)
+                        match return_type:
+                            Auto():
+                                TypeNode first_arg_type = TypeNode::Auto()
+                                if call_children.len() > 0:
+                                    first_arg_type = typed_expr_type(call_children[0])
+                                TypeNode builtin_type = intrinsic_builtin_call_return_type(name.lexeme, first_arg_type)
+                                match builtin_type:
+                                    Auto():
+                                        pass
+                                    _:
+                                        return_type = builtin_type
+                            _:
+                                pass
+                        if typed_is_closure_type(callee_type):
+                            TypeNode closure_return = typed_closure_return_type(callee_type)
+                            match closure_return:
+                                Auto():
+                                    pass
+                                _:
+                                    return_type = closure_return
                         match return_type:
                             Auto():
                                 return_type = this.infer_expr_type(expr)
                             _:
                                 pass
                         Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, call_target.lowered_name, name.line, name.col)), paren, [], [])
-                        return this.make_typed_expr("call", rewritten, return_type, call_target, call_children, empty, "", "")
+                        return this.make_typed_expr("call", return_type, call_target, this.make_typed_call_sig(call_children, return_type), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                     StaticGet(object, name):
                         TypeNode callee_object_type = TypeNode::Auto()
                         match object:
@@ -480,34 +440,36 @@ class TypedNormalizer:
                                 callee_object_type = TypeNode::Custom(enum_name.lexeme, [])
                             _:
                                 pass
-                        TypedCallTarget call_target = typed_call_target_from_surface(this.checker, callee, callee_object_type)
+                        TypedCallTarget call_target = typed_call_target_from_surface(this.checker, callee, callee_object_type, TypeNode::Auto())
                         vector[TypedExpr] call_children = []
                         for ref arg in args:
                             call_children.push(this.normalize_expr(arg))
-                        TypeNode return_type = this.typed_call_return_type(call_target, call_children)
+                        TypeNode return_type = semantic_call_return_type(this.checker, call_target, call_children)
                         match return_type:
                             Auto():
                                 return_type = this.infer_expr_type(expr)
                             _:
                                 pass
                         Expr rewritten = Expr::Call(Expr::Variable(Token(TK_IDENTIFIER, call_target.lowered_name, name.line, name.col)), paren, [], [])
-                        return this.make_typed_expr("call", rewritten, return_type, call_target, call_children, empty, "", "")
+                        return this.make_typed_expr("call", return_type, call_target, this.make_typed_call_sig(call_children, return_type), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
                     _:
                         vector[TypedExpr] call_children = []
                         for ref arg in args:
                             call_children.push(this.normalize_expr(arg))
-                        return this.make_typed_expr("call", expr, this.infer_expr_type(expr), typed_call_target_indirect(""), call_children, empty, "", "")
+                        TypeNode indirect_return = this.infer_expr_type(expr)
+                        TypedCallTarget indirect_target = typed_call_target_indirect("")
+                        return this.make_typed_expr("call", indirect_return, indirect_target, this.make_typed_call_sig(call_children, indirect_return), no_closure, 0, call_children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Index(object, bracket, index):
                 vector[TypedExpr] children = [this.normalize_expr(object), this.normalize_expr(index)]
-                return this.make_typed_expr("index", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("index", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             IndexSet(object, bracket, index, value):
                 vector[TypedExpr] children = [this.normalize_expr(object), this.normalize_expr(index), this.normalize_expr(value)]
-                return this.make_typed_expr("index_set", expr, typed_expr_type(children[2]), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("index_set", typed_expr_type(children[2]), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Vector(elements):
                 vector[TypedExpr] children = []
                 for ref element in elements:
                     children.push(this.normalize_expr(element))
-                return this.make_typed_expr("vector", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("vector", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Map(keys, values):
                 vector[TypedExpr] key_children = []
                 vector[TypedExpr] value_children = []
@@ -515,41 +477,68 @@ class TypedNormalizer:
                     key_children.push(this.normalize_expr(key))
                 for ref value in values:
                     value_children.push(this.normalize_expr(value))
-                return this.make_typed_expr("map", expr, this.infer_expr_type(expr), typed_call_target_none(), key_children, value_children, "", "")
+                return this.make_typed_expr("map", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, key_children, value_children, empty_names, empty_types, empty_names, empty_types, "", "")
             Get(object, name):
                 vector[TypedExpr] children = [this.normalize_expr(object)]
-                return this.make_typed_expr("get", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, name.lexeme, "")
+                return this.make_typed_expr("get", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, name.lexeme, "")
             Set(object, name, value):
                 vector[TypedExpr] children = [this.normalize_expr(object), this.normalize_expr(value)]
-                return this.make_typed_expr("set", expr, typed_expr_type(children[1]), typed_call_target_none(), children, empty, name.lexeme, "")
+                return this.make_typed_expr("set", typed_expr_type(children[1]), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, name.lexeme, "")
             StaticGet(object, name):
                 vector[TypedExpr] children = [this.normalize_expr(object)]
-                return this.make_typed_expr("static_get", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("static_get", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Lambda(params, body):
                 this.push_scope()
+                vector[string] param_names = []
+                vector[TypeNode] param_types = []
                 for ref param in params:
                     this.declare_normalized(param.name.lexeme, param.param_type)
+                    param_names.push(param.name.lexeme)
+                    param_types.push(param.param_type)
                 vector[TypedExpr] children = [this.normalize_expr(body)]
+                vector[string] capture_names = []
+                vector[TypeNode] capture_types = []
+                vector[string] bound_names = this.copy_names(param_names)
+                this.collect_expr_captures(children[0], bound_names, capture_names, capture_types)
                 this.pop_scope()
-                return this.make_typed_expr("lambda", expr, TypeNode::Auto(), typed_call_target_none(), children, empty, "", "")
+                TypeNode lambda_return = typed_expr_type(children[0])
+                TypedClosureSig closure_sig = this.make_typed_closure_sig(capture_types, param_types, lambda_return)
+                TypeNode closure_type = typed_closure_value_type(closure_sig)
+                return this.make_typed_expr("lambda", closure_type, typed_call_target_none(), no_call, closure_sig, 0, children, empty, param_names, param_types, capture_names, capture_types, "", "")
             BlockLambda(params, body_id):
-                this.normalize_lambda_block(params, body_id)
-                return this.make_typed_expr("block_lambda", expr, TypeNode::Auto(), typed_call_target_none(), empty, empty, to_string(body_id), "")
+                vector[TypedStmt] body = this.normalize_lambda_block(params, body_id)
+                vector[string] param_names = []
+                vector[TypeNode] param_types = []
+                for ref param in params:
+                    param_names.push(param.name.lexeme)
+                    param_types.push(param.param_type)
+                vector[string] capture_names = []
+                vector[TypeNode] capture_types = []
+                vector[string] bound_names = this.copy_names(param_names)
+                for ref stmt in body:
+                    this.collect_stmt_captures(stmt, bound_names, capture_names, capture_types)
+                TypeNode block_return = TypeNode::Void()
+                for ref stmt in body:
+                    if stmt.kind == "return" and stmt.exprs.len() > 0 and stmt.exprs[0].kind != "none":
+                        block_return = stmt.exprs[0].value_type
+                TypedClosureSig block_sig = this.make_typed_closure_sig(capture_types, param_types, block_return)
+                TypeNode closure_type = typed_closure_value_type(block_sig)
+                return this.make_typed_expr("block_lambda", closure_type, typed_call_target_none(), no_call, block_sig, body_id, empty, empty, param_names, param_types, capture_names, capture_types, "", "")
             Cast(value, target_type):
                 vector[TypedExpr] children = [this.normalize_expr(value)]
-                return this.make_typed_expr("cast", expr, target_type, typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("cast", target_type, typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Throw(value):
                 vector[TypedExpr] children = [this.normalize_expr(value)]
-                return this.make_typed_expr("throw", expr, TypeNode::Void(), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("throw", TypeNode::Void(), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Range(start, end):
                 vector[TypedExpr] children = [this.normalize_expr(start), this.normalize_expr(end)]
-                return this.make_typed_expr("range", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("range", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             Own(value):
                 vector[TypedExpr] children = [this.normalize_expr(value)]
-                return this.make_typed_expr("own", expr, typed_expr_type(children[0]), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("own", typed_expr_type(children[0]), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             AddressOf(value):
                 vector[TypedExpr] children = [this.normalize_expr(value)]
-                return this.make_typed_expr("address_of", expr, this.infer_expr_type(expr), typed_call_target_none(), children, empty, "", "")
+                return this.make_typed_expr("address_of", this.infer_expr_type(expr), typed_call_target_none(), no_call, no_closure, 0, children, empty, empty_names, empty_types, empty_names, empty_types, "", "")
             _:
                 return typed_expr_none()
 
@@ -558,6 +547,71 @@ class TypedNormalizer:
         for ref stmt in stmts:
             normalized.push(this.normalize_stmt(stmt))
         return normalized
+
+    void fn collect_expr_captures(ref TypedExpr expr, ref! vector[string] bound_names, ref! vector[string] capture_names, ref! vector[TypeNode] capture_types):
+        if expr.kind == "variable":
+            if not this.contains_name(bound_names, expr.text_a):
+                TypeNode capture_type = this.lookup_normalized(expr.text_a)
+                match capture_type:
+                    None():
+                        if this.current_self_name != "" and expr.text_a == this.current_self_name and this.current_struct_name != "":
+                            capture_type = TypeNode::Custom(this.current_struct_name, [])
+                    _:
+                        pass
+                match capture_type:
+                    None():
+                        pass
+                    _:
+                        this.add_capture(capture_names, capture_types, expr.text_a, capture_type)
+            return
+        elif expr.kind == "assign":
+            if not this.contains_name(bound_names, expr.text_a):
+                TypeNode capture_type = this.lookup_normalized(expr.text_a)
+                match capture_type:
+                    None():
+                        pass
+                    _:
+                        this.add_capture(capture_names, capture_types, expr.text_a, capture_type)
+        elif expr.kind == "lambda" or expr.kind == "block_lambda":
+            return
+        for ref child in expr.children:
+            this.collect_expr_captures(child, bound_names, capture_names, capture_types)
+        for ref child in expr.extra_children:
+            this.collect_expr_captures(child, bound_names, capture_names, capture_types)
+
+    void fn collect_stmt_captures(ref TypedStmt stmt, ref! vector[string] bound_names, ref! vector[string] capture_names, ref! vector[TypeNode] capture_types):
+        if stmt.kind == "let" or stmt.kind == "const":
+            for ref expr in stmt.exprs:
+                this.collect_expr_captures(expr, bound_names, capture_names, capture_types)
+            if stmt.text_a != "":
+                bound_names.push(stmt.text_a)
+        elif stmt.kind == "expr_stmt" or stmt.kind == "return":
+            for ref expr in stmt.exprs:
+                this.collect_expr_captures(expr, bound_names, capture_names, capture_types)
+        elif stmt.kind == "block" or stmt.kind == "namespace":
+            vector[string] nested_bound = this.copy_names(bound_names)
+            for ref child in stmt.children:
+                this.collect_stmt_captures(child, nested_bound, capture_names, capture_types)
+        elif stmt.kind == "if":
+            for ref expr in stmt.exprs:
+                this.collect_expr_captures(expr, bound_names, capture_names, capture_types)
+            if stmt.children.len() > 0:
+                vector[string] then_bound = this.copy_names(bound_names)
+                this.collect_stmt_captures(stmt.children[0], then_bound, capture_names, capture_types)
+            if stmt.children.len() > 1:
+                vector[string] else_bound = this.copy_names(bound_names)
+                this.collect_stmt_captures(stmt.children[1], else_bound, capture_names, capture_types)
+        elif stmt.kind == "while":
+            for ref expr in stmt.exprs:
+                this.collect_expr_captures(expr, bound_names, capture_names, capture_types)
+            if stmt.children.len() > 0:
+                vector[string] loop_bound = this.copy_names(bound_names)
+                this.collect_stmt_captures(stmt.children[0], loop_bound, capture_names, capture_types)
+        else:
+            for ref expr in stmt.exprs:
+                this.collect_expr_captures(expr, bound_names, capture_names, capture_types)
+            for ref child in stmt.children:
+                this.collect_stmt_captures(child, bound_names, capture_names, capture_types)
 
     vector[TypedStmt] fn normalize_lambda_block(ref vector[Param] params, int body_id):
         while this.normalized_lambda_blocks.len() <= body_id:

@@ -1,0 +1,83 @@
+import ast
+import checker
+import higher_order
+import intrinsics
+import typed_calls
+import typed_ast
+
+TypeNode fn direct_call_return_type(ref! Checker checker, ref TypedCallTarget target, ref TypeNode first_arg_type):
+    match target.kind:
+        Intrinsic():
+            return intrinsic_type_return_type(target.intrinsic, first_arg_type)
+        DirectFunction():
+            TypeNode builtin_type = intrinsic_builtin_call_return_type(target.source_name, first_arg_type)
+            match builtin_type:
+                Auto():
+                    pass
+                _:
+                    return builtin_type
+            builtin_type = intrinsic_builtin_call_return_type(target.lowered_name, first_arg_type)
+            match builtin_type:
+                Auto():
+                    pass
+                _:
+                    return builtin_type
+            if checker.known_funcs.has(target.source_name):
+                return checker.known_funcs[target.source_name].return_type
+            if checker.known_funcs.has(target.lowered_name):
+                return checker.known_funcs[target.lowered_name].return_type
+            return TypeNode::Auto()
+        DirectConstructor():
+            return TypeNode::Custom(target.source_name, [])
+        ClosureValue():
+            return TypeNode::Auto()
+        _:
+            return TypeNode::Auto()
+
+TypeNode fn semantic_call_return_type(ref! Checker checker, ref TypedCallTarget target, ref vector[TypedExpr] args):
+    TypeNode first_arg_type = TypeNode::Auto()
+    if args.len() > 0:
+        first_arg_type = typed_expr_type(args[0])
+
+    TypeNode direct_type = direct_call_return_type(checker, target, first_arg_type)
+    match direct_type:
+        Auto():
+            pass
+        _:
+            return direct_type
+
+    TypeNode higher_order_type = higher_order_return_type(target.lowered_name, args, first_arg_type)
+    match higher_order_type:
+        Auto():
+            pass
+        _:
+            return higher_order_type
+
+    if target.lowered_name == "__lv_col_zip" and args.len() >= 2:
+        match first_arg_type:
+            Array(left_inner):
+                match typed_expr_type(args[1]):
+                    Array(right_inner):
+                        if higher_order_type_has_auto(left_inner) or higher_order_type_has_auto(right_inner):
+                            return TypeNode::Auto()
+                        return TypeNode::Array(TypeNode::Custom("std::pair", [left_inner, right_inner]))
+                    _:
+                        pass
+            _:
+                pass
+    elif target.lowered_name == "__lv_col_take" or target.lowered_name == "__lv_col_drop":
+        return first_arg_type
+    elif target.lowered_name == "__lv_col_enumerate" and args.len() >= 1:
+        match first_arg_type:
+            Array(inner):
+                if higher_order_type_has_auto(inner):
+                    return TypeNode::Auto()
+                return TypeNode::Array(TypeNode::Custom("std::pair", [TypeNode::Int(), inner]))
+            _:
+                pass
+    elif target.lowered_name == "__lv_col_range" or target.lowered_name == "__lv_col_range_step":
+        return TypeNode::Array(TypeNode::Int())
+    elif target.lowered_name == "__lv_col_set_union" or target.lowered_name == "__lv_col_set_intersection" or target.lowered_name == "__lv_col_set_difference":
+        return first_arg_type
+
+    return TypeNode::Auto()
