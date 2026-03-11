@@ -1,5 +1,6 @@
 #pragma once
 #include "core.h"
+#include "bytes.h"
 
 static const std::string base64_chars = 
     "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -185,4 +186,34 @@ inline std::string base64_encode_binary(const std::vector<unsigned char>& input)
 inline std::vector<unsigned char> base64_decode_binary(const std::string& input) {
     std::string decoded = base64_decode(input);
     return std::vector<unsigned char>(decoded.begin(), decoded.end());
+}
+
+inline std::string __base64_encode(const std::string& input) {
+    return base64_encode(input);
+}
+
+inline std::string __base64_decode(const std::string& input) {
+    return base64_decode(input);
+}
+
+inline std::string __base64_url_encode(const std::string& input) {
+    return base64_url_encode(input);
+}
+
+inline std::string __base64_url_decode(const std::string& input) {
+    return base64_url_decode(input);
+}
+
+inline bool __base64_is_valid(const std::string& input) {
+    return base64_is_valid(input);
+}
+
+inline lv_bytes __base64_encode_bytes(const lv_bytes& input) {
+    std::string encoded = base64_encode_binary(std::vector<unsigned char>(input.begin(), input.end()));
+    return lv_bytes(encoded.begin(), encoded.end());
+}
+
+inline lv_bytes __base64_decode_bytes(const std::string& input) {
+    std::vector<unsigned char> decoded = base64_decode_binary(input);
+    return lv_bytes(decoded.begin(), decoded.end());
 }

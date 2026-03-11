@@ -448,3 +448,11 @@ inline std::string md5(const std::string& input) {
     return ss.str();
 }
 #endif
+
+inline std::string __crypto_sha256(const std::string& input) {
+    return sha256(input);
+}
+
+inline std::string __crypto_md5(const std::string& input) {
+    return md5(input);
+}

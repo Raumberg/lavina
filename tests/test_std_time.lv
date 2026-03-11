@@ -1,0 +1,47 @@
+import std::chrono
+
+void fn main():
+    lv_assert(chrono::now() > 0, "now > 0")
+    lv_assert(chrono::now_ms() > 0, "now_ms > 0")
+    lv_assert(chrono::now_us() > 0, "now_us > 0")
+    lv_assert(chrono::uptime_ms() >= 0, "uptime_ms >= 0")
+    lv_assert(chrono::perf_frequency() > 0, "perf frequency > 0")
+
+    chrono::DateTime dt = chrono::from_timestamp_ms(1704067200123, false)
+    lv_assert(dt.year == 2024, "year")
+    lv_assert(dt.month == 1, "month")
+    lv_assert(dt.day == 1, "day")
+    lv_assert(dt.hour == 0, "hour")
+    lv_assert(dt.minute == 0, "minute")
+    lv_assert(dt.second == 0, "second")
+    lv_assert(dt.millisecond == 123, "millisecond")
+
+    string formatted = chrono::format(dt, "%Y-%m-%d %H:%M:%S.{ms}")
+    lv_assert(formatted == "2024-01-01 00:00:00.123", "format with ms")
+    lv_assert(chrono::to_iso8601(1704067200, false) == "2024-01-01T00:00:00Z", "iso8601")
+    int parsed_iso = chrono::from_iso8601("2024-01-01T00:00:00")
+    chrono::DateTime parsed_dt = chrono::from_timestamp_ms(parsed_iso * 1000, true)
+    lv_assert(parsed_dt.year == 2024, "from iso8601 year")
+    lv_assert(parsed_dt.month == 1, "from iso8601 month")
+    lv_assert(parsed_dt.day == 1, "from iso8601 day")
+
+    chrono::DateTime local_now = chrono::current(true)
+    int local_now_ms = chrono::to_timestamp_ms(local_now)
+    chrono::DateTime local_roundtrip = chrono::from_timestamp_ms(local_now_ms, true)
+    lv_assert(local_roundtrip.year == local_now.year, "local roundtrip year")
+    lv_assert(local_roundtrip.month == local_now.month, "local roundtrip month")
+    lv_assert(local_roundtrip.day == local_now.day, "local roundtrip day")
+    lv_assert(local_roundtrip.hour == local_now.hour, "local roundtrip hour")
+    lv_assert(local_roundtrip.minute == local_now.minute, "local roundtrip minute")
+
+    chrono::DateTime valid = chrono::DateTime(2024, 2, 29, 12, 30, 15, 250, 0, 0)
+    chrono::DateTime invalid = chrono::DateTime(2024, 2, 30, 0, 0, 0, 0, 0, 0)
+    lv_assert(chrono::is_valid(valid), "valid datetime")
+    lv_assert(chrono::is_valid(invalid) == false, "invalid datetime")
+
+    int before = chrono::now_ms()
+    chrono::sleep_ms(20)
+    int after = chrono::now_ms()
+    lv_assert(after - before >= 10, "sleep_ms elapsed")
+    lv_assert(chrono::difference(after, before) >= 10, "difference")
+    print("All std::chrono tests passed!")

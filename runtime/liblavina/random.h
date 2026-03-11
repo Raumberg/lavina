@@ -2,6 +2,7 @@
 #define LAVINA_RANDOM_H
 
 #include "core.h"
+#include "bytes.h"
 
 #pragma comment(lib, "bcrypt.lib")
 
@@ -400,6 +401,88 @@ inline void rand_uuid_to_string(RandUUID uuid, char *out) {
     out[pos] = '\0';
 }
 
+#ifdef __cplusplus
+}
+#endif
+
+inline void __rand_seed(int64_t seed) {
+    rand_prng_seed(static_cast<uint64_t>(seed));
+}
+
+inline int64_t __rand_u32() {
+    return static_cast<int64_t>(rand_prng_u32());
+}
+
+inline int64_t __rand_u64() {
+    return static_cast<int64_t>(rand_prng_u64());
+}
+
+inline int64_t __rand_int(int64_t min, int64_t max) {
+    return static_cast<int64_t>(rand_prng_range(static_cast<int>(min), static_cast<int>(max)));
+}
+
+inline double __rand_double() {
+    return rand_prng_double();
+}
+
+inline double __rand_float() {
+    return static_cast<double>(rand_prng_float());
+}
+
+inline bool __rand_bool() {
+    return rand_prng_bool();
+}
+
+inline bool __rand_chance(double probability) {
+    return rand_prng_chance(probability);
+}
+
+inline double __rand_normal(double mean, double stddev) {
+    return rand_prng_normal(mean, stddev);
+}
+
+inline double __rand_exponential(double lambda) {
+    return rand_prng_exponential(lambda);
+}
+
+inline lv_bytes __rand_bytes(int64_t len) {
+    if (len <= 0) {
+        return lv_bytes();
+    }
+    lv_bytes out(static_cast<size_t>(len));
+    rand_prng_bytes(out.data(), out.size());
+    return out;
+}
+
+inline lv_bytes __rand_secure_bytes(int64_t len) {
+    if (len <= 0) {
+        return lv_bytes();
+    }
+    lv_bytes out(static_cast<size_t>(len));
+    rand_trng_bytes(out.data(), out.size());
+    return out;
+}
+
+inline int64_t __rand_secure_int(int64_t min, int64_t max) {
+    return static_cast<int64_t>(rand_trng_range(static_cast<int>(min), static_cast<int>(max)));
+}
+
+inline double __rand_secure_double() {
+    return rand_trng_double();
+}
+
+inline lv_bytes __rand_uuid_bytes() {
+    RandUUID uuid = rand_trng_uuid();
+    return lv_bytes(uuid.bytes, uuid.bytes + 16);
+}
+
+inline std::string __rand_uuid_string() {
+    RandUUID uuid = rand_trng_uuid();
+    char out[37];
+    rand_uuid_to_string(uuid, out);
+    return std::string(out);
+}
+
 // ============================================================================
 // Convenience Aliases (shorter names)
 // ============================================================================
@@ -422,9 +505,5 @@ inline void rand_uuid_to_string(RandUUID uuid, char *out) {
 #define rand_secure_u32()       rand_trng_u32()
 #define rand_secure_u64()       rand_trng_u64()
 #define rand_uuid()             rand_trng_uuid()
-
-#ifdef __cplusplus
-}
-#endif
 
 #endif // LAVINA_RANDOM_H

@@ -1,0 +1,7 @@
+// std::crypto — hashing helpers
+
+public string fn sha256(ref string input):
+    return __crypto_sha256(input)
+
+public string fn md5(ref string input):
+    return __crypto_md5(input)

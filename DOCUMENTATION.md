@@ -1252,6 +1252,65 @@ See [Type Casting](#type-casting) for full details on the `as` keyword.
 | `random(min, max)` | Random integer in range. |
 | `random_float()` | Random float in [0, 1). |
 
+### Crypto
+
+| Module Function | Description |
+|----------------|-------------|
+| `crypto::sha256(text)` | SHA-256 digest as lowercase hex string. |
+| `crypto::md5(text)` | MD5 digest as lowercase hex string. |
+
+### Base64
+
+| Module Function | Description |
+|----------------|-------------|
+| `base64::encode(text)` | Encode UTF-8 string as Base64. |
+| `base64::decode(text)` | Decode Base64 to string. |
+| `base64::url_encode(text)` | URL-safe Base64 encoding without padding. |
+| `base64::url_decode(text)` | Decode URL-safe Base64 string. |
+| `base64::is_valid(text)` | Validate Base64 input. |
+| `base64::encode_bytes(buf)` | Encode bytes, returns Base64 text as bytes. |
+| `base64::decode_bytes(text)` | Decode Base64 text into `bytes`. |
+
+### Random
+
+Use `import std::rng` for the newer random API. The module is named `rng` rather than `random` to avoid conflicts with C runtime symbols in generated C++.
+
+| Module Function | Description |
+|----------------|-------------|
+| `rng::seed(seed)` | Seed the pseudo-random generator. |
+| `rng::range(min, max)` | Pseudo-random integer in range. |
+| `rng::u32()` / `rng::u64()` | Pseudo-random unsigned values exposed as `int`. |
+| `rng::next_double()` / `rng::next_float()` | Pseudo-random float in `[0, 1)`. |
+| `rng::next_bool()` | Pseudo-random boolean. |
+| `rng::chance(p)` | Bernoulli trial with probability `p`. |
+| `rng::normal(mean, stddev)` | Normal distribution sample. |
+| `rng::exponential(lambda)` | Exponential distribution sample. |
+| `rng::next_bytes(len)` | Pseudo-random bytes. |
+| `rng::secure_bytes(len)` | OS-backed secure random bytes. |
+| `rng::secure_int(min, max)` | Secure random integer in range. |
+| `rng::secure_double()` | Secure random float in `[0, 1)`. |
+| `rng::uuid_bytes()` / `rng::uuid_string()` | Random UUID v4 as bytes/string. |
+
+### Time
+
+Use `import std::chrono` for the newer time API. The module is named `chrono` rather than `time` to avoid conflicts with the C `time()` symbol in generated C++.
+
+| Module Function | Description |
+|----------------|-------------|
+| `chrono::now()` / `chrono::now_ms()` / `chrono::now_us()` | Current Unix time in seconds / milliseconds / microseconds. |
+| `chrono::uptime_ms()` | Monotonic uptime in milliseconds. |
+| `chrono::perf_counter()` / `chrono::perf_frequency()` | High-resolution timer values. |
+| `chrono::current(local = true)` | Current local or UTC `DateTime`. |
+| `chrono::from_timestamp_ms(ms, local = true)` | Convert timestamp to `DateTime`. |
+| `chrono::to_timestamp(dt)` / `chrono::to_timestamp_ms(dt)` | Convert `DateTime` back to Unix time. |
+| `chrono::format(dt, fmt)` / `chrono::format_current(fmt)` | Format date/time values. |
+| `chrono::to_iso8601(ts, local = true)` | Format Unix seconds as ISO-8601. |
+| `chrono::from_iso8601(text)` | Parse ISO-like string in local time. |
+| `chrono::sleep_ms(ms)` / `chrono::sleep_us(us)` / `chrono::sleep_seconds(sec)` | Sleep helpers. |
+| `chrono::difference(a, b)` | Subtract timestamps. |
+| `chrono::timezone_offset()` | Local offset from UTC in seconds. |
+| `chrono::is_valid(dt)` | Validate `DateTime` fields. |
+
 ### Standard Library Modules
 
 The standard library is organized into importable modules:
@@ -1262,6 +1321,10 @@ import std::os           // os::args(), os::exec(), ...
 import std::math         // math::PI, math::sqrt(), ...
 import std::collections  // vector/hashset dot-methods + free functions
 import std::bytes        // bytes::create(), buf.get(), buf.write_u16_be(), ...
+import std::crypto       // crypto::sha256(), crypto::md5()
+import std::base64       // base64::encode(), decode(), url_encode(), ...
+import std::rng          // rng::range(), secure_bytes(), uuid_string(), ...
+import std::chrono       // chrono::now_ms(), format(), DateTime, ...
 import std::net          // net::tcp_listen(), TcpStream, UdpSocket, ...
 import std::thread       // thread::spawn(), Mutex, Pool, ...
 ```
@@ -1323,6 +1386,52 @@ bool eq = a.equals(b)               // compare
 // Free functions
 bytes c = bytes::concat(a, b)
 bool e = bytes::equals(a, b)
+```
+
+**std::crypto** provides hashing helpers:
+
+```lavina
+import std::crypto
+
+string sha = crypto::sha256("lavina")
+string digest = crypto::md5("lavina")
+```
+
+**std::base64** provides text and binary Base64 helpers:
+
+```lavina
+import std::base64
+import std::bytes
+
+string encoded = base64::encode("hello")
+string decoded = base64::decode(encoded)
+
+bytes raw = bytes::from_string("Lavina")
+bytes encoded_bytes = base64::encode_bytes(raw)
+bytes decoded_bytes = base64::decode_bytes("TGF2aW5h")
+```
+
+**std::rng** provides pseudo-random and secure random generation:
+
+```lavina
+import std::rng
+
+rng::seed(12345)
+int roll = rng::range(1, 6)
+float x = rng::next_double()
+bytes token = rng::secure_bytes(32)
+string uuid = rng::uuid_string()
+```
+
+**std::chrono** provides time, date, and sleep helpers:
+
+```lavina
+import std::chrono
+
+int now_ms = chrono::now_ms()
+chrono::DateTime dt = chrono::current()
+string stamp = chrono::format(dt, "%Y-%m-%d %H:%M:%S.{ms}")
+chrono::sleep_ms(50)
 ```
 
 **std::net** provides TCP/UDP networking and DNS resolution:

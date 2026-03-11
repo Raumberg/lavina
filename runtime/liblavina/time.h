@@ -145,7 +145,7 @@ namespace TimeUtils {
 
     // DateTime conversion functions
 
-    // Convert Unix timestamp to DateTime structure
+    // Convert Unix timestamp in seconds to DateTime structure
     inline DateTime timestampToDateTime(long long timestamp, bool localTime = true) {
         DateTime dt;
         time_t time = static_cast<time_t>(timestamp);
@@ -175,18 +175,29 @@ namespace TimeUtils {
         dt.dayOfWeek = timeinfo.tm_wday;
         dt.dayOfYear = timeinfo.tm_yday + 1;
         
-        // Add milliseconds/microseconds if available
-        long long ms = timestamp % 1000;
-        if (ms < 0) ms += 1000;
-        dt.millisecond = static_cast<int>(ms);
+        dt.millisecond = 0;
         dt.microsecond = 0;
         
         return dt;
     }
 
+    // Convert Unix timestamp in milliseconds to DateTime structure
+    inline DateTime timestampMsToDateTime(long long timestampMs, bool localTime = true) {
+        long long seconds = timestampMs / 1000;
+        long long ms = timestampMs % 1000;
+        if (ms < 0) {
+            ms += 1000;
+            seconds -= 1;
+        }
+
+        DateTime dt = timestampToDateTime(seconds, localTime);
+        dt.millisecond = static_cast<int>(ms);
+        return dt;
+    }
+
     // Get current DateTime
     inline DateTime getCurrentDateTime(bool localTime = true) {
-        return timestampToDateTime(getCurrentTimestamp(), localTime);
+        return timestampMsToDateTime(getCurrentTimestampMs(), localTime);
     }
 
     // Convert DateTime to Unix timestamp
@@ -330,16 +341,17 @@ namespace TimeUtils {
 
     // Add duration to DateTime
     inline DateTime addDuration(const DateTime& dt, const Duration& duration) {
-        long long timestamp = dateTimeToTimestamp(dt);
-        timestamp += duration.seconds();
-        return timestampToDateTime(timestamp, true);
+        long long timestampMs = dateTimeToTimestamp(dt) * 1000LL;
+        timestampMs += dt.millisecond;
+        timestampMs += duration.milliseconds;
+        return timestampMsToDateTime(timestampMs, true);
     }
 
     // Calculate duration between two DateTimes
     inline Duration durationBetween(const DateTime& dt1, const DateTime& dt2) {
-        long long ts1 = dateTimeToTimestamp(dt1);
-        long long ts2 = dateTimeToTimestamp(dt2);
-        return Duration((ts1 - ts2) * 1000);
+        long long ts1 = dateTimeToTimestamp(dt1) * 1000LL + dt1.millisecond;
+        long long ts2 = dateTimeToTimestamp(dt2) * 1000LL + dt2.millisecond;
+        return Duration(ts1 - ts2);
     }
 
     // Timezone functions
@@ -453,3 +465,138 @@ namespace TimeUtils {
         return true;
     }
 } // namespace TimeUtils
+
+inline int64_t __time_now() {
+    return TimeUtils::getCurrentTimestamp();
+}
+
+inline int64_t __time_now_ms() {
+    return TimeUtils::getCurrentTimestampMs();
+}
+
+inline int64_t __time_now_us() {
+    return TimeUtils::getCurrentTimestampUs();
+}
+
+inline int64_t __time_uptime_ms() {
+    return TimeUtils::getSystemUptime();
+}
+
+inline int64_t __time_perf_counter() {
+    return TimeUtils::getPerformanceCounter();
+}
+
+inline int64_t __time_perf_frequency() {
+    return TimeUtils::getPerformanceFrequency();
+}
+
+inline TimeUtils::DateTime __time_datetime_from_timestamp_ms(int64_t timestamp_ms, bool local_time) {
+    return TimeUtils::timestampMsToDateTime(timestamp_ms, local_time);
+}
+
+inline int64_t __time_datetime_to_timestamp_ms(
+    int64_t year,
+    int64_t month,
+    int64_t day,
+    int64_t hour,
+    int64_t minute,
+    int64_t second,
+    int64_t millisecond
+) {
+    TimeUtils::DateTime dt;
+    dt.year = static_cast<int>(year);
+    dt.month = static_cast<int>(month);
+    dt.day = static_cast<int>(day);
+    dt.hour = static_cast<int>(hour);
+    dt.minute = static_cast<int>(minute);
+    dt.second = static_cast<int>(second);
+    dt.millisecond = static_cast<int>(millisecond);
+    return TimeUtils::dateTimeToTimestamp(dt) * 1000LL + dt.millisecond;
+}
+
+inline std::string __time_format_datetime(
+    int64_t year,
+    int64_t month,
+    int64_t day,
+    int64_t hour,
+    int64_t minute,
+    int64_t second,
+    int64_t millisecond,
+    int64_t day_of_week,
+    int64_t day_of_year,
+    const std::string& format
+) {
+    TimeUtils::DateTime dt;
+    dt.year = static_cast<int>(year);
+    dt.month = static_cast<int>(month);
+    dt.day = static_cast<int>(day);
+    dt.hour = static_cast<int>(hour);
+    dt.minute = static_cast<int>(minute);
+    dt.second = static_cast<int>(second);
+    dt.millisecond = static_cast<int>(millisecond);
+    dt.dayOfWeek = static_cast<int>(day_of_week);
+    dt.dayOfYear = static_cast<int>(day_of_year);
+    return TimeUtils::formatDateTime(dt, format);
+}
+
+inline bool __time_is_valid_datetime(
+    int64_t year,
+    int64_t month,
+    int64_t day,
+    int64_t hour,
+    int64_t minute,
+    int64_t second,
+    int64_t millisecond
+) {
+    TimeUtils::DateTime dt;
+    dt.year = static_cast<int>(year);
+    dt.month = static_cast<int>(month);
+    dt.day = static_cast<int>(day);
+    dt.hour = static_cast<int>(hour);
+    dt.minute = static_cast<int>(minute);
+    dt.second = static_cast<int>(second);
+    dt.millisecond = static_cast<int>(millisecond);
+    return TimeUtils::isValidDateTime(dt);
+}
+
+inline int64_t __time_dt_year(const TimeUtils::DateTime& dt) { return dt.year; }
+inline int64_t __time_dt_month(const TimeUtils::DateTime& dt) { return dt.month; }
+inline int64_t __time_dt_day(const TimeUtils::DateTime& dt) { return dt.day; }
+inline int64_t __time_dt_hour(const TimeUtils::DateTime& dt) { return dt.hour; }
+inline int64_t __time_dt_minute(const TimeUtils::DateTime& dt) { return dt.minute; }
+inline int64_t __time_dt_second(const TimeUtils::DateTime& dt) { return dt.second; }
+inline int64_t __time_dt_millisecond(const TimeUtils::DateTime& dt) { return dt.millisecond; }
+inline int64_t __time_dt_day_of_week(const TimeUtils::DateTime& dt) { return dt.dayOfWeek; }
+inline int64_t __time_dt_day_of_year(const TimeUtils::DateTime& dt) { return dt.dayOfYear; }
+
+inline std::string __time_format_current(const std::string& format, bool local_time) {
+    return TimeUtils::formatCurrentTime(format, local_time);
+}
+
+inline std::string __time_to_iso8601(int64_t timestamp, bool local_time) {
+    return TimeUtils::toISO8601(timestamp, local_time);
+}
+
+inline int64_t __time_from_iso8601(const std::string& iso) {
+    return TimeUtils::fromISO8601(iso);
+}
+
+inline void __time_sleep_ms(int64_t milliseconds) {
+    TimeUtils::sleepMs(milliseconds);
+}
+
+inline void __time_sleep_us(int64_t microseconds) {
+    TimeUtils::sleepUs(microseconds);
+}
+
+inline void __time_sleep_seconds(double seconds) {
+    TimeUtils::sleepSeconds(seconds);
+}
+
+inline int64_t __time_difference(int64_t timestamp1, int64_t timestamp2) {
+    return TimeUtils::timeDifference(timestamp1, timestamp2);
+}
+
+inline int64_t __time_timezone_offset() {
+    return TimeUtils::getTimezoneOffset();
+}
