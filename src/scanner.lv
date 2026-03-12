@@ -46,7 +46,6 @@ const string TK_AUTO = "Auto"
 const string TK_BOOL = "Bool"
 const string TK_COMPTIME = "Comptime"
 const string TK_COMPTIME_STRICT = "ComptimeStrict"
-const string TK_DYNAMIC = "Dynamic"
 const string TK_ELSE = "Else"
 const string TK_ELIF = "Elif"
 const string TK_FALSE = "False"
@@ -134,8 +133,6 @@ string fn lookup_keyword(ref string w):
         return TK_BOOL
     elif w == "comptime":
         return TK_COMPTIME
-    elif w == "dynamic":
-        return TK_DYNAMIC
     elif w == "else":
         return TK_ELSE
     elif w == "elif":

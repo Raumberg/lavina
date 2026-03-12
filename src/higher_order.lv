@@ -2,6 +2,141 @@ import ast
 import typed_calls
 import typed_ast
 
+bool fn higher_order_types_equal(ref TypeNode left, ref TypeNode right):
+    match left:
+        None():
+            match right:
+                None():
+                    return true
+                _:
+                    return false
+        Int():
+            match right:
+                Int():
+                    return true
+                _:
+                    return false
+        Float():
+            match right:
+                Float():
+                    return true
+                _:
+                    return false
+        Str():
+            match right:
+                Str():
+                    return true
+                _:
+                    return false
+        Bool():
+            match right:
+                Bool():
+                    return true
+                _:
+                    return false
+        Void():
+            match right:
+                Void():
+                    return true
+                _:
+                    return false
+        Auto():
+            match right:
+                Auto():
+                    return true
+                _:
+                    return false
+        NullType():
+            match right:
+                NullType():
+                    return true
+                _:
+                    return false
+        Int8():
+            match right:
+                Int8():
+                    return true
+                _:
+                    return false
+        Int16():
+            match right:
+                Int16():
+                    return true
+                _:
+                    return false
+        Int32():
+            match right:
+                Int32():
+                    return true
+                _:
+                    return false
+        Float32():
+            match right:
+                Float32():
+                    return true
+                _:
+                    return false
+        USize():
+            match right:
+                USize():
+                    return true
+                _:
+                    return false
+        CString():
+            match right:
+                CString():
+                    return true
+                _:
+                    return false
+        Bytes():
+            match right:
+                Bytes():
+                    return true
+                _:
+                    return false
+        Array(left_inner):
+            match right:
+                Array(right_inner):
+                    return higher_order_types_equal(left_inner, right_inner)
+                _:
+                    return false
+        HashSet(left_inner):
+            match right:
+                HashSet(right_inner):
+                    return higher_order_types_equal(left_inner, right_inner)
+                _:
+                    return false
+        HashMap(left_key, left_value):
+            match right:
+                HashMap(right_key, right_value):
+                    return higher_order_types_equal(left_key, right_key) and higher_order_types_equal(left_value, right_value)
+                _:
+                    return false
+        Nullable(left_inner):
+            match right:
+                Nullable(right_inner):
+                    return higher_order_types_equal(left_inner, right_inner)
+                _:
+                    return false
+        Ptr(left_inner):
+            match right:
+                Ptr(right_inner):
+                    return higher_order_types_equal(left_inner, right_inner)
+                _:
+                    return false
+        Custom(left_name, left_args):
+            match right:
+                Custom(right_name, right_args):
+                    if left_name != right_name or left_args.len() != right_args.len():
+                        return false
+                    for i in 0..left_args.len():
+                        if not higher_order_types_equal(left_args[i], right_args[i]):
+                            return false
+                    return true
+                _:
+                    return false
+    return false
+
 bool fn higher_order_is_auto_type(ref TypeNode value_type):
     match value_type:
         Auto():
@@ -51,7 +186,7 @@ bool fn higher_order_closure_accepts_types(ref TypeNode closure_type, ref vector
             Auto():
                 pass
             _:
-                if param_types[i] != expected_types[i]:
+                if not higher_order_types_equal(param_types[i], expected_types[i]):
                     return false
     return true
 

@@ -1,0 +1,66 @@
+import ir
+
+struct IrIfPlan:
+    int then_index
+    int else_index
+    int end_index
+    string then_name
+    string else_name
+    string end_name
+
+struct IrWhilePlan:
+    int cond_index
+    int body_index
+    int end_index
+    string cond_name
+    string body_name
+    string end_name
+
+struct IrForPlan:
+    int cond_index
+    int body_index
+    int step_index
+    int end_index
+    string cond_name
+    string body_name
+    string step_name
+    string end_name
+
+struct IrMatchArmPlan:
+    int body_index
+    int fail_index
+    string body_name
+    string fail_name
+    bool is_wildcard
+
+IrIfPlan fn ir_if_plan(ref vector[IrBlock] blocks, int then_index, int else_index, int end_index):
+    return IrIfPlan(then_index, else_index, end_index, blocks[then_index].name, blocks[else_index].name, blocks[end_index].name)
+
+IrWhilePlan fn ir_while_plan(ref vector[IrBlock] blocks, int cond_index, int body_index, int end_index):
+    return IrWhilePlan(cond_index, body_index, end_index, blocks[cond_index].name, blocks[body_index].name, blocks[end_index].name)
+
+IrForPlan fn ir_for_plan(ref vector[IrBlock] blocks, int cond_index, int body_index, int step_index, int end_index):
+    return IrForPlan(cond_index, body_index, step_index, end_index, blocks[cond_index].name, blocks[body_index].name, blocks[step_index].name, blocks[end_index].name)
+
+IrMatchArmPlan fn ir_match_arm_plan(ref vector[IrBlock] blocks, int body_index, int fail_index, bool is_wildcard):
+    return IrMatchArmPlan(body_index, fail_index, blocks[body_index].name, blocks[fail_index].name, is_wildcard)
+
+void fn ir_push_loop_targets(ref! vector[string] break_targets, ref! vector[string] continue_targets, string break_target, string continue_target):
+    break_targets.push(break_target)
+    continue_targets.push(continue_target)
+
+void fn ir_pop_loop_targets(ref! vector[string] break_targets, ref! vector[string] continue_targets):
+    if break_targets.len() > 0:
+        break_targets.pop()
+    if continue_targets.len() > 0:
+        continue_targets.pop()
+
+string fn ir_current_break_target(ref vector[string] break_targets):
+    if break_targets.len() == 0:
+        return ""
+    return break_targets[break_targets.len() - 1]
+
+string fn ir_current_continue_target(ref vector[string] continue_targets):
+    if continue_targets.len() == 0:
+        return ""
+    return continue_targets[continue_targets.len() - 1]

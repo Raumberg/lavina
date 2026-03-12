@@ -1,0 +1,115 @@
+import backend_model
+import cpp_format
+import ir
+
+void fn cpp_push_line(ref! vector[string] lines, string line):
+    lines.push(line)
+
+IrClosureDef fn cpp_find_closure(ref vector[IrClosureDef] closures, string name):
+    vector[IrParam] empty_params = []
+    for ref closure in closures:
+        if closure.name == name:
+            return closure
+    return IrClosureDef("", "", empty_params, empty_params, IrClosureSig([], ir_auto_type()))
+
+IrClosureDef fn cpp_find_closure_by_helper(ref vector[IrClosureDef] closures, string helper_name):
+    vector[IrParam] empty_params = []
+    for ref closure in closures:
+        if closure.helper_name == helper_name:
+            return closure
+    return IrClosureDef("", "", empty_params, empty_params, IrClosureSig([], ir_auto_type()))
+
+string fn cpp_render_closure_inst(ref IrInst inst, ref vector[IrClosureDef] closures):
+    auto closure = cpp_find_closure(closures, ir_inst_closure_name(inst))
+    vector[string] capture_parts = []
+    for ref arg in ir_inst_args(inst):
+        capture_parts.push("&${cpp_safe_name(arg)}")
+    string capture_list = "[]"
+    if capture_parts.len() > 0:
+        capture_list = "[${capture_parts.join(", ")}]"
+    vector[string] param_parts = []
+    vector[string] call_parts = []
+    for ref capture in ir_closure_capture_params(closure):
+        call_parts.push(cpp_safe_name(capture.name))
+    for ref param in ir_closure_lambda_params(closure):
+        string param_name = cpp_safe_name(param.name)
+        param_parts.push("${cpp_type_from_ir(param.param_type)} ${param_name}")
+        call_parts.push(param_name)
+    string helper_call = "${ir_closure_helper_name(closure)}(${call_parts.join(", ")})"
+    if ir_type_is_void(ir_closure_sig_return_type(ir_closure_signature(closure))):
+        return "    auto ${cpp_safe_name(ir_inst_dest(inst))} = ${capture_list}(${param_parts.join(", ")}) { ${helper_call}; };"
+    return "    auto ${cpp_safe_name(ir_inst_dest(inst))} = ${capture_list}(${param_parts.join(", ")}) { return ${helper_call}; };"
+
+string fn cpp_render_inst(ref IrInst inst, ref vector[IrClosureDef] closures):
+    if ir_inst_is_const(inst):
+        return "    ${cpp_assign_target(inst)} = ${cpp_literal(inst)};"
+    elif ir_inst_is_vector_literal(inst):
+        vector[string] rendered = []
+        for ref arg in ir_inst_args(inst):
+            rendered.push(cpp_safe_name(arg))
+        return "    ${cpp_safe_name(ir_inst_dest(inst))} = {${rendered.join(", ")}};"
+    elif ir_inst_is_map_literal(inst):
+        vector[string] rendered = []
+        int i = 0
+        auto args = ir_inst_args(inst)
+        while i < args.len():
+            rendered.push("{${cpp_safe_name(args[i])}, ${cpp_safe_name(args[i + 1])}}")
+            i += 2
+        return "    ${cpp_safe_name(ir_inst_dest(inst))} = {${rendered.join(", ")}};"
+    elif ir_inst_is_move(inst):
+        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(ir_inst_source_name(inst))};"
+    elif ir_inst_is_unary(inst):
+        return "    ${cpp_assign_target(inst)} = ${cpp_operator(ir_inst_unary_op(inst))}${cpp_safe_name(ir_inst_unary_operand(inst))};"
+    elif ir_inst_is_binary(inst):
+        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(ir_inst_binary_left(inst))} ${cpp_operator(ir_inst_binary_op(inst))} ${cpp_safe_name(ir_inst_binary_right(inst))};"
+    elif ir_inst_is_call_like(inst):
+        vector[string] rendered_args = []
+        for ref arg in ir_inst_args(inst):
+            rendered_args.push(cpp_safe_name(arg))
+        string call_expr = "${ir_inst_call_target_name(inst)}(${rendered_args.join(", ")})"
+        string call_mode = ir_inst_call_mode(inst)
+        if call_mode == "value":
+            return "    ${cpp_assign_target(inst)} = ${call_expr};"
+        elif call_mode == "auto":
+            return "    auto ${cpp_safe_name(ir_inst_dest(inst))} = ${call_expr};"
+        return "    ${call_expr};"
+    elif ir_inst_is_field_read(inst):
+        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(ir_inst_field_object(inst))}.${ir_inst_field_name(inst)};"
+    elif ir_inst_is_field_write(inst):
+        return "    ${cpp_safe_name(ir_inst_field_object(inst))}.${ir_inst_field_name(inst)} = ${cpp_safe_name(ir_inst_field_value(inst))};"
+    elif ir_inst_is_index_read(inst):
+        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(ir_inst_index_object(inst))}[${cpp_safe_name(ir_inst_index_value(inst))}];"
+    elif ir_inst_is_index_write(inst):
+        return "    ${cpp_safe_name(ir_inst_index_object(inst))}[${cpp_safe_name(ir_inst_index_value(inst))}] = ${cpp_safe_name(ir_inst_index_set_value(inst))};"
+    elif ir_inst_is_convert(inst):
+        if ir_type_is_auto(ir_inst_value_type(inst)):
+            return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(ir_inst_source_name(inst))};"
+        return "    ${cpp_assign_target(inst)} = static_cast<${cpp_type_from_ir(ir_inst_value_type(inst))}>(${cpp_safe_name(ir_inst_source_name(inst))});"
+    elif ir_inst_is_bind_auto(inst):
+        return "    auto ${cpp_safe_name(ir_inst_dest(inst))} = ${ir_inst_bind_expr(inst)};"
+    elif ir_inst_is_make_closure(inst):
+        return cpp_render_closure_inst(inst, closures)
+    elif ir_inst_is_enum_check(inst):
+        return "    ${cpp_assign_target(inst)} = std::holds_alternative<std::decay_t<decltype(${cpp_safe_name(ir_inst_enum_object(inst))})>::${ir_inst_enum_variant(inst)}>(${cpp_safe_name(ir_inst_enum_object(inst))}._data);"
+    elif ir_inst_is_enum_read(inst):
+        return "    ${cpp_assign_target(inst)} = std::get<std::decay_t<decltype(${cpp_safe_name(ir_inst_enum_object(inst))})>::${ir_inst_enum_variant(inst)}>(${cpp_safe_name(ir_inst_enum_object(inst))}._data).${ir_inst_enum_field(inst)};"
+    return "    /* unknown inst */"
+
+vector[string] fn cpp_render_terminator(ref IrTerminator term, bool is_entry, ref string return_type):
+    vector[string] lines = []
+    if ir_term_is_jump(term):
+        lines.push("    goto ${ir_term_jump_target(term)};")
+    elif ir_term_is_branch(term):
+        lines.push("    if (${cpp_safe_name(ir_term_condition(term))}) goto ${ir_term_then_target(term)}; else goto ${ir_term_else_target(term)};")
+    elif ir_term_is_return_void(term):
+        if is_entry:
+            lines.push("    return 0;")
+        elif return_type == "void":
+            lines.push("    return;")
+        else:
+            lines.push("    return {};")
+    elif ir_term_is_return_value(term):
+        lines.push("    return ${cpp_safe_name(ir_term_return_value_name(term))};")
+    else:
+        lines.push("    std::abort();")
+    return lines

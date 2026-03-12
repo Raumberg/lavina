@@ -286,47 +286,47 @@ IrType fn intrinsic_ir_element_type(ref IrType container_type):
         int comma_pos = container_type.name.indexOf(", ")
         if comma_pos >= 0:
             return ir_type(container_type.name.substring(comma_pos + 2, container_type.name.len() - 1))
-    return ir_type("auto")
+    return ir_auto_type()
 
 IrType fn intrinsic_ir_key_type(ref IrType container_type):
     if container_type.name.starts_with("map[") and container_type.name.ends_with("]"):
         int comma_pos = container_type.name.indexOf(", ")
         if comma_pos >= 0:
             return ir_type(container_type.name.substring(4, comma_pos))
-    return ir_type("auto")
+    return ir_auto_type()
 
 IrType fn intrinsic_ir_return_type(ref IntrinsicId intrinsic, ref IrType first_arg_type):
     match intrinsic:
         Len():
-            return ir_type("int")
+            return ir_int_type()
         IndexOf():
-            return ir_type("int")
+            return ir_int_type()
         Contains():
-            return ir_type("bool")
+            return ir_bool_type()
         Has():
-            return ir_type("bool")
+            return ir_bool_type()
         IsEmpty():
-            return ir_type("bool")
+            return ir_bool_type()
         Join():
-            return ir_type("string")
+            return ir_string_type()
         Print():
-            return ir_type("void")
+            return ir_void_type()
         Println():
-            return ir_type("void")
+            return ir_void_type()
         Assert():
-            return ir_type("void")
+            return ir_void_type()
         Push():
-            return ir_type("void")
+            return ir_void_type()
         Remove():
-            return ir_type("void")
+            return ir_void_type()
         Clear():
-            return ir_type("void")
+            return ir_void_type()
         Sort():
-            return ir_type("void")
+            return ir_void_type()
         Reverse():
-            return ir_type("void")
+            return ir_void_type()
         Add():
-            return ir_type("void")
+            return ir_void_type()
         Pop():
             return intrinsic_ir_element_type(first_arg_type)
         Unique():
@@ -338,15 +338,15 @@ IrType fn intrinsic_ir_return_type(ref IntrinsicId intrinsic, ref IrType first_a
         Flatten():
             return intrinsic_ir_element_type(first_arg_type)
         Keys():
-            return ir_type("array[${ir_type_to_string(intrinsic_ir_key_type(first_arg_type))}]")
+            return ir_array_type(intrinsic_ir_key_type(first_arg_type))
         Values():
-            return ir_type("array[${ir_type_to_string(intrinsic_ir_element_type(first_arg_type))}]")
+            return ir_array_type(intrinsic_ir_element_type(first_arg_type))
         _:
-            return ir_type("auto")
+            return ir_auto_type()
 
 IrType fn intrinsic_ir_builtin_return_type(string callee_name):
     IntrinsicId intrinsic = intrinsic_from_name(callee_name)
-    return intrinsic_ir_return_type(intrinsic, ir_type("auto"))
+    return intrinsic_ir_return_type(intrinsic, ir_auto_type())
 
 IrType fn intrinsic_ir_container_return_type(string callee_name, ref IrType first_arg_type):
     IntrinsicId intrinsic = intrinsic_from_name(callee_name)

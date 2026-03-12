@@ -12,7 +12,6 @@ class CppCodegen:
     int temp_counter
     bool has_main
     hashmap[string, vector[EnumVariantNode]] known_enums
-    vector[string] dynamic_vars
     vector[string] extern_includes
     vector[string] extern_link_libs
     vector[string] extern_import_paths
@@ -37,7 +36,6 @@ class CppCodegen:
         this.temp_counter = 0
         this.has_main = false
         this.known_enums = {}
-        this.dynamic_vars = []
         this.extern_includes = []
         this.extern_link_libs = []
         this.extern_import_paths = []
@@ -69,16 +67,6 @@ class CppCodegen:
             result +="    "
         return result
 
-    bool fn is_dynamic_var(ref string name):
-        for ref v in this.dynamic_vars:
-            if v == name:
-                return true
-        return false
-
-    void fn add_dynamic_var(string name):
-        if not this.is_dynamic_var(name):
-            this.dynamic_vars.push(name)
-
     EnumVariantNode fn get_variant_info(ref string enum_name, ref string variant_name):
         if this.known_enums.has(enum_name):
             vector[EnumVariantNode] variants = this.known_enums[enum_name]
@@ -97,15 +85,6 @@ class CppCodegen:
             string base = name.substring(0, angle)
             return this.known_enums.has(base)
         return false
-
-    bool fn type_contains_dynamic(ref TypeNode t):
-        match t:
-            Dynamic():
-                return true
-            Array(inner):
-                return this.type_contains_dynamic(inner)
-            _:
-                return false
 
     string fn template_prefix(ref vector[string] type_params):
         if type_params.len() == 0:
@@ -295,8 +274,6 @@ class CppCodegen:
     string fn emit_cast(ref Expr expr, ref TypeNode target_type, bool m):
         string ex = this.emit_expr(expr, m)
         string t = this.emit_type(target_type)
-        if this.is_dynamic_expression(expr):
-            return "std::any_cast<${t}>(${ex})"
         TypeNode src = this.infer_source_type(expr)
         // string -> int/float
         if is_string_type(src):
@@ -435,15 +412,6 @@ class CppCodegen:
         elif kind == "null":
             return "std::nullopt"
         return value
-
-    bool fn is_dynamic_expression(ref Expr e):
-        match e:
-            Variable(name):
-                return this.is_dynamic_var(name.lexeme)
-            Index(object, bracket, index):
-                return this.is_dynamic_expression(object)
-            _:
-                return false
 
     // Resolve named arguments: reorder args to match param positions, fill defaults
     vector[string] fn resolve_named_args(ref vector[Expr] args, ref vector[string] arg_names, ref vector[Param] params, ref vector[Expr] defaults, bool in_method):
@@ -794,9 +762,8 @@ class CppCodegen:
     void fn emit_extend_method(ref string type_key, ref Stmt method):
         match method:
             Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, vis, tp, m_defaults):
-                vector[string] saved_dyn = this.dynamic_vars
                 string ret_type = this.emit_type(mret)
-                string param_str = this.emit_params(mparams, true)
+                string param_str = this.emit_params(mparams)
                 string all_params = "auto&& self"
                 if param_str != "":
                     all_params = "auto&& self, ${param_str}"
@@ -809,11 +776,10 @@ class CppCodegen:
                 this.in_extend = saved_extend
                 this.indent_level -= 1
                 this.output +="${this.indent()}}\n\n"
-                this.dynamic_vars = saved_dyn
             _:
                 pass
 
-    string fn emit_params(ref vector[Param] params, bool track_dynamic):
+    string fn emit_params(ref vector[Param] params):
         vector[string] strs = []
         for ref p in params:
             if p.is_ref and p.is_mut:
@@ -823,20 +789,14 @@ class CppCodegen:
             else:
                 strs.push("${this.emit_type(p.param_type)} ${p.name.lexeme}")
             this.var_types[p.name.lexeme] = p.param_type
-            if track_dynamic:
-                match p.param_type:
-                    Dynamic():
-                        this.add_dynamic_var(p.name.lexeme)
-                    _:
-                        pass
         return strs.join(", ")
 
     string fn emit_lambda(ref vector[Param] params, ref Expr body, bool in_method):
         string body_str = this.emit_expr(body, in_method)
-        return "[&](${this.emit_params(params, false)}) { return ${body_str}; }"
+        return "[&](${this.emit_params(params)}) { return ${body_str}; }"
 
     string fn emit_block_lambda(ref vector[Param] params, int body_id, bool in_method):
-        string param_str = this.emit_params(params, false)
+        string param_str = this.emit_params(params)
         string saved_output = this.output
         this.output = ""
         int saved_indent = this.indent_level
@@ -891,9 +851,6 @@ class CppCodegen:
                         this.emit_block_or_stmt(body, m)
                     _:
                         match collection:
-                            Variable(tok):
-                                if this.is_dynamic_var(tok.lexeme):
-                                    this.add_dynamic_var(item_name.lexeme)
                             _:
                                 pass
                         string for_type = "auto"
@@ -976,8 +933,6 @@ class CppCodegen:
     void fn emit_let(ref Token name, ref TypeNode var_type, ref Expr initializer, bool in_method, bool is_ref, bool is_mut):
         string cpp_type = this.emit_type(var_type)
         this.var_types[name.lexeme] = var_type
-        if this.type_contains_dynamic(var_type):
-            this.add_dynamic_var(name.lexeme)
         string const_str = ""
         string ref_str = ""
         if is_ref:
@@ -1021,10 +976,9 @@ class CppCodegen:
     void fn emit_function(ref Token name, ref vector[Param] params, ref TypeNode return_type, ref vector[Stmt] body, ref vector[string] type_params, int comptime_mode, ref vector[Expr] defaults):
         this.fn_params[name.lexeme] = params
         this.fn_defaults[name.lexeme] = defaults
-        vector[string] saved_dynamic = this.dynamic_vars
         this.output +=this.template_prefix(type_params)
         string ret_type = this.emit_type(return_type)
-        string param_str = this.emit_params(params, true)
+        string param_str = this.emit_params(params)
         string prefix = ""
         if comptime_mode == 1:
             prefix = "constexpr "
@@ -1036,7 +990,6 @@ class CppCodegen:
             this.emit_stmt(st, false)
         this.indent_level -= 1
         this.output +="${this.indent()}}\n\n"
-        this.dynamic_vars = saved_dynamic
 
     // ── Class emission ────────────────────────────────────────
 
@@ -1054,7 +1007,7 @@ class CppCodegen:
             this.output +="\n"
 
     void fn emit_constructor(ref Token name, ref vector[Param] init_params, ref vector[Stmt] init_body):
-        string param_str = this.emit_params(init_params, false)
+        string param_str = this.emit_params(init_params)
         vector[string] init_list = []
         vector[Stmt] remaining_body = []
         for ref st in init_body:
@@ -1084,20 +1037,17 @@ class CppCodegen:
         else:
             this.output +="${this.indent()}${name.lexeme}(${param_str})\n"
             this.output +="${this.indent()}    : ${init_list.join(", ")} {\n"
-        vector[string] saved_dyn = this.dynamic_vars
         this.indent_level += 1
         for ref st in remaining_body:
             this.emit_stmt(st, true)
         this.indent_level -= 1
         this.output +="${this.indent()}}\n\n"
-        this.dynamic_vars = saved_dyn
 
     void fn emit_class_method(ref Token class_name, ref Stmt method):
         match method:
             Function(mname, mparams, mret, mbody, is_inline, comptime_mode, is_static, visibility, m_tp, m_defs2):
-                vector[string] saved_dyn = this.dynamic_vars
                 string ret_type = this.emit_type(mret)
-                string mparam_str = this.emit_params(mparams, true)
+                string mparam_str = this.emit_params(mparams)
                 string ct_prefix = ""
                 if comptime_mode == 1:
                     ct_prefix = "constexpr "
@@ -1114,7 +1064,6 @@ class CppCodegen:
                     this.emit_stmt(st, true)
                 this.indent_level -= 1
                 this.output +="${this.indent()}}\n\n"
-                this.dynamic_vars = saved_dyn
             _:
                 pass
 

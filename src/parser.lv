@@ -68,7 +68,7 @@ class Parser:
         auto t = this.peek_at(pos).token_type
         vector[string] type_tokens = [
             TK_INT_TYPE, TK_FLOAT_TYPE, TK_STRING_TYPE, TK_BOOL, TK_VOID,
-            TK_AUTO, TK_DYNAMIC, TK_VECTOR, TK_HASHMAP, TK_HASHSET,
+            TK_AUTO, TK_VECTOR, TK_HASHMAP, TK_HASHSET,
             TK_IDENTIFIER, TK_INT8, TK_INT16, TK_INT32, TK_INT64,
             TK_FLOAT32, TK_FLOAT64, TK_USIZE, TK_CSTRING, TK_PTR, TK_BYTES
         ]
@@ -150,8 +150,6 @@ class Parser:
             t = TypeNode::Void()
         elif this.match_any([TK_AUTO]):
             t = TypeNode::Auto()
-        elif this.match_any([TK_DYNAMIC]):
-            t = TypeNode::Dynamic()
         elif this.match_any([TK_NULL]):
             t = TypeNode::NullType()
         elif this.match_any([TK_VECTOR]):

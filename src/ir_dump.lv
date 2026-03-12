@@ -1,0 +1,120 @@
+import ir
+
+vector[string] fn ir_named_param_parts(ref vector[IrParam] params):
+    vector[string] parts = []
+    for ref p in params:
+        parts.push("${p.name}: ${ir_type_to_string(p.param_type)}")
+    return parts
+
+vector[string] fn ir_named_signature_param_parts(ref vector[IrParam] params, ref vector[IrType] param_types):
+    vector[string] parts = []
+    for i in 0..params.len():
+        if i < param_types.len():
+            parts.push("${params[i].name}: ${ir_type_to_string(param_types[i])}")
+    return parts
+
+string fn ir_call_target_to_string(ref IrCallTarget target):
+    if ir_call_target_is_intrinsic(target):
+        return "intrinsic ${ir_call_target_name(target)}"
+    elif ir_call_target_is_closure(target):
+        return "closure ${ir_call_target_name(target)}"
+    elif ir_call_target_is_indirect(target):
+        return "indirect ${ir_call_target_name(target)}"
+    return ir_call_target_name(target)
+
+string fn ir_inst_to_string(ref IrInst inst):
+    if ir_inst_is_const(inst):
+        return "${ir_inst_dest(inst)} = const ${ir_type_to_string(ir_inst_value_type(inst))} ${ir_inst_literal_kind(inst)} ${ir_inst_literal_value(inst)}"
+    elif ir_inst_is_vector_literal(inst):
+        return "${ir_inst_dest(inst)} = vector_literal [${ir_inst_args(inst).join(", ")}] : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_map_literal(inst):
+        return "${ir_inst_dest(inst)} = map_literal {${ir_inst_args(inst).join(", ")}} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_move(inst):
+        return "${ir_inst_dest(inst)} = move ${ir_inst_source_name(inst)} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_unary(inst):
+        return "${ir_inst_dest(inst)} = unary ${ir_inst_unary_op(inst)} ${ir_inst_unary_operand(inst)} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_binary(inst):
+        return "${ir_inst_dest(inst)} = binary ${ir_inst_binary_op(inst)} ${ir_inst_binary_left(inst)}, ${ir_inst_binary_right(inst)} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_call_like(inst):
+        string rendered_target = ir_call_target_to_string(ir_inst_call_target(inst))
+        string rendered_args = ir_inst_args(inst).join(", ")
+        string call_mode = ir_inst_call_mode(inst)
+        if call_mode == "value":
+            return "${ir_inst_dest(inst)} = call ${rendered_target}(${rendered_args}) : ${ir_type_to_string(ir_inst_value_type(inst))}"
+        elif call_mode == "auto":
+            return "${ir_inst_dest(inst)} = call_auto ${rendered_target}(${rendered_args})"
+        return "call ${rendered_target}(${rendered_args}) : void"
+    elif ir_inst_is_field_read(inst):
+        return "${ir_inst_dest(inst)} = get_field ${ir_inst_field_object(inst)}.${ir_inst_field_name(inst)} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_field_write(inst):
+        return "set_field ${ir_inst_field_object(inst)}.${ir_inst_field_name(inst)} = ${ir_inst_field_value(inst)}"
+    elif ir_inst_is_index_read(inst):
+        return "${ir_inst_dest(inst)} = index ${ir_inst_index_object(inst)}[${ir_inst_index_value(inst)}] : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_index_write(inst):
+        return "index_set ${ir_inst_index_object(inst)}[${ir_inst_index_value(inst)}] = ${ir_inst_index_set_value(inst)}"
+    elif ir_inst_is_convert(inst):
+        return "${ir_inst_dest(inst)} = convert ${ir_inst_source_name(inst)} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_bind_auto(inst):
+        return "${ir_inst_dest(inst)} = bind_auto ${ir_inst_bind_expr(inst)}"
+    elif ir_inst_is_make_closure(inst):
+        return "${ir_inst_dest(inst)} = make_closure ${ir_inst_closure_name(inst)}(${ir_inst_args(inst).join(", ")}) : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    elif ir_inst_is_enum_check(inst):
+        return "${ir_inst_dest(inst)} = enum_is ${ir_inst_enum_object(inst)} is ${ir_inst_enum_variant(inst)}"
+    elif ir_inst_is_enum_read(inst):
+        return "${ir_inst_dest(inst)} = enum_get ${ir_inst_enum_object(inst)} as ${ir_inst_enum_variant(inst)}.${ir_inst_enum_field(inst)} : ${ir_type_to_string(ir_inst_value_type(inst))}"
+    return "<unknown-inst>"
+
+string fn ir_terminator_to_string(ref IrTerminator term):
+    if ir_term_is_none(term):
+        return "unreachable"
+    elif ir_term_is_jump(term):
+        return "jump ${ir_term_jump_target(term)}"
+    elif ir_term_is_branch(term):
+        return "branch ${ir_term_condition(term)}, ${ir_term_then_target(term)}, ${ir_term_else_target(term)}"
+    elif ir_term_is_return_void(term):
+        return "return"
+    elif ir_term_is_return_value(term):
+        return "return ${ir_term_return_value_name(term)}"
+    elif ir_term_is_unreachable(term):
+        return "unreachable"
+    return "<unknown-term>"
+
+string fn ir_dump_function(ref IrFunction fn_ir):
+    vector[string] parts = []
+    vector[string] param_parts = ir_named_param_parts(ir_function_params(fn_ir))
+    parts.push("fn ${ir_function_name(fn_ir)}(${param_parts.join(", ")}) -> ${ir_type_to_string(ir_function_return_type(fn_ir))} {")
+    auto locals = ir_function_locals(fn_ir)
+    if locals.len() > 0:
+        vector[string] local_parts = []
+        for ref local in locals:
+            local_parts.push("${local.name}: ${ir_type_to_string(local.local_type)}")
+        parts.push("  locals ${local_parts.join(", ")}")
+    for ref block in ir_function_blocks(fn_ir):
+        parts.push("  ${ir_block_name(block)}:")
+        for ref inst in ir_block_instructions(block):
+            parts.push("    ${ir_inst_to_string(inst)}")
+        parts.push("    ${ir_terminator_to_string(ir_block_terminator(block))}")
+    parts.push("}")
+    return parts.join("\n")
+
+string fn ir_dump_closure(ref IrClosureDef closure_ir):
+    auto signature = ir_closure_signature(closure_ir)
+    vector[string] capture_parts = ir_named_param_parts(ir_closure_capture_params(closure_ir))
+    vector[string] lambda_parts = ir_named_signature_param_parts(ir_closure_lambda_params(closure_ir), ir_closure_sig_param_types(signature))
+    return "closure ${ir_closure_name(closure_ir)} captures (${capture_parts.join(", ")}) params (${lambda_parts.join(", ")}) -> ${ir_type_to_string(ir_closure_sig_return_type(signature))} uses ${ir_closure_helper_name(closure_ir)}"
+
+string fn ir_dump_module(ref IrModule module_ir):
+    vector[string] parts = []
+    parts.push("module ${ir_module_name(module_ir)}")
+    parts.push("")
+    auto closures = ir_module_closures(module_ir)
+    for ref closure_ir in closures:
+        parts.push(ir_dump_closure(closure_ir))
+    if closures.len() > 0:
+        parts.push("")
+    auto functions = ir_module_functions(module_ir)
+    for i in 0..functions.len():
+        parts.push(ir_dump_function(functions[i]))
+        if i + 1 < functions.len():
+            parts.push("")
+    return parts.join("\n")

@@ -146,16 +146,12 @@ class Checker:
                 return true
             None():
                 return true
-            Dynamic():
-                return true
             _:
                 pass
         match actual:
             Auto():
                 return true
             None():
-                return true
-            Dynamic():
                 return true
             _:
                 pass

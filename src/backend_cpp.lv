@@ -1,4 +1,6 @@
 import backend_model
+import backend_cpp_support
+import cpp_format
 import ir
 import typed_ast
 import type_utils
@@ -8,293 +10,27 @@ import type_utils
 //  Converts structured IR into a structured C++ backend model.
 // ═══════════════════════════════════════════════════════════════
 
-string fn cpp_escape_string(string value):
-    return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t")
-
-string fn cpp_operator(string op):
-    if op == "and":
-        return "&&"
-    elif op == "or":
-        return "||"
-    elif op == "not":
-        return "!"
-    return op
-
-string fn cpp_safe_name(string name):
-    if name.starts_with("%"):
-        return "tmp_${name.substring(1, name.len())}"
-    return name
-
-string fn cpp_literal(ref IrInst inst):
-    if inst.text_a == "string":
-        return "\"${cpp_escape_string(inst.text_b)}\""
-    elif inst.text_a == "bool":
-        return inst.text_b
-    elif inst.text_a == "null":
-        return "nullptr"
-    return inst.text_b
-
-string fn cpp_map_key_type(string map_type):
-    int comma_pos = map_type.indexOf(", ")
-    if comma_pos >= 0:
-        return map_type.substring(4, comma_pos)
-    return "auto"
-
-string fn cpp_map_value_type(string map_type):
-    int comma_pos = map_type.indexOf(", ")
-    if comma_pos >= 0:
-        return map_type.substring(comma_pos + 2, map_type.len() - 1)
-    return "auto"
-
-vector[string] fn cpp_split_generic_args(string type_name):
-    vector[string] parts = []
-    string current = ""
-    int depth = 0
-    for i in 0..type_name.len():
-        string ch = type_name.substring(i, i + 1)
-        if ch == "<":
-            depth += 1
-            current += ch
-        elif ch == ">":
-            depth -= 1
-            current += ch
-        elif ch == "," and depth == 0:
-            parts.push(current.trim())
-            current = ""
-        else:
-            current += ch
-    if current != "":
-        parts.push(current.trim())
-    return parts
-
-string fn cpp_type_from_ir(ref IrType t):
-    if t.name == "void":
-        return "void"
-    elif t.name == "bool":
-        return "bool"
-    elif t.name == "int":
-        return "int64_t"
-    elif t.name == "float":
-        return "double"
-    elif t.name == "string":
-        return "std::string"
-    elif t.name == "bytes":
-        return "lv_bytes"
-    elif t.name == "int8":
-        return "int8_t"
-    elif t.name == "int16":
-        return "int16_t"
-    elif t.name == "int32":
-        return "int32_t"
-    elif t.name == "float32":
-        return "float"
-    elif t.name == "usize":
-        return "size_t"
-    elif t.name == "*char":
-        return "const char*"
-    elif t.name.starts_with("array[") and t.name.ends_with("]"):
-        string inner = t.name.substring(6, t.name.len() - 1)
-        return "std::vector<${cpp_type_from_ir(IrType(inner))}>"
-    elif t.name.starts_with("set[") and t.name.ends_with("]"):
-        string inner = t.name.substring(4, t.name.len() - 1)
-        return "std::unordered_set<${cpp_type_from_ir(IrType(inner))}>"
-    elif t.name.starts_with("map[") and t.name.ends_with("]"):
-        string key_type = cpp_map_key_type(t.name)
-        string value_type = cpp_map_value_type(t.name)
-        return "std::unordered_map<${cpp_type_from_ir(IrType(key_type))}, ${cpp_type_from_ir(IrType(value_type))}>"
-    elif t.name.starts_with("std::pair<") and t.name.ends_with(">"):
-        string inner = t.name.substring(10, t.name.len() - 1)
-        vector[string] parts = cpp_split_generic_args(inner)
-        if parts.len() == 2:
-            return "std::pair<${cpp_type_from_ir(IrType(parts[0]))}, ${cpp_type_from_ir(IrType(parts[1]))}>"
-        return t.name
-    elif t.name.starts_with("*"):
-        return "${cpp_type_from_ir(IrType(t.name.substring(1, t.name.len())))}*"
-    elif t.name.starts_with("?"):
-        string inner = t.name.substring(1, t.name.len())
-        return "std::optional<${cpp_type_from_ir(IrType(inner))}>"
-    elif t.name.starts_with("closure:"):
-        return "auto"
-    elif t.name == "auto":
-        return "auto"
-    return t.name
-
-string fn cpp_type_from_type_node(ref TypeNode t):
-    match t:
-        Int():
-            return "int64_t"
-        Float():
-            return "double"
-        Str():
-            return "std::string"
-        Bool():
-            return "bool"
-        Void():
-            return "void"
-        Int8():
-            return "int8_t"
-        Int16():
-            return "int16_t"
-        Int32():
-            return "int32_t"
-        Float32():
-            return "float"
-        USize():
-            return "size_t"
-        Bytes():
-            return "lv_bytes"
-        Custom(name, type_args):
-            if name == "__closure":
-                return "auto"
-            return type_to_cpp(t)
-        _:
-            return type_to_cpp(t)
-
-bool fn cpp_should_skip_local(ref CppFunction function_model, ref string name):
-    for ref local in function_model.locals:
-        if local.name == name:
-            return true
-    return false
-
-void fn cpp_push_line(ref! vector[string] lines, string line):
-    lines.push(line)
-
-IrClosureDef fn cpp_find_closure(ref vector[IrClosureDef] closures, string name):
-    vector[IrParam] empty_params = []
-    for ref closure in closures:
-        if closure.name == name:
-            return closure
-    return IrClosureDef("", "", empty_params, empty_params, IrClosureSig([], ir_type("auto")))
-
-IrClosureDef fn cpp_find_closure_by_helper(ref vector[IrClosureDef] closures, string helper_name):
-    vector[IrParam] empty_params = []
-    for ref closure in closures:
-        if closure.helper_name == helper_name:
-            return closure
-    return IrClosureDef("", "", empty_params, empty_params, IrClosureSig([], ir_type("auto")))
-
-string fn cpp_assign_target(ref IrInst inst):
-    if inst.dest != "" and inst.value_type.name == "auto":
-        return "auto ${cpp_safe_name(inst.dest)}"
-    return cpp_safe_name(inst.dest)
-
-string fn cpp_render_closure_inst(ref IrInst inst, ref vector[IrClosureDef] closures):
-    auto closure = cpp_find_closure(closures, inst.text_a)
-    vector[string] capture_parts = []
-    for ref arg in inst.args:
-        capture_parts.push("&${cpp_safe_name(arg)}")
-    string capture_list = "[]"
-    if capture_parts.len() > 0:
-        capture_list = "[${capture_parts.join(", ")}]"
-    vector[string] param_parts = []
-    vector[string] call_parts = []
-    for ref capture in closure.capture_params:
-        call_parts.push(cpp_safe_name(capture.name))
-    for ref param in closure.lambda_params:
-        string param_name = cpp_safe_name(param.name)
-        param_parts.push("${cpp_type_from_ir(param.param_type)} ${param_name}")
-        call_parts.push(param_name)
-    string helper_call = "${closure.helper_name}(${call_parts.join(", ")})"
-    if closure.signature.return_type.name == "void":
-        return "    auto ${cpp_safe_name(inst.dest)} = ${capture_list}(${param_parts.join(", ")}) { ${helper_call}; };"
-    return "    auto ${cpp_safe_name(inst.dest)} = ${capture_list}(${param_parts.join(", ")}) { return ${helper_call}; };"
-
-string fn cpp_render_inst(ref IrInst inst, ref vector[IrClosureDef] closures):
-    if inst.kind == "const":
-        return "    ${cpp_assign_target(inst)} = ${cpp_literal(inst)};"
-    elif inst.kind == "vector_literal":
-        vector[string] rendered = []
-        for ref arg in inst.args:
-            rendered.push(cpp_safe_name(arg))
-        return "    ${cpp_safe_name(inst.dest)} = {${rendered.join(", ")}};"
-    elif inst.kind == "map_literal":
-        vector[string] rendered = []
-        int i = 0
-        while i < inst.args.len():
-            rendered.push("{${cpp_safe_name(inst.args[i])}, ${cpp_safe_name(inst.args[i + 1])}}")
-            i += 2
-        return "    ${cpp_safe_name(inst.dest)} = {${rendered.join(", ")}};"
-    elif inst.kind == "move":
-        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(inst.text_a)};"
-    elif inst.kind == "unary":
-        return "    ${cpp_assign_target(inst)} = ${cpp_operator(inst.text_a)}${cpp_safe_name(inst.text_b)};"
-    elif inst.kind == "binary":
-        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(inst.text_b)} ${cpp_operator(inst.text_a)} ${cpp_safe_name(inst.text_c)};"
-    elif inst.kind == "call":
-        vector[string] rendered_args = []
-        for ref arg in inst.args:
-            rendered_args.push(cpp_safe_name(arg))
-        return "    ${cpp_assign_target(inst)} = ${inst.call_target.name}(${rendered_args.join(", ")});"
-    elif inst.kind == "call_auto":
-        vector[string] rendered_args = []
-        for ref arg in inst.args:
-            rendered_args.push(cpp_safe_name(arg))
-        return "    auto ${cpp_safe_name(inst.dest)} = ${inst.call_target.name}(${rendered_args.join(", ")});"
-    elif inst.kind == "call_void":
-        vector[string] rendered_args = []
-        for ref arg in inst.args:
-            rendered_args.push(cpp_safe_name(arg))
-        return "    ${inst.call_target.name}(${rendered_args.join(", ")});"
-    elif inst.kind == "get_field":
-        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(inst.text_a)}.${inst.text_b};"
-    elif inst.kind == "set_field":
-        return "    ${cpp_safe_name(inst.text_a)}.${inst.text_b} = ${cpp_safe_name(inst.text_c)};"
-    elif inst.kind == "index":
-        return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(inst.text_a)}[${cpp_safe_name(inst.text_b)}];"
-    elif inst.kind == "index_set":
-        return "    ${cpp_safe_name(inst.text_a)}[${cpp_safe_name(inst.text_b)}] = ${cpp_safe_name(inst.text_c)};"
-    elif inst.kind == "convert":
-        if inst.value_type.name == "auto":
-            return "    ${cpp_assign_target(inst)} = ${cpp_safe_name(inst.text_a)};"
-        return "    ${cpp_assign_target(inst)} = static_cast<${cpp_type_from_ir(inst.value_type)}>(${cpp_safe_name(inst.text_a)});"
-    elif inst.kind == "bind_auto":
-        return "    auto ${cpp_safe_name(inst.dest)} = ${inst.text_a};"
-    elif inst.kind == "make_closure":
-        return cpp_render_closure_inst(inst, closures)
-    elif inst.kind == "enum_is":
-        return "    ${cpp_assign_target(inst)} = std::holds_alternative<std::decay_t<decltype(${cpp_safe_name(inst.text_a)})>::${inst.text_b}>(${cpp_safe_name(inst.text_a)}._data);"
-    elif inst.kind == "enum_get":
-        return "    ${cpp_assign_target(inst)} = std::get<std::decay_t<decltype(${cpp_safe_name(inst.text_a)})>::${inst.text_b}>(${cpp_safe_name(inst.text_a)}._data).${inst.text_c};"
-    return "    /* unknown inst */"
-
-vector[string] fn cpp_render_terminator(ref IrTerminator term, bool is_entry, ref string return_type):
-    vector[string] lines = []
-    if term.kind == "jump":
-        lines.push("    goto ${term.text_a};")
-    elif term.kind == "branch":
-        lines.push("    if (${cpp_safe_name(term.text_a)}) goto ${term.text_b}; else goto ${term.text_c};")
-    elif term.kind == "return_void":
-        if is_entry:
-            lines.push("    return 0;")
-        elif return_type == "void":
-            lines.push("    return;")
-        else:
-            lines.push("    return {};")
-    elif term.kind == "return_value":
-        lines.push("    return ${cpp_safe_name(term.text_a)};")
-    else:
-        lines.push("    std::abort();")
-    return lines
-
 CppFunction fn cpp_lower_function(ref IrFunction fn_ir, ref vector[IrClosureDef] closures):
     vector[CppParam] params = []
     vector[CppLocal] locals = []
     vector[string] body_lines = []
-    auto helper_closure = cpp_find_closure_by_helper(closures, fn_ir.name)
-    for ref param in fn_ir.params:
+    auto helper_closure = cpp_find_closure_by_helper(closures, ir_function_name(fn_ir))
+    auto fn_params = ir_function_params(fn_ir)
+    auto closure_capture_params = ir_closure_capture_params(helper_closure)
+    for ref param in fn_params:
         string param_type = cpp_type_from_ir(param.param_type)
         int capture_index = -1
-        for i in 0..helper_closure.capture_params.len():
-            if i < fn_ir.params.len() and helper_closure.capture_params[i].name == param.name:
+        for i in 0..closure_capture_params.len():
+            if i < fn_params.len() and closure_capture_params[i].name == param.name:
                 capture_index = i
         if capture_index >= 0:
             param_type = "${param_type}&"
         if param.name == "self":
             param_type = "${param_type}&"
         params.push(CppParam(cpp_safe_name(param.name), param_type))
-    for ref local in fn_ir.locals:
+    for ref local in ir_function_locals(fn_ir):
         bool is_param = false
-        for ref param in fn_ir.params:
+        for ref param in fn_params:
             if param.name == local.name:
                 is_param = true
         if not is_param:
@@ -302,19 +38,19 @@ CppFunction fn cpp_lower_function(ref IrFunction fn_ir, ref vector[IrClosureDef]
             if local_type == "auto":
                 continue
             locals.push(CppLocal(cpp_safe_name(local.name), local_type))
-    for ref block in fn_ir.blocks:
-        cpp_push_line(body_lines, "  ${block.name}:")
-        for ref inst in block.instructions:
+    for ref block in ir_function_blocks(fn_ir):
+        cpp_push_line(body_lines, "  ${ir_block_name(block)}:")
+        for ref inst in ir_block_instructions(block):
             cpp_push_line(body_lines, cpp_render_inst(inst, closures))
-        auto term_lines = cpp_render_terminator(block.terminator, fn_ir.is_entry, cpp_type_from_ir(fn_ir.return_type))
+        auto term_lines = cpp_render_terminator(ir_block_terminator(block), ir_function_is_entry(fn_ir), cpp_type_from_ir(ir_function_return_type(fn_ir)))
         for ref line in term_lines:
             cpp_push_line(body_lines, line)
-    string return_type = cpp_type_from_ir(fn_ir.return_type)
-    string fn_name = fn_ir.name
-    if fn_ir.is_entry:
+    string return_type = cpp_type_from_ir(ir_function_return_type(fn_ir))
+    string fn_name = ir_function_name(fn_ir)
+    if ir_function_is_entry(fn_ir):
         return_type = "int"
         fn_name = "main"
-    return CppFunction(fn_name, return_type, params, locals, body_lines, fn_ir.is_entry)
+    return CppFunction(fn_name, return_type, params, locals, body_lines, ir_function_is_entry(fn_ir))
 
 string fn cpp_expr_literal(ref Expr expr):
     match expr:
@@ -574,14 +310,16 @@ CppModule fn cpp_lower_module(ref TypedProgram program, ref IrModule module_ir):
         structs.push(cpp_lower_struct(struct_info))
     for ref enum_info in program.enums:
         bool has_to_string = false
-        for ref fn_ir in module_ir.functions:
-            if fn_ir.name == "${enum_info.name}__to_string":
+        for ref fn_ir in ir_module_functions(module_ir):
+            if ir_function_name(fn_ir) == "${enum_info.name}__to_string":
                 has_to_string = true
         enums.push(cpp_lower_enum(enum_info, has_to_string))
-    for ref fn_ir in module_ir.functions:
-        if fn_ir.name == "__module_init":
+    auto module_functions = ir_module_functions(module_ir)
+    auto module_closures = ir_module_closures(module_ir)
+    for ref fn_ir in module_functions:
+        if ir_function_name(fn_ir) == "__module_init":
             continue
-        functions.push(cpp_lower_function(fn_ir, module_ir.closures))
+        functions.push(cpp_lower_function(fn_ir, module_closures))
     return CppModule(includes, structs, enums, functions)
 
 string fn cpp_render_struct(ref CppStruct struct_model):

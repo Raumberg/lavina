@@ -3,6 +3,7 @@ import checker
 import backend_cpp
 import backend_model
 import ir
+import ir_dump
 import lowering
 import parser
 import typed_ast

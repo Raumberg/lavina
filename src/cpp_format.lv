@@ -1,0 +1,115 @@
+import ir
+import type_utils
+
+string fn cpp_escape_string(string value):
+    return value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t")
+
+string fn cpp_operator(string op):
+    if op == "and":
+        return "&&"
+    elif op == "or":
+        return "||"
+    elif op == "not":
+        return "!"
+    return op
+
+string fn cpp_safe_name(string name):
+    if name.starts_with("%"):
+        return "tmp_${name.substring(1, name.len())}"
+    return name
+
+string fn cpp_literal(ref IrInst inst):
+    if ir_inst_literal_kind(inst) == "string":
+        return "\"${cpp_escape_string(ir_inst_literal_value(inst))}\""
+    elif ir_inst_literal_kind(inst) == "bool":
+        return ir_inst_literal_value(inst)
+    elif ir_inst_literal_kind(inst) == "null":
+        return "nullptr"
+    return ir_inst_literal_value(inst)
+
+string fn cpp_type_from_ir(ref IrType t):
+    if ir_type_is_void(t):
+        return "void"
+    elif ir_type_is_bool(t):
+        return "bool"
+    elif ir_type_is_int(t):
+        return "int64_t"
+    elif ir_type_is_float(t):
+        return "double"
+    elif ir_type_is_string(t):
+        return "std::string"
+    elif ir_type_is_bytes(t):
+        return "lv_bytes"
+    elif t.name == "int8":
+        return "int8_t"
+    elif t.name == "int16":
+        return "int16_t"
+    elif t.name == "int32":
+        return "int32_t"
+    elif t.name == "float32":
+        return "float"
+    elif t.name == "usize":
+        return "size_t"
+    elif t.name == "*char":
+        return "const char*"
+    elif ir_type_is_array(t):
+        string inner = ir_array_inner_type(t)
+        return "std::vector<${cpp_type_from_ir(IrType(inner))}>"
+    elif ir_type_is_set(t):
+        string inner = ir_set_inner_type(t)
+        return "std::unordered_set<${cpp_type_from_ir(IrType(inner))}>"
+    elif ir_type_is_map(t):
+        string key_type = ir_map_key_type_name(t)
+        string value_type = ir_map_value_type_name(t)
+        return "std::unordered_map<${cpp_type_from_ir(IrType(key_type))}, ${cpp_type_from_ir(IrType(value_type))}>"
+    elif ir_type_is_pair(t):
+        vector[string] parts = ir_pair_type_args(t)
+        if parts.len() == 2:
+            return "std::pair<${cpp_type_from_ir(IrType(parts[0]))}, ${cpp_type_from_ir(IrType(parts[1]))}>"
+        return t.name
+    elif ir_type_is_ptr(t):
+        return "${cpp_type_from_ir(IrType(ir_ptr_inner_type(t)))}*"
+    elif ir_type_is_nullable(t):
+        string inner = ir_nullable_inner_type(t)
+        return "std::optional<${cpp_type_from_ir(IrType(inner))}>"
+    elif ir_type_is_closure(t):
+        return "auto"
+    elif ir_type_is_auto(t):
+        return "auto"
+    return t.name
+
+string fn cpp_type_from_type_node(ref TypeNode t):
+    match t:
+        Int():
+            return "int64_t"
+        Float():
+            return "double"
+        Str():
+            return "std::string"
+        Bool():
+            return "bool"
+        Void():
+            return "void"
+        Int8():
+            return "int8_t"
+        Int16():
+            return "int16_t"
+        Int32():
+            return "int32_t"
+        Float32():
+            return "float"
+        USize():
+            return "size_t"
+        Bytes():
+            return "lv_bytes"
+        Custom(name, type_args):
+            if name == "__closure":
+                return "auto"
+            return type_to_cpp(t)
+        _:
+            return type_to_cpp(t)
+
+string fn cpp_assign_target(ref IrInst inst):
+    if ir_inst_dest(inst) != "" and ir_type_is_auto(ir_inst_value_type(inst)):
+        return "auto ${cpp_safe_name(ir_inst_dest(inst))}"
+    return cpp_safe_name(ir_inst_dest(inst))

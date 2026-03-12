@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-BOOTSTRAP_SRC = src/scanner.lv src/ast.lv src/type_utils.lv src/parser.lv src/checker.lv src/codegen.lv src/typed_ast.lv src/intrinsics.lv src/typed_calls.lv src/higher_order.lv src/call_semantics.lv src/typed_lowering.lv src/ir.lv src/lowering.lv src/backend_model.lv src/backend_cpp.lv src/main.lv
+BOOTSTRAP_SRC = src/scanner.lv src/ast.lv src/type_utils.lv src/parser.lv src/checker.lv src/codegen.lv src/typed_ast.lv src/intrinsics.lv src/typed_calls.lv src/higher_order.lv src/call_semantics.lv src/typed_lowering.lv src/ir.lv src/ir_dump.lv src/ir_call_support.lv src/ir_metadata_support.lv src/ir_control_flow_support.lv src/lowering.lv src/backend_model.lv src/cpp_format.lv src/backend_cpp_support.lv src/backend_cpp.lv src/main.lv
 LATEST_STAGE = stages/stage-latest.cpp
 
 # Windows (MSYS2) needs ws2_32 for Winsock
@@ -62,6 +62,7 @@ evolve: $(BOOTSTRAP_SRC)
 # ── Run test suite ───────────────────────────────────────────
 
 SKIP_WINDOWS_TESTS = test_std_fs test_std_os test_std_net test_std_thread test_stdlib
+IR_SUBSET_TESTS = tests/test_named_args.lv tests/test_structs.lv tests/test_collections.lv tests/test_enums.lv tests/test_enum_methods.lv tests/test_control_flow.lv tests/test_std_collections.lv tests/test_block_lambdas.lv
 
 test:
 	@if [ ! -f /tmp/lavina_next ]; then echo "Run 'make bootstrap' first"; exit 1; fi
@@ -118,6 +119,32 @@ test:
 	fi; \
 	if [ $$failed -ne 0 ]; then echo "Failed:$$errors"; exit 1; fi
 
+test-ir-subset:
+	@if [ ! -f /tmp/lavina_next ]; then echo "Run 'make bootstrap' first"; exit 1; fi
+	@cp runtime/lavina.h /tmp/lavina.h
+	@rm -rf /tmp/liblavina && cp -r runtime/liblavina /tmp/liblavina
+	@passed=0; failed=0; errors=""; \
+	for f in $(IR_SUBSET_TESTS); do \
+		name=$$(basename $$f .lv); \
+		cpp=/tmp/$$name.ir.cpp; \
+		bin=/tmp/$$name.ir.bin; \
+		if /tmp/lavina_next --emit-ir-cpp $$f > $$cpp && g++ -std=c++23 -I/tmp -o $$bin $$cpp $(LDFLAGS) && $$bin; then \
+			echo "  PASS  $$name"; \
+			passed=$$((passed + 1)); \
+		else \
+			echo "  FAIL  $$name"; \
+			failed=$$((failed + 1)); \
+			errors="$$errors $$name"; \
+		fi; \
+		rm -f $$cpp $$bin; \
+	done; \
+	echo ""; \
+	echo "$$passed passed, $$failed failed"; \
+	if [ $$failed -ne 0 ]; then echo "Failed:$$errors"; exit 1; fi
+
+verify-compiler-rewrite: bootstrap
+	@$(MAKE) test-ir-subset
+
 # ── Build compiler binary from latest stage ─────────────────
 
 build:
@@ -164,4 +191,4 @@ clean:
 	rm -f /tmp/lavina.h
 	rm -rf /tmp/liblavina
 
-.PHONY: bootstrap snapshot evolve clean test build lvpkg install uninstall
+.PHONY: bootstrap snapshot evolve clean test test-ir-subset verify-compiler-rewrite build lvpkg install uninstall

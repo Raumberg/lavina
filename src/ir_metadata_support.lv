@@ -1,0 +1,36 @@
+import intrinsics
+import ir
+import typed_ast
+
+IrType fn ir_element_type_of(ref IrType container_type):
+    return intrinsic_ir_element_type(container_type)
+
+IrType fn ir_struct_field_result_type(IrType fallback_type, ref! hashmap[string, IrType] struct_field_types, ref IrType object_type, string field_name):
+    if fallback_type.name != "auto":
+        return fallback_type
+    string field_key = "${object_type.name}.${field_name}"
+    if struct_field_types.has(field_key):
+        return struct_field_types[field_key]
+    return fallback_type
+
+TypedEnumVariant fn ir_enum_variant_lookup(ref! hashmap[string, vector[TypedEnumVariant]] enum_variants, string enum_name, string variant_name):
+    vector[TypeNode] empty_types = []
+    vector[string] empty_fields = []
+    if enum_variants.has(enum_name):
+        for ref variant in enum_variants[enum_name]:
+            if variant.name == variant_name:
+                return variant
+    return TypedEnumVariant("", empty_types, empty_fields)
+
+string fn ir_match_enum_name(ref TypeNode value_type):
+    match value_type:
+        Custom(name, type_args):
+            return name
+        _:
+            return ""
+
+void fn ir_emit_named_vector_literal(ref! vector[IrInst] instructions, string dest_name, IrType declared_type, ref vector[string] lowered_elements):
+    instructions.push(ir_vector_literal(dest_name, declared_type, lowered_elements))
+
+void fn ir_emit_named_map_literal(ref! vector[IrInst] instructions, string dest_name, IrType declared_type, ref vector[string] lowered_items):
+    instructions.push(ir_map_literal(dest_name, declared_type, lowered_items))

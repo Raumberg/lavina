@@ -1,0 +1,61 @@
+import ir
+import typed_ast
+import typed_calls
+
+IrCallSig fn ir_call_sig_from_lowered_types(ref vector[IrType] param_types, IrType return_type):
+    return ir_call_sig(param_types, return_type)
+
+IrClosureSig fn ir_closure_sig_from_lowered_types(ref vector[IrType] param_types, IrType return_type):
+    return ir_closure_sig(param_types, return_type)
+
+IrCallTarget fn ir_call_target_from_typed(ref TypedCallTarget target, IrCallSig signature):
+    match target.kind:
+        Intrinsic():
+            return ir_call_target_intrinsic(target.lowered_name, signature)
+        DirectFunction():
+            return ir_call_target_function(target.lowered_name, signature)
+        DirectConstructor():
+            return ir_call_target_function(target.lowered_name, signature)
+        ClosureValue():
+            return ir_call_target_closure(target.lowered_name, signature)
+        _:
+            return ir_call_target_indirect(target.lowered_name, signature)
+
+IrCallTarget fn ir_len_call_target(IrType collection_type):
+    vector[IrType] param_types = [collection_type]
+    return ir_call_target_intrinsic("len", ir_call_sig(param_types, ir_int_type()))
+
+void fn ir_emit_call_auto_named(ref! vector[IrInst] instructions, string dest_name, ref TypedExpr expr, ref vector[string] lowered_args, IrCallTarget call_target):
+    instructions.push(ir_call_auto(dest_name, call_target, lowered_args))
+
+void fn ir_emit_call_void_expr(ref! vector[IrInst] instructions, ref TypedExpr expr, ref vector[string] lowered_args, IrCallTarget call_target):
+    instructions.push(ir_call_void(call_target, lowered_args))
+
+void fn ir_emit_return_from_exprs(ref! IrTerminator terminator, ref vector[TypedExpr] exprs, string value_name):
+    if exprs.len() == 0:
+        terminator = ir_term_return_void()
+        return
+    if exprs[0].kind == "none":
+        terminator = ir_term_return_void()
+        return
+    terminator = ir_term_return_value(value_name)
+
+vector[IrParam] fn ir_params_from_names_and_types(ref vector[string] names, ref vector[IrType] types):
+    vector[IrParam] params = []
+    for i in 0..names.len():
+        if i < types.len():
+            params.push(IrParam(names[i], types[i]))
+    return params
+
+vector[string] fn ir_capture_names(ref TypedExpr expr):
+    vector[string] captures = []
+    for ref capture_name in expr.capture_names:
+        captures.push(capture_name)
+    return captures
+
+IrType fn ir_resolve_call_result_type(IrType result_type, ref! hashmap[string, IrType] call_return_types, string lowered_name, IrType current_return_type):
+    if ir_type_is_auto(result_type) and call_return_types.has(lowered_name):
+        result_type = call_return_types[lowered_name]
+    if ir_type_is_auto(result_type) and not ir_type_is_auto(current_return_type) and not ir_type_is_void(current_return_type):
+        result_type = current_return_type
+    return result_type

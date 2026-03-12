@@ -58,8 +58,6 @@ string fn type_to_cpp(ref TypeNode t):
             return "void"
         Auto():
             return "auto"
-        Dynamic():
-            return "std::any"
         NullType():
             return "std::nullptr_t"
         Custom(name, type_args):
@@ -112,8 +110,6 @@ string fn type_to_display(ref TypeNode t):
             return "void"
         Auto():
             return "auto"
-        Dynamic():
-            return "dynamic"
         NullType():
             return "null"
         Custom(name, _):
