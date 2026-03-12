@@ -26,11 +26,13 @@ class ImportResolver:
     vector[string] resolved_paths
     vector[ModuleInfo] modules
     string runtime_dir
+    string import_root
 
-    constructor(string runtime_dir):
+    constructor(string runtime_dir, string import_root):
         this.resolved_paths = []
         this.modules = []
         this.runtime_dir = runtime_dir
+        this.import_root = import_root
 
     bool fn already_resolved(ref string path):
         for ref p in this.resolved_paths:
@@ -45,6 +47,44 @@ class ImportResolver:
                 return path.substring(0, i + 1)
             i -= 1
         return "./"
+
+    string fn resolve_module_path(ref string current_dir, ref string file_rel):
+        vector[string] candidates = []
+        string alias_rel = this.resolve_compiler_alias(file_rel)
+        bool prefer_alias = alias_rel != "" and current_dir == this.import_root
+        if prefer_alias:
+            candidates.push("${this.import_root}${alias_rel}.lv")
+        candidates.push("${current_dir}${file_rel}.lv")
+        if alias_rel != "" and not prefer_alias:
+            candidates.push("${this.import_root}${alias_rel}.lv")
+        if this.import_root != current_dir:
+            candidates.push("${this.import_root}${file_rel}.lv")
+
+        for ref candidate in candidates:
+            if __fs_exists(candidate):
+                return candidate
+        return candidates[0]
+
+    string fn resolve_compiler_alias(ref string file_rel):
+        if file_rel == "backend_cpp":
+            return "backend/cpp"
+        elif file_rel == "backend_cpp_support":
+            return "backend/cpp_support"
+        elif file_rel == "cpp_format":
+            return "backend/cpp_format"
+        elif file_rel == "ir_dump":
+            return "ir/dump"
+        elif file_rel == "ir_call_support":
+            return "ir/support/calls"
+        elif file_rel == "ir_control_flow_support":
+            return "ir/support/control_flow"
+        elif file_rel == "ir_metadata_support":
+            return "ir/support/metadata"
+        elif file_rel == "call_semantics":
+            return "semantics/call_semantics"
+        elif file_rel == "higher_order":
+            return "semantics/higher_order"
+        return ""
 
     string fn resolve(string file_path):
         if this.already_resolved(file_path):
@@ -68,7 +108,7 @@ class ImportResolver:
                     mod_path = import_str.substring(0, as_pos).trim()
                 string file_rel = mod_path.replace("::", "/")
                 vector[string] segments = file_rel.split("/")
-                string module_file = "${dir}${file_rel}.lv"
+                string module_file = this.resolve_module_path(dir, file_rel)
                 if segments[0] == "std":
                     module_file = "${this.runtime_dir}${file_rel}.lv"
                 if segments.len() > 1:
@@ -150,7 +190,10 @@ int fn main():
         return 1
 
     string runtime_dir = find_runtime_dir()
-    auto resolver = ImportResolver(runtime_dir)
+    string import_root = __fs_dirname(path)
+    if not import_root.ends_with("/"):
+        import_root += "/"
+    auto resolver = ImportResolver(runtime_dir, import_root)
     string source = resolver.resolve(path)
 
     // Parse each module

@@ -1,0 +1,149 @@
+import core
+import types
+
+IrClosureSig fn ir_closure_sig(ref vector[IrType] param_types, IrType return_type):
+    return IrClosureSig(param_types, return_type)
+
+IrCallSig fn ir_call_sig(ref vector[IrType] param_types, IrType return_type):
+    return IrCallSig(param_types, return_type)
+
+IrType fn ir_closure_sig_return_type(ref IrClosureSig signature):
+    return signature.return_type
+
+vector[IrType] fn ir_closure_sig_param_types(ref IrClosureSig signature):
+    return signature.param_types
+
+IrType fn ir_call_sig_return_type(ref IrCallSig signature):
+    return signature.return_type
+
+vector[IrType] fn ir_call_sig_param_types(ref IrCallSig signature):
+    return signature.param_types
+
+IrCallTarget fn ir_call_target_none():
+    return IrCallTarget("none", "", ir_call_sig([], ir_void_type()))
+
+IrCallTarget fn ir_call_target_function(string name, IrCallSig signature):
+    return IrCallTarget("function", name, signature)
+
+IrCallTarget fn ir_call_target_intrinsic(string name, IrCallSig signature):
+    return IrCallTarget("intrinsic", name, signature)
+
+IrCallTarget fn ir_call_target_closure(string name, IrCallSig signature):
+    return IrCallTarget("closure", name, signature)
+
+IrCallTarget fn ir_call_target_indirect(string name, IrCallSig signature):
+    return IrCallTarget("indirect", name, signature)
+
+bool fn ir_call_target_is_none(ref IrCallTarget target):
+    return target.kind == "none"
+
+bool fn ir_call_target_is_function(ref IrCallTarget target):
+    return target.kind == "function"
+
+bool fn ir_call_target_is_intrinsic(ref IrCallTarget target):
+    return target.kind == "intrinsic"
+
+bool fn ir_call_target_is_closure(ref IrCallTarget target):
+    return target.kind == "closure"
+
+bool fn ir_call_target_is_indirect(ref IrCallTarget target):
+    return target.kind == "indirect"
+
+string fn ir_call_target_name(ref IrCallTarget target):
+    return target.name
+
+IrCallSig fn ir_call_target_signature(ref IrCallTarget target):
+    return target.signature
+
+IrType fn ir_call_target_return_type(ref IrCallTarget target):
+    return ir_call_sig_return_type(target.signature)
+
+vector[IrType] fn ir_call_target_param_types(ref IrCallTarget target):
+    return ir_call_sig_param_types(target.signature)
+
+IrCallPayload fn ir_call_payload(string mode, IrCallTarget target, ref vector[string] args):
+    return IrCallPayload(mode, target, args)
+
+IrCallPayload fn ir_call_payload_none():
+    return ir_call_payload("none", ir_call_target_none(), [])
+
+IrCallPayload fn ir_call_payload_value(IrCallTarget target, ref vector[string] args):
+    return ir_call_payload("value", target, args)
+
+IrCallPayload fn ir_call_payload_auto(IrCallTarget target, ref vector[string] args):
+    return ir_call_payload("auto", target, args)
+
+IrCallPayload fn ir_call_payload_void(IrCallTarget target, ref vector[string] args):
+    return ir_call_payload("void", target, args)
+
+bool fn ir_call_payload_is_none(ref IrCallPayload payload):
+    return payload.mode == "none"
+
+bool fn ir_call_payload_is_value(ref IrCallPayload payload):
+    return payload.mode == "value"
+
+bool fn ir_call_payload_is_auto(ref IrCallPayload payload):
+    return payload.mode == "auto"
+
+bool fn ir_call_payload_is_void(ref IrCallPayload payload):
+    return payload.mode == "void"
+
+string fn ir_call_payload_mode(ref IrCallPayload payload):
+    return payload.mode
+
+IrCallTarget fn ir_call_payload_target(ref IrCallPayload payload):
+    return payload.target
+
+vector[string] fn ir_call_payload_args(ref IrCallPayload payload):
+    return payload.args
+
+string fn ir_closure_name(ref IrClosureDef closure):
+    return closure.name
+
+string fn ir_closure_helper_name(ref IrClosureDef closure):
+    return closure.helper_name
+
+vector[IrParam] fn ir_closure_capture_params(ref IrClosureDef closure):
+    return closure.capture_params
+
+vector[IrParam] fn ir_closure_lambda_params(ref IrClosureDef closure):
+    return closure.lambda_params
+
+IrClosureSig fn ir_closure_signature(ref IrClosureDef closure):
+    return closure.signature
+
+string fn ir_function_name(ref IrFunction fn_ir):
+    return fn_ir.name
+
+vector[IrParam] fn ir_function_params(ref IrFunction fn_ir):
+    return fn_ir.params
+
+IrType fn ir_function_return_type(ref IrFunction fn_ir):
+    return fn_ir.return_type
+
+vector[IrLocal] fn ir_function_locals(ref IrFunction fn_ir):
+    return fn_ir.locals
+
+vector[IrBlock] fn ir_function_blocks(ref IrFunction fn_ir):
+    return fn_ir.blocks
+
+bool fn ir_function_is_entry(ref IrFunction fn_ir):
+    return fn_ir.is_entry
+
+string fn ir_block_name(ref IrBlock block):
+    return block.name
+
+vector[IrInst] fn ir_block_instructions(ref IrBlock block):
+    return block.instructions
+
+IrTerminator fn ir_block_terminator(ref IrBlock block):
+    return block.terminator
+
+string fn ir_module_name(ref IrModule module_ir):
+    return module_ir.name
+
+vector[IrClosureDef] fn ir_module_closures(ref IrModule module_ir):
+    return module_ir.closures
+
+vector[IrFunction] fn ir_module_functions(ref IrModule module_ir):
+    return module_ir.functions

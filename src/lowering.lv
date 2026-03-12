@@ -28,7 +28,7 @@ class IrLowerer:
     hashmap[string, IrType] struct_field_types
     hashmap[string, IrType] call_return_types
     hashmap[string, vector[TypedEnumVariant]] enum_variants
-    vector[vector[TypedStmt]] lambda_blocks
+    vector[TypedLambdaBodyInfo] lambda_blocks
     vector[IrClosureDef] closure_defs
     vector[IrFunction] closure_functions
     IrType current_return_type
@@ -311,7 +311,7 @@ class IrLowerer:
         this.reset_function_state()
         vector[TypedStmt] body = []
         if expr.int_a >= 0 and expr.int_a < this.lambda_blocks.len():
-            body = this.lambda_blocks[expr.int_a]
+            body = this.lambda_blocks[expr.int_a].body
         this.current_return_type = this.lower_type(expr.closure_signature.return_type)
         vector[IrParam] helper_params = []
         int entry_index = this.create_block("bb")
@@ -799,7 +799,7 @@ class IrLowerer:
         for ref fn_info in program.functions:
             functions.push(this.lower_typed_function(fn_info))
         if program.top_level.len() > 0:
-            TypedFunctionInfo top_level_fn = TypedFunctionInfo("__module_init", [], TypeNode::Void(), program.top_level)
+            TypedFunctionInfo top_level_fn = TypedFunctionInfo(item_id(-1), program.top_level_body_id, "__module_init", [], TypeNode::Void(), program.top_level)
             functions.push(this.lower_typed_function(top_level_fn))
         vector[IrFunction] ordered_functions = []
         for ref closure_fn in this.closure_functions:

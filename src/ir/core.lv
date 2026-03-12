@@ -1,0 +1,92 @@
+struct IrType:
+    string name
+
+struct IrParam:
+    string name
+    IrType param_type
+
+struct IrLocal:
+    string name
+    IrType local_type
+
+struct IrClosureSig:
+    vector[IrType] param_types
+    IrType return_type
+
+struct IrCallSig:
+    vector[IrType] param_types
+    IrType return_type
+
+struct IrClosureDef:
+    string name
+    string helper_name
+    vector[IrParam] capture_params
+    vector[IrParam] lambda_params
+    IrClosureSig signature
+
+struct IrCallTarget:
+    string kind
+    string name
+    IrCallSig signature
+
+struct IrCallPayload:
+    string mode
+    IrCallTarget target
+    vector[string] args
+
+struct IrFieldPayload:
+    string mode
+    string object_name
+    string field_name
+    string value_name
+
+struct IrIndexPayload:
+    string mode
+    string object_name
+    string index_name
+    string value_name
+
+struct IrEnumPayload:
+    string mode
+    string object_name
+    string variant_name
+    string field_name
+
+struct IrInst:
+    string kind
+    string dest
+    IrType value_type
+    IrCallPayload call_payload
+    IrFieldPayload field_payload
+    IrIndexPayload index_payload
+    IrEnumPayload enum_payload
+    IrCallTarget call_target
+    string text_a
+    string text_b
+    string text_c
+    vector[string] args
+
+struct IrTerminator:
+    string kind
+    string text_a
+    string text_b
+    string text_c
+
+struct IrBlock:
+    string name
+    vector[IrInst] instructions
+    IrTerminator terminator
+
+struct IrFunction:
+    string name
+    vector[IrParam] params
+    IrType return_type
+    vector[IrLocal] locals
+    vector[IrBlock] blocks
+    bool is_entry
+    bool is_extern
+
+struct IrModule:
+    string name
+    vector[IrClosureDef] closures
+    vector[IrFunction] functions

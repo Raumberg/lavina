@@ -31,6 +31,18 @@ TypedExpr fn typed_expr_none():
     vector[TypeNode] empty_types = []
     return TypedExpr("none", TypeNode::None(), typed_call_target_none(), typed_call_sig_none(), typed_closure_sig_none(), 0, empty, empty, empty_names, empty_types, empty_names, empty_types, "", "")
 
+struct ItemId:
+    int value
+
+ItemId fn item_id(int value):
+    return ItemId(value)
+
+struct BodyId:
+    int value
+
+BodyId fn body_id(int value):
+    return BodyId(value)
+
 struct TypedStmt:
     string kind
     Stmt node
@@ -50,6 +62,8 @@ TypedStmt fn typed_stmt_none():
     return TypedStmt("none", Stmt::None(), TypeNode::None(), "", "", empty_names, empty_name_groups, empty_exprs, empty_children)
 
 struct TypedFunctionInfo:
+    ItemId item_id
+    BodyId body_id
     string name
     vector[Param] params
     TypeNode return_type
@@ -60,6 +74,8 @@ struct TypedStructField:
     TypeNode field_type
 
 struct TypedStructInfo:
+    ItemId item_id
+    BodyId constructor_body_id
     string name
     vector[TypedStructField] fields
     vector[Param] constructor_params
@@ -72,13 +88,19 @@ struct TypedEnumVariant:
     vector[string] field_names
 
 struct TypedEnumInfo:
+    ItemId item_id
     string name
     vector[TypedEnumVariant] variants
 
+struct TypedLambdaBodyInfo:
+    BodyId body_id
+    vector[TypedStmt] body
+
 struct TypedProgram:
     string name
+    BodyId top_level_body_id
     vector[TypedStmt] top_level
     vector[TypedFunctionInfo] functions
     vector[TypedStructInfo] structs
     vector[TypedEnumInfo] enums
-    vector[vector[TypedStmt]] lambda_blocks
+    vector[TypedLambdaBodyInfo] lambda_blocks

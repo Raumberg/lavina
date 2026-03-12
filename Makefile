@@ -1,5 +1,5 @@
 SHELL := /bin/bash
-BOOTSTRAP_SRC = src/scanner.lv src/ast.lv src/type_utils.lv src/parser.lv src/checker.lv src/codegen.lv src/typed_ast.lv src/intrinsics.lv src/typed_calls.lv src/higher_order.lv src/call_semantics.lv src/typed_lowering.lv src/ir.lv src/ir_dump.lv src/ir_call_support.lv src/ir_metadata_support.lv src/ir_control_flow_support.lv src/lowering.lv src/backend_model.lv src/cpp_format.lv src/backend_cpp_support.lv src/backend_cpp.lv src/main.lv
+BOOTSTRAP_SRC = src/scanner.lv src/ast.lv src/type_utils.lv src/parser.lv src/checker.lv src/codegen.lv src/typed_ast.lv src/intrinsics.lv src/typed_calls.lv src/semantics/higher_order.lv src/semantics/call_semantics.lv src/typed_lowering.lv src/ir.lv src/ir/core.lv src/ir/types.lv src/ir/calls.lv src/ir/payloads.lv src/ir/insts.lv src/ir/terms.lv src/ir/dump.lv src/ir/support/calls.lv src/ir/support/metadata.lv src/ir/support/control_flow.lv src/lowering.lv src/backend_model.lv src/backend/cpp_format.lv src/backend/cpp_support.lv src/backend/cpp.lv src/main.lv
 LATEST_STAGE = stages/stage-latest.cpp
 
 # Windows (MSYS2) needs ws2_32 for Winsock

@@ -1,0 +1,91 @@
+import core
+
+IrFieldPayload fn ir_field_payload(string mode, string object_name, string field_name, string value_name):
+    return IrFieldPayload(mode, object_name, field_name, value_name)
+
+IrFieldPayload fn ir_field_payload_none():
+    return ir_field_payload("none", "", "", "")
+
+IrFieldPayload fn ir_field_payload_read(string object_name, string field_name):
+    return ir_field_payload("read", object_name, field_name, "")
+
+IrFieldPayload fn ir_field_payload_write(string object_name, string field_name, string value_name):
+    return ir_field_payload("write", object_name, field_name, value_name)
+
+bool fn ir_field_payload_is_none(ref IrFieldPayload payload):
+    return payload.mode == "none"
+
+bool fn ir_field_payload_is_read(ref IrFieldPayload payload):
+    return payload.mode == "read"
+
+bool fn ir_field_payload_is_write(ref IrFieldPayload payload):
+    return payload.mode == "write"
+
+string fn ir_field_payload_object(ref IrFieldPayload payload):
+    return payload.object_name
+
+string fn ir_field_payload_name(ref IrFieldPayload payload):
+    return payload.field_name
+
+string fn ir_field_payload_value(ref IrFieldPayload payload):
+    return payload.value_name
+
+IrIndexPayload fn ir_index_payload(string mode, string object_name, string index_name, string value_name):
+    return IrIndexPayload(mode, object_name, index_name, value_name)
+
+IrIndexPayload fn ir_index_payload_none():
+    return ir_index_payload("none", "", "", "")
+
+IrIndexPayload fn ir_index_payload_read(string object_name, string index_name):
+    return ir_index_payload("read", object_name, index_name, "")
+
+IrIndexPayload fn ir_index_payload_write(string object_name, string index_name, string value_name):
+    return ir_index_payload("write", object_name, index_name, value_name)
+
+bool fn ir_index_payload_is_none(ref IrIndexPayload payload):
+    return payload.mode == "none"
+
+bool fn ir_index_payload_is_read(ref IrIndexPayload payload):
+    return payload.mode == "read"
+
+bool fn ir_index_payload_is_write(ref IrIndexPayload payload):
+    return payload.mode == "write"
+
+string fn ir_index_payload_object(ref IrIndexPayload payload):
+    return payload.object_name
+
+string fn ir_index_payload_index(ref IrIndexPayload payload):
+    return payload.index_name
+
+string fn ir_index_payload_value(ref IrIndexPayload payload):
+    return payload.value_name
+
+IrEnumPayload fn ir_enum_payload(string mode, string object_name, string variant_name, string field_name):
+    return IrEnumPayload(mode, object_name, variant_name, field_name)
+
+IrEnumPayload fn ir_enum_payload_none():
+    return ir_enum_payload("none", "", "", "")
+
+IrEnumPayload fn ir_enum_payload_check(string object_name, string variant_name):
+    return ir_enum_payload("check", object_name, variant_name, "")
+
+IrEnumPayload fn ir_enum_payload_read(string object_name, string variant_name, string field_name):
+    return ir_enum_payload("read", object_name, variant_name, field_name)
+
+bool fn ir_enum_payload_is_none(ref IrEnumPayload payload):
+    return payload.mode == "none"
+
+bool fn ir_enum_payload_is_check(ref IrEnumPayload payload):
+    return payload.mode == "check"
+
+bool fn ir_enum_payload_is_read(ref IrEnumPayload payload):
+    return payload.mode == "read"
+
+string fn ir_enum_payload_object(ref IrEnumPayload payload):
+    return payload.object_name
+
+string fn ir_enum_payload_variant(ref IrEnumPayload payload):
+    return payload.variant_name
+
+string fn ir_enum_payload_field(ref IrEnumPayload payload):
+    return payload.field_name

@@ -1,5 +1,5 @@
 import backend_model
-import backend_cpp_support
+import cpp_support
 import cpp_format
 import ir
 import typed_ast
@@ -107,9 +107,9 @@ string fn cpp_indent(int level):
     return out
 
 class TypedLambdaCppRenderer:
-    vector[vector[TypedStmt]] lambda_blocks
+    vector[TypedLambdaBodyInfo] lambda_blocks
 
-    constructor(ref vector[vector[TypedStmt]] lambda_blocks):
+    constructor(ref vector[TypedLambdaBodyInfo] lambda_blocks):
         this.lambda_blocks = lambda_blocks
 
     string fn render_param(ref Param param):
@@ -189,7 +189,7 @@ class TypedLambdaCppRenderer:
                     if i < expr.types.len():
                         param_parts.push(this.render_typed_param(expr.names[i], expr.types[i]))
                 string out = "${this.render_capture_list(expr)}(${param_parts.join(", ")}) {\n"
-                for ref stmt in this.lambda_blocks[body_id]:
+                for ref stmt in this.lambda_blocks[body_id].body:
                     out += this.render_stmt(stmt, 1)
                 out += "}"
                 return out
@@ -259,7 +259,7 @@ class TypedLambdaCppRenderer:
             return ""
         return "${indent}/* unsupported lambda stmt */\n"
  
-string fn cpp_render_typed_expr_inline(ref TypedExpr expr, ref vector[vector[TypedStmt]] lambda_blocks):
+string fn cpp_render_typed_expr_inline(ref TypedExpr expr, ref vector[TypedLambdaBodyInfo] lambda_blocks):
     auto renderer = TypedLambdaCppRenderer(lambda_blocks)
     return renderer.render_expr(expr)
 

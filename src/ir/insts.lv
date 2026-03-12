@@ -1,0 +1,287 @@
+import calls
+import core
+import payloads
+import types
+
+IrInst fn ir_const(string dest, IrType value_type, string literal_kind, string literal_value):
+    vector[string] empty_args = []
+    return IrInst("const", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), literal_kind, literal_value, "", empty_args)
+
+IrInst fn ir_const_int(string dest, IrType value_type, string literal_value):
+    return ir_const(dest, value_type, "int", literal_value)
+
+IrInst fn ir_vector_literal(string dest, IrType value_type, ref vector[string] elements):
+    return IrInst("vector_literal", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", elements)
+
+IrInst fn ir_map_literal(string dest, IrType value_type, ref vector[string] items):
+    return IrInst("map_literal", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", items)
+
+IrInst fn ir_move(string dest, IrType value_type, string source):
+    vector[string] empty_args = []
+    return IrInst("move", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), source, "", "", empty_args)
+
+IrInst fn ir_unary(string dest, IrType value_type, string op, string operand):
+    vector[string] empty_args = []
+    return IrInst("unary", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), op, operand, "", empty_args)
+
+IrInst fn ir_binary(string dest, IrType value_type, string op, string left, string right):
+    vector[string] empty_args = []
+    return IrInst("binary", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), op, left, right, empty_args)
+
+IrInst fn ir_binary_add(string dest, IrType value_type, string left, string right):
+    return ir_binary(dest, value_type, "+", left, right)
+
+IrInst fn ir_binary_lt(string dest, string left, string right):
+    return ir_binary(dest, ir_bool_type(), "<", left, right)
+
+IrInst fn ir_call(string dest, IrType value_type, IrCallTarget call_target, ref vector[string] args):
+    vector[string] empty_args = []
+    return IrInst("call", dest, value_type, ir_call_payload_value(call_target, args), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_call_auto(string dest, IrCallTarget call_target, ref vector[string] args):
+    vector[string] empty_args = []
+    return IrInst("call_auto", dest, ir_auto_type(), ir_call_payload_auto(call_target, args), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_call_void(IrCallTarget call_target, ref vector[string] args):
+    vector[string] empty_args = []
+    return IrInst("call_void", "", ir_void_type(), ir_call_payload_void(call_target, args), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+bool fn ir_inst_is_const(ref IrInst inst):
+    return inst.kind == "const"
+
+bool fn ir_inst_is_vector_literal(ref IrInst inst):
+    return inst.kind == "vector_literal"
+
+bool fn ir_inst_is_map_literal(ref IrInst inst):
+    return inst.kind == "map_literal"
+
+bool fn ir_inst_is_move(ref IrInst inst):
+    return inst.kind == "move"
+
+bool fn ir_inst_is_unary(ref IrInst inst):
+    return inst.kind == "unary"
+
+bool fn ir_inst_is_binary(ref IrInst inst):
+    return inst.kind == "binary"
+
+bool fn ir_inst_is_call(ref IrInst inst):
+    if not ir_call_payload_is_none(inst.call_payload):
+        return ir_call_payload_is_value(inst.call_payload)
+    return inst.kind == "call"
+
+bool fn ir_inst_is_call_auto(ref IrInst inst):
+    if not ir_call_payload_is_none(inst.call_payload):
+        return ir_call_payload_is_auto(inst.call_payload)
+    return inst.kind == "call_auto"
+
+bool fn ir_inst_is_call_void(ref IrInst inst):
+    if not ir_call_payload_is_none(inst.call_payload):
+        return ir_call_payload_is_void(inst.call_payload)
+    return inst.kind == "call_void"
+
+bool fn ir_inst_is_call_like(ref IrInst inst):
+    return ir_inst_is_call(inst) or ir_inst_is_call_auto(inst) or ir_inst_is_call_void(inst)
+
+bool fn ir_inst_is_get_field(ref IrInst inst):
+    return inst.kind == "get_field"
+
+bool fn ir_inst_is_set_field(ref IrInst inst):
+    return inst.kind == "set_field"
+
+bool fn ir_inst_is_index(ref IrInst inst):
+    return inst.kind == "index"
+
+bool fn ir_inst_is_index_set(ref IrInst inst):
+    return inst.kind == "index_set"
+
+bool fn ir_inst_is_convert(ref IrInst inst):
+    return inst.kind == "convert"
+
+bool fn ir_inst_is_bind_auto(ref IrInst inst):
+    return inst.kind == "bind_auto"
+
+bool fn ir_inst_is_make_closure(ref IrInst inst):
+    return inst.kind == "make_closure"
+
+bool fn ir_inst_is_enum_is(ref IrInst inst):
+    if not ir_enum_payload_is_none(inst.enum_payload):
+        return ir_enum_payload_is_check(inst.enum_payload)
+    return inst.kind == "enum_is"
+
+bool fn ir_inst_is_enum_get(ref IrInst inst):
+    if not ir_enum_payload_is_none(inst.enum_payload):
+        return ir_enum_payload_is_read(inst.enum_payload)
+    return inst.kind == "enum_get"
+
+bool fn ir_inst_is_field_op(ref IrInst inst):
+    return ir_inst_is_get_field(inst) or ir_inst_is_set_field(inst)
+
+bool fn ir_inst_is_field_read(ref IrInst inst):
+    return ir_inst_is_get_field(inst)
+
+bool fn ir_inst_is_field_write(ref IrInst inst):
+    return ir_inst_is_set_field(inst)
+
+bool fn ir_inst_is_index_op(ref IrInst inst):
+    return ir_inst_is_index(inst) or ir_inst_is_index_set(inst)
+
+bool fn ir_inst_is_index_read(ref IrInst inst):
+    return ir_inst_is_index(inst)
+
+bool fn ir_inst_is_index_write(ref IrInst inst):
+    return ir_inst_is_index_set(inst)
+
+bool fn ir_inst_is_enum_op(ref IrInst inst):
+    return ir_inst_is_enum_is(inst) or ir_inst_is_enum_get(inst)
+
+bool fn ir_inst_is_enum_check(ref IrInst inst):
+    return ir_inst_is_enum_is(inst)
+
+bool fn ir_inst_is_enum_read(ref IrInst inst):
+    return ir_inst_is_enum_get(inst)
+
+string fn ir_inst_dest(ref IrInst inst):
+    return inst.dest
+
+IrType fn ir_inst_value_type(ref IrInst inst):
+    return inst.value_type
+
+IrCallTarget fn ir_inst_call_target(ref IrInst inst):
+    if not ir_call_payload_is_none(inst.call_payload):
+        return ir_call_payload_target(inst.call_payload)
+    return inst.call_target
+
+string fn ir_inst_call_mode(ref IrInst inst):
+    if not ir_call_payload_is_none(inst.call_payload):
+        return ir_call_payload_mode(inst.call_payload)
+    if ir_inst_is_call(inst):
+        return "value"
+    elif ir_inst_is_call_auto(inst):
+        return "auto"
+    elif ir_inst_is_call_void(inst):
+        return "void"
+    return "none"
+
+string fn ir_inst_call_target_name(ref IrInst inst):
+    return ir_call_target_name(ir_inst_call_target(inst))
+
+IrType fn ir_inst_call_target_return_type(ref IrInst inst):
+    return ir_call_target_return_type(ir_inst_call_target(inst))
+
+vector[IrType] fn ir_inst_call_target_param_types(ref IrInst inst):
+    return ir_call_target_param_types(ir_inst_call_target(inst))
+
+vector[string] fn ir_inst_args(ref IrInst inst):
+    if not ir_call_payload_is_none(inst.call_payload):
+        return ir_call_payload_args(inst.call_payload)
+    return inst.args
+
+string fn ir_inst_literal_kind(ref IrInst inst):
+    return inst.text_a
+
+string fn ir_inst_literal_value(ref IrInst inst):
+    return inst.text_b
+
+string fn ir_inst_source_name(ref IrInst inst):
+    return inst.text_a
+
+string fn ir_inst_unary_op(ref IrInst inst):
+    return inst.text_a
+
+string fn ir_inst_unary_operand(ref IrInst inst):
+    return inst.text_b
+
+string fn ir_inst_binary_op(ref IrInst inst):
+    return inst.text_a
+
+string fn ir_inst_binary_left(ref IrInst inst):
+    return inst.text_b
+
+string fn ir_inst_binary_right(ref IrInst inst):
+    return inst.text_c
+
+string fn ir_inst_field_object(ref IrInst inst):
+    if not ir_field_payload_is_none(inst.field_payload):
+        return ir_field_payload_object(inst.field_payload)
+    return inst.text_a
+
+string fn ir_inst_field_name(ref IrInst inst):
+    if not ir_field_payload_is_none(inst.field_payload):
+        return ir_field_payload_name(inst.field_payload)
+    return inst.text_b
+
+string fn ir_inst_field_value(ref IrInst inst):
+    if not ir_field_payload_is_none(inst.field_payload):
+        return ir_field_payload_value(inst.field_payload)
+    return inst.text_c
+
+string fn ir_inst_index_object(ref IrInst inst):
+    if not ir_index_payload_is_none(inst.index_payload):
+        return ir_index_payload_object(inst.index_payload)
+    return inst.text_a
+
+string fn ir_inst_index_value(ref IrInst inst):
+    if not ir_index_payload_is_none(inst.index_payload):
+        return ir_index_payload_index(inst.index_payload)
+    return inst.text_b
+
+string fn ir_inst_index_set_value(ref IrInst inst):
+    if not ir_index_payload_is_none(inst.index_payload):
+        return ir_index_payload_value(inst.index_payload)
+    return inst.text_c
+
+string fn ir_inst_bind_expr(ref IrInst inst):
+    return inst.text_a
+
+string fn ir_inst_closure_name(ref IrInst inst):
+    return inst.text_a
+
+string fn ir_inst_enum_object(ref IrInst inst):
+    if not ir_enum_payload_is_none(inst.enum_payload):
+        return ir_enum_payload_object(inst.enum_payload)
+    return inst.text_a
+
+string fn ir_inst_enum_variant(ref IrInst inst):
+    if not ir_enum_payload_is_none(inst.enum_payload):
+        return ir_enum_payload_variant(inst.enum_payload)
+    return inst.text_b
+
+string fn ir_inst_enum_field(ref IrInst inst):
+    if not ir_enum_payload_is_none(inst.enum_payload):
+        return ir_enum_payload_field(inst.enum_payload)
+    return inst.text_c
+
+IrInst fn ir_get_field(string dest, IrType value_type, string object_name, string field_name):
+    vector[string] empty_args = []
+    return IrInst("get_field", dest, value_type, ir_call_payload_none(), ir_field_payload_read(object_name, field_name), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_set_field(string object_name, string field_name, string value_name):
+    vector[string] empty_args = []
+    return IrInst("set_field", "", ir_void_type(), ir_call_payload_none(), ir_field_payload_write(object_name, field_name, value_name), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_index(string dest, IrType value_type, string object_name, string index_name):
+    vector[string] empty_args = []
+    return IrInst("index", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_read(object_name, index_name), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_index_set(string object_name, string index_name, string value_name):
+    vector[string] empty_args = []
+    return IrInst("index_set", "", ir_void_type(), ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_write(object_name, index_name, value_name), ir_enum_payload_none(), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_convert(string dest, IrType value_type, string source):
+    vector[string] empty_args = []
+    return IrInst("convert", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), source, "", "", empty_args)
+
+IrInst fn ir_bind_auto(string dest, string expr_text):
+    vector[string] empty_args = []
+    return IrInst("bind_auto", dest, ir_auto_type(), ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), expr_text, "", "", empty_args)
+
+IrInst fn ir_make_closure(string dest, IrType value_type, string closure_name, ref vector[string] captures):
+    return IrInst("make_closure", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_none(), ir_call_target_none(), closure_name, "", "", captures)
+
+IrInst fn ir_enum_is(string dest, string object_name, string variant_name):
+    vector[string] empty_args = []
+    return IrInst("enum_is", dest, ir_bool_type(), ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_check(object_name, variant_name), ir_call_target_none(), "", "", "", empty_args)
+
+IrInst fn ir_enum_get(string dest, IrType value_type, string object_name, string variant_name, string field_name):
+    vector[string] empty_args = []
+    return IrInst("enum_get", dest, value_type, ir_call_payload_none(), ir_field_payload_none(), ir_index_payload_none(), ir_enum_payload_read(object_name, variant_name, field_name), ir_call_target_none(), "", "", "", empty_args)

@@ -1,0 +1,52 @@
+import core
+
+IrTerminator fn ir_term_none():
+    return IrTerminator("none", "", "", "")
+
+IrTerminator fn ir_term_jump(string target):
+    return IrTerminator("jump", target, "", "")
+
+IrTerminator fn ir_term_branch(string condition, string then_block, string else_block):
+    return IrTerminator("branch", condition, then_block, else_block)
+
+IrTerminator fn ir_term_return_void():
+    return IrTerminator("return_void", "", "", "")
+
+IrTerminator fn ir_term_return_value(string value):
+    return IrTerminator("return_value", value, "", "")
+
+IrTerminator fn ir_term_unreachable():
+    return IrTerminator("unreachable", "", "", "")
+
+bool fn ir_term_is_none(ref IrTerminator term):
+    return term.kind == "none"
+
+bool fn ir_term_is_jump(ref IrTerminator term):
+    return term.kind == "jump"
+
+bool fn ir_term_is_branch(ref IrTerminator term):
+    return term.kind == "branch"
+
+bool fn ir_term_is_return_void(ref IrTerminator term):
+    return term.kind == "return_void"
+
+bool fn ir_term_is_return_value(ref IrTerminator term):
+    return term.kind == "return_value"
+
+bool fn ir_term_is_unreachable(ref IrTerminator term):
+    return term.kind == "unreachable"
+
+string fn ir_term_condition(ref IrTerminator term):
+    return term.text_a
+
+string fn ir_term_then_target(ref IrTerminator term):
+    return term.text_b
+
+string fn ir_term_else_target(ref IrTerminator term):
+    return term.text_c
+
+string fn ir_term_jump_target(ref IrTerminator term):
+    return term.text_a
+
+string fn ir_term_return_value_name(ref IrTerminator term):
+    return term.text_a

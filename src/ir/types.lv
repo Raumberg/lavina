@@ -1,0 +1,179 @@
+import core
+
+IrType fn ir_type(string name):
+    return IrType(name)
+
+IrType fn ir_void_type():
+    return ir_type("void")
+
+IrType fn ir_bool_type():
+    return ir_type("bool")
+
+IrType fn ir_int_type():
+    return ir_type("int")
+
+IrType fn ir_float_type():
+    return ir_type("float")
+
+IrType fn ir_string_type():
+    return ir_type("string")
+
+IrType fn ir_bytes_type():
+    return ir_type("bytes")
+
+IrType fn ir_int8_type():
+    return ir_type("int8")
+
+IrType fn ir_int16_type():
+    return ir_type("int16")
+
+IrType fn ir_int32_type():
+    return ir_type("int32")
+
+IrType fn ir_float32_type():
+    return ir_type("float32")
+
+IrType fn ir_usize_type():
+    return ir_type("usize")
+
+IrType fn ir_auto_type():
+    return ir_type("auto")
+
+IrType fn ir_cstring_type():
+    return ir_type("*char")
+
+IrType fn ir_ptr_type(IrType inner):
+    return ir_type("*${inner.name}")
+
+IrType fn ir_nullable_type(IrType inner):
+    return ir_type("?${inner.name}")
+
+IrType fn ir_array_type(IrType inner):
+    return ir_type("array[${inner.name}]")
+
+IrType fn ir_set_type(IrType inner):
+    return ir_type("set[${inner.name}]")
+
+IrType fn ir_map_type(IrType key_type, IrType value_type):
+    return ir_type("map[${key_type.name}, ${value_type.name}]")
+
+IrType fn ir_generic_closure_type():
+    return ir_type("closure")
+
+IrType fn ir_closure_type(string closure_name):
+    return ir_type("closure:${closure_name}")
+
+bool fn ir_type_is_void(ref IrType t):
+    return t.name == "void"
+
+bool fn ir_type_is_bool(ref IrType t):
+    return t.name == "bool"
+
+bool fn ir_type_is_int(ref IrType t):
+    return t.name == "int"
+
+bool fn ir_type_is_float(ref IrType t):
+    return t.name == "float"
+
+bool fn ir_type_is_string(ref IrType t):
+    return t.name == "string"
+
+bool fn ir_type_is_bytes(ref IrType t):
+    return t.name == "bytes"
+
+bool fn ir_type_is_auto(ref IrType t):
+    return t.name == "auto"
+
+bool fn ir_type_has_auto(ref IrType t):
+    return t.name.contains("auto")
+
+bool fn ir_type_is_array(ref IrType t):
+    return t.name.starts_with("array[") and t.name.ends_with("]")
+
+bool fn ir_type_is_set(ref IrType t):
+    return t.name.starts_with("set[") and t.name.ends_with("]")
+
+bool fn ir_type_is_map(ref IrType t):
+    return t.name.starts_with("map[") and t.name.ends_with("]")
+
+bool fn ir_type_is_pair(ref IrType t):
+    return t.name.starts_with("std::pair<") and t.name.ends_with(">")
+
+bool fn ir_type_is_ptr(ref IrType t):
+    return t.name.starts_with("*")
+
+bool fn ir_type_is_nullable(ref IrType t):
+    return t.name.starts_with("?")
+
+bool fn ir_type_is_closure(ref IrType t):
+    return t.name.starts_with("closure:")
+
+string fn ir_array_inner_type(ref IrType t):
+    if ir_type_is_array(t):
+        return t.name.substring(6, t.name.len() - 1)
+    return "auto"
+
+string fn ir_set_inner_type(ref IrType t):
+    if ir_type_is_set(t):
+        return t.name.substring(4, t.name.len() - 1)
+    return "auto"
+
+string fn ir_ptr_inner_type(ref IrType t):
+    if ir_type_is_ptr(t):
+        return t.name.substring(1, t.name.len())
+    return "auto"
+
+string fn ir_nullable_inner_type(ref IrType t):
+    if ir_type_is_nullable(t):
+        return t.name.substring(1, t.name.len())
+    return "auto"
+
+string fn ir_map_key_type_name(ref IrType t):
+    if ir_type_is_map(t):
+        int comma_pos = t.name.indexOf(", ")
+        if comma_pos >= 0:
+            return t.name.substring(4, comma_pos)
+    return "auto"
+
+string fn ir_map_value_type_name(ref IrType t):
+    if ir_type_is_map(t):
+        int comma_pos = t.name.indexOf(", ")
+        if comma_pos >= 0:
+            return t.name.substring(comma_pos + 2, t.name.len() - 1)
+    return "auto"
+
+bool fn ir_type_is_array_of_auto(ref IrType t):
+    return ir_type_is_array(t) and ir_array_inner_type(t) == "auto"
+
+bool fn ir_type_is_map_of_auto(ref IrType t):
+    return ir_type_is_map(t) and ir_map_key_type_name(t) == "auto" and ir_map_value_type_name(t) == "auto"
+
+vector[string] fn ir_split_generic_args(string type_name):
+    vector[string] parts = []
+    string current = ""
+    int depth = 0
+    for i in 0..type_name.len():
+        string ch = type_name.substring(i, i + 1)
+        if ch == "<":
+            depth += 1
+            current += ch
+        elif ch == ">":
+            depth -= 1
+            current += ch
+        elif ch == "," and depth == 0:
+            parts.push(current.trim())
+            current = ""
+        else:
+            current += ch
+    if current != "":
+        parts.push(current.trim())
+    return parts
+
+vector[string] fn ir_pair_type_args(ref IrType t):
+    if ir_type_is_pair(t):
+        string inner = t.name.substring(10, t.name.len() - 1)
+        return ir_split_generic_args(inner)
+    return []
+
+string fn ir_type_to_string(ref IrType t):
+    return t.name

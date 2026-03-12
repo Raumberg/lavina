@@ -17,6 +17,9 @@ class TypedNormalizer:
     vector[hashmap[string, TypeNode]] normalized_scopes
     vector[vector[Stmt]] raw_lambda_blocks
     vector[vector[TypedStmt]] normalized_lambda_blocks
+    vector[BodyId] lambda_body_ids
+    int next_item_id
+    int next_body_id
 
     constructor(ref vector[Stmt] stmts, ref vector[vector[Stmt]] lambda_blocks):
         this.checker = Checker()
@@ -26,6 +29,19 @@ class TypedNormalizer:
         this.normalized_scopes = []
         this.raw_lambda_blocks = lambda_blocks
         this.normalized_lambda_blocks = []
+        this.lambda_body_ids = []
+        this.next_item_id = 0
+        this.next_body_id = 0
+
+    ItemId fn allocate_item_id():
+        ItemId id = item_id(this.next_item_id)
+        this.next_item_id += 1
+        return id
+
+    BodyId fn allocate_body_id():
+        BodyId id = body_id(this.next_body_id)
+        this.next_body_id += 1
+        return id
 
     void fn push_scope():
         hashmap[string, TypeNode] scope = {}
@@ -617,6 +633,8 @@ class TypedNormalizer:
         while this.normalized_lambda_blocks.len() <= body_id:
             vector[TypedStmt] empty_block = []
             this.normalized_lambda_blocks.push(empty_block)
+        while this.lambda_body_ids.len() <= body_id:
+            this.lambda_body_ids.push(this.allocate_body_id())
         if this.normalized_lambda_blocks[body_id].len() > 0:
             return this.normalized_lambda_blocks[body_id]
         this.push_scope()
@@ -717,6 +735,7 @@ TypedLowerResult fn lower_to_typed(string module_name, ref vector[Stmt] stmts, r
     vector[TypedStructInfo] structs = []
     vector[TypedEnumInfo] enums = []
     vector[TypedStmt] top_level = []
+    BodyId top_level_body_id = normalizer.allocate_body_id()
     for ref stmt in stmts:
         match stmt:
             Function(name, params, return_type, body, is_inline, comptime_mode, is_static, visibility, type_params, param_defaults):
@@ -725,12 +744,14 @@ TypedLowerResult fn lower_to_typed(string module_name, ref vector[Stmt] stmts, r
                     normalizer.declare_normalized(param.name.lexeme, param.param_type)
                 vector[TypedStmt] normalized_body = normalizer.normalize_block(body)
                 normalizer.pop_scope()
-                functions.push(TypedFunctionInfo(name.lexeme, params, return_type, normalized_body))
+                functions.push(TypedFunctionInfo(normalizer.allocate_item_id(), normalizer.allocate_body_id(), name.lexeme, params, return_type, normalized_body))
             Struct(name, body, visibility, type_params):
                 vector[TypedStructField] fields = []
                 vector[Param] constructor_params = []
                 vector[Expr] constructor_defaults = []
                 vector[TypedStmt] constructor_body = []
+                ItemId struct_item_id = normalizer.allocate_item_id()
+                BodyId constructor_body_id = body_id(-1)
                 string saved_self = normalizer.current_self_name
                 string saved_struct = normalizer.current_struct_name
                 normalizer.current_self_name = "self"
@@ -750,6 +771,7 @@ TypedLowerResult fn lower_to_typed(string module_name, ref vector[Stmt] stmts, r
                                 normalizer.current_self_name = ""
                                 constructor_params = params
                                 constructor_defaults = param_defaults
+                                constructor_body_id = normalizer.allocate_body_id()
                                 constructor_body = normalizer.normalize_block(fn_body)
                                 normalizer.current_self_name = ctor_self
                                 normalizer.pop_scope()
@@ -763,15 +785,16 @@ TypedLowerResult fn lower_to_typed(string module_name, ref vector[Stmt] stmts, r
                                     normalizer.declare_normalized(param.name.lexeme, param.param_type)
                                 vector[TypedStmt] normalized_body = normalizer.normalize_block(fn_body)
                                 normalizer.pop_scope()
-                                functions.push(TypedFunctionInfo(typed_method_name(name.lexeme, fn_name.lexeme), lowered_params, return_type, normalized_body))
+                                functions.push(TypedFunctionInfo(normalizer.allocate_item_id(), normalizer.allocate_body_id(), typed_method_name(name.lexeme, fn_name.lexeme), lowered_params, return_type, normalized_body))
                         _:
                             pass
                 normalizer.pop_scope()
                 normalizer.current_self_name = saved_self
                 normalizer.current_struct_name = saved_struct
-                structs.push(TypedStructInfo(name.lexeme, fields, constructor_params, constructor_defaults, constructor_body))
+                structs.push(TypedStructInfo(struct_item_id, constructor_body_id, name.lexeme, fields, constructor_params, constructor_defaults, constructor_body))
             Enum(name, variants, methods, visibility, type_params):
                 vector[TypedEnumVariant] typed_variants = []
+                ItemId enum_item_id = normalizer.allocate_item_id()
                 for ref variant in variants:
                     typed_variants.push(TypedEnumVariant(variant.name.lexeme, variant.types, variant.field_names))
                 string saved_self = normalizer.current_self_name
@@ -790,18 +813,22 @@ TypedLowerResult fn lower_to_typed(string module_name, ref vector[Stmt] stmts, r
                                 normalizer.declare_normalized(param.name.lexeme, param.param_type)
                             vector[TypedStmt] normalized_body = normalizer.normalize_block(fn_body)
                             normalizer.pop_scope()
-                            functions.push(TypedFunctionInfo(typed_method_name(name.lexeme, fn_name.lexeme), lowered_params, return_type, normalized_body))
+                            functions.push(TypedFunctionInfo(normalizer.allocate_item_id(), normalizer.allocate_body_id(), typed_method_name(name.lexeme, fn_name.lexeme), lowered_params, return_type, normalized_body))
                         _:
                             pass
                 normalizer.current_self_name = saved_self
                 normalizer.current_struct_name = saved_struct
-                enums.push(TypedEnumInfo(name.lexeme, typed_variants))
+                enums.push(TypedEnumInfo(enum_item_id, name.lexeme, typed_variants))
             _:
                 if normalizer.normalized_scopes.len() == 0:
                     normalizer.push_scope()
                 top_level.push(normalizer.normalize_stmt(stmt))
 
-    return TypedLowerResult(TypedProgram(module_name, top_level, functions, structs, enums, normalizer.normalized_lambda_blocks), normalizer.checker.errors)
+    vector[TypedLambdaBodyInfo] typed_lambda_blocks = []
+    for i in 0..normalizer.normalized_lambda_blocks.len():
+        typed_lambda_blocks.push(TypedLambdaBodyInfo(normalizer.lambda_body_ids[i], normalizer.normalized_lambda_blocks[i]))
+
+    return TypedLowerResult(TypedProgram(module_name, top_level_body_id, top_level, functions, structs, enums, typed_lambda_blocks), normalizer.checker.errors)
 
 vector[string] fn typed_lower_errors(ref TypedLowerResult result):
     return result.errors
